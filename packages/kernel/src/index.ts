@@ -3,6 +3,7 @@ export { captureIntent } from './brain/intent';
 export { planTask } from './brain/planner';
 export { executeStep } from './brain/executor';
 export { Orchestrator } from './brain/orchestrator';
+export { needsClarification } from './brain/clarify';
 export type { Claim } from './brain/executor';
 export { TraceStore } from './trace/trace-store';
 export { FetchTransport } from './model/deepseek/transport';
