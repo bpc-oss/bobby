@@ -4,6 +4,7 @@ import type { AcceptanceCriterion, Evidence, Verdict } from '@bobby/shared';
 
 import type { Oracle } from '../oracle';
 import type { ModelClient, ModelMessage } from '../../model/model-client';
+import { PRO_REVIEW_SYSTEM_PROMPT } from '../../brain/system-prompts';
 
 const ReviewSchema = z.object({
   verdict: z.enum(['pass', 'fail']),
@@ -17,11 +18,6 @@ const ReviewSchema = z.object({
   ),
   unverifiable: z.array(z.string()).default([]),
 });
-
-const SYSTEM_PROMPT =
-  'You are an adversarial reviewer. Review only acceptance criteria and real artifacts/evidence. ' +
-  'Do not read executor self-justification fields. Return JSON only in the format: ' +
-  `{verdict: "pass"|"fail", defects:[{severity, acId, evidence, mustFix}], unverifiable:[...]}.`;
 
 const PROHIBITED_PAYLOAD_FIELDS = new Set(['summary', 'executorSays']);
 
@@ -51,7 +47,7 @@ function buildMessages(
   }));
 
   return [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: PRO_REVIEW_SYSTEM_PROMPT },
     { role: 'user', content: JSON.stringify({ ac, evidence: filteredEvidence }) },
   ];
 }

@@ -1,16 +1,11 @@
 import { PlanStep, PlanStepSchema, TaskContract } from '@bobby/shared';
 import { z } from 'zod';
 import type { ModelClient } from '../model/model-client';
-
-const SYSTEM_PROMPT = `You are a planner.
-Transform TaskContract into minimal verifiable plan steps:
-[{id,desc,satisfiesAcIds,dependsOn}]
-Each step must state acceptance criteria it satisfies.
-Only return a JSON array.`;
+import { PLAN_SYSTEM_PROMPT } from './system-prompts';
 
 export async function planTask(model: ModelClient, contract: TaskContract): Promise<PlanStep[]> {
   const response = await model.complete('grader', [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: PLAN_SYSTEM_PROMPT },
     { role: 'user', content: JSON.stringify(contract) }
   ], { json: true });
 
