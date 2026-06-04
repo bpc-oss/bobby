@@ -1,5 +1,10 @@
 #!/usr/bin/env node
-import { KernelHost, makeDeepSeekClientFromBobbyConfig, type ModelClient } from '@bobby/kernel';
+import {
+  KernelHost,
+  makeDeepSeekClientFromBobbyConfig,
+  probeAndWriteCapabilities,
+  type ModelClient
+} from '@bobby/kernel';
 import { runHeadless } from './headless';
 import { pathToFileURL } from 'node:url';
 
@@ -14,15 +19,16 @@ export async function makeDefaultModel(): Promise<ModelClient> {
 }
 
 const setupPrompt =
-  'Bobby CLI — 配置 DeepSeek Key 后开始（见 M6）。';
+  'Bobby CLI — Configure DeepSeek Key before running (see M6).';
 
 type RunCliOptions = {
   makeModel?: () => Promise<ModelClient>;
+  probe?: () => Promise<string>;
 };
 
 function printHelp(io: CliIO): void {
   io.log(setupPrompt);
-  io.log('用法：bobby run "<task>" | bobby interactive');
+  io.log('Usage: bobby run "<task>" | bobby interactive | bobby probe');
 }
 
 export async function runCli(io: CliIO, options: RunCliOptions = {}): Promise<void> {
@@ -58,12 +64,27 @@ export async function runCli(io: CliIO, options: RunCliOptions = {}): Promise<vo
   }
 
   if (cmd === 'interactive') {
-    io.log('交互式模式尚未接入，见 M6 后开放。');
+    io.log('Interactive mode not enabled in this milestone yet.');
     return;
   }
 
-  io.log(`未知命令: ${cmd}`);
-  io.log('支持命令: run（bobby run "<task>"）或 interactive');
+  if (cmd === 'probe') {
+    try {
+      const reportPath = await (options.probe ?? probeAndWriteCapabilities)();
+      io.log(`DeepSeek capability report written to: ${reportPath}`);
+    } catch (err) {
+      if (err instanceof Error) {
+        io.log(err.message);
+      } else {
+        io.log(String(err));
+      }
+      io.exit(1);
+    }
+    return;
+  }
+
+  io.log(`Unknown command: ${cmd}`);
+  io.log('Supported commands: run, interactive, probe');
   io.exit(1);
 }
 

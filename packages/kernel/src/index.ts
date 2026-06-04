@@ -6,6 +6,15 @@ export { Orchestrator } from './brain/orchestrator';
 export type { Claim } from './brain/executor';
 export { TraceStore } from './trace/trace-store';
 export { FetchTransport } from './model/deepseek/transport';
+export {
+  buildCapabilityReport,
+  defaultDeepSeekProbeRaw,
+  probeAndWriteCapabilities,
+  writeCapabilityReport,
+  type CapabilityReport,
+  type ProbeRaw,
+  type ProbeWriteDeps
+} from './model/deepseek/probe';
 export { MockModelClient } from './model/mock-model-client';
 export { DeepSeekModelClient } from './model/deepseek/client';
 export {

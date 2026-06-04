@@ -39,17 +39,19 @@ describe('runCli', () => {
     await runCli(io);
 
     expect(logs.join('\n')).toContain('Bobby CLI');
-    expect(logs.join('\n')).toContain('配置 DeepSeek Key 后开始（见 M6）');
+    expect(logs.join('\n')).toContain('Configure DeepSeek Key');
     expect(exits).toHaveLength(0);
   });
 
-  it('exits with code 1 for unknown commands', async () => {
+  it('exits with code 1 for unknown commands and lists supported commands including probe', async () => {
     const { io, logs, exits } = collectOutput();
     io.argv = ['unknown'];
 
     await runCli(io);
 
-    expect(logs.join('\n')).toContain('未知');
+    const output = logs.join('\n');
+    expect(output).toContain('Unknown command');
+    expect(output).toContain('Supported commands: run, interactive, probe');
     expect(exits).toEqual([1]);
   });
 
@@ -59,9 +61,22 @@ describe('runCli', () => {
 
     await runCli(io);
 
-    expect(logs.join('\n')).toContain('未配置');
+    expect(logs.join('\n')).toContain('DeepSeek Key');
     expect(logs.join('\n')).not.toContain('deepseek-key');
     expect(exits).toEqual([1]);
+  });
+
+  it('writes capability report with probe and does not log secrets', async () => {
+    const { io, logs, exits } = collectOutput();
+    io.argv = ['probe'];
+
+    await runCli(io, {
+      probe: async () => '/tmp/bobby/.bobby/capabilities.json'
+    });
+
+    expect(logs.join('\n')).toContain('DeepSeek capability report written to: /tmp/bobby/.bobby/capabilities.json');
+    expect(logs.join('\n')).not.toContain('deepseek-key');
+    expect(exits).toHaveLength(0);
   });
 
   it('uses injected makeModel for run and exits with headless result', async () => {

@@ -1,6 +1,63 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { join } from 'node:path';
 
-import { buildCapabilityReport, type ProbeRaw } from '../src/model/deepseek/probe';
+import {
+  buildCapabilityReport,
+  defaultDeepSeekProbeRaw,
+  probeAndWriteCapabilities,
+  type ProbeRaw
+} from '../src/model/deepseek/probe';
+
+describe('capability probe', () => {
+  it('builds report from default DeepSeek V4 probe raw', () => {
+    const raw = defaultDeepSeekProbeRaw();
+    const report = buildCapabilityReport(raw);
+
+    expect(report).toEqual({
+      runnerModel: 'deepseek-v4-flash',
+      graderModel: 'deepseek-v4-pro',
+      useToolCalling: true,
+      useJsonMode: true,
+      useFim: false,
+      useCaching: true,
+      useReasoning: true,
+      contextWindow: 1_000_000
+    });
+  });
+
+  it('writes capability report to ~/.bobby/capabilities.json with pretty JSON and no API key', async () => {
+    const homeDir = '/tmp/bobby';
+    let writtenPath = '';
+    let writtenContent = '';
+
+    const mkdir = vi.fn(async () => undefined);
+    const writeFile = vi.fn(async (_path: string, content: string) => {
+      writtenPath = _path;
+      writtenContent = content;
+    });
+
+    const reportPath = await probeAndWriteCapabilities({ homeDir, mkdir, writeFile });
+
+    expect(reportPath).toBe(join(homeDir, '.bobby', 'capabilities.json'));
+    expect(mkdir).toHaveBeenCalledWith(join(homeDir, '.bobby'), { recursive: true });
+    expect(writeFile).toHaveBeenCalledTimes(1);
+
+    const parsed = JSON.parse(writtenContent);
+    expect(parsed).toEqual({
+      runnerModel: 'deepseek-v4-flash',
+      graderModel: 'deepseek-v4-pro',
+      useToolCalling: true,
+      useJsonMode: true,
+      useFim: false,
+      useCaching: true,
+      useReasoning: true,
+      contextWindow: 1_000_000
+    });
+    expect(writtenContent).toContain('\n');
+    expect(writtenContent).not.toContain('deepseek-key');
+    expect(writtenPath).toBe(reportPath);
+  });
+});
 
 it('buildCapabilityReport: uses flash and pro models when present and maps specific capability flags', () => {
   const raw: ProbeRaw = {
