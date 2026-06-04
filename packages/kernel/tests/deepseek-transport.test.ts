@@ -67,6 +67,56 @@ it('chat sends DeepSeek-compatible request including response_format and thinkin
   });
 });
 
+it('chat retries on 429 with retry delay and succeeds on the second attempt', async () => {
+  const sleepDelays: number[] = [];
+  let callCount = 0;
+
+  const fakeFetch = vi.fn(async (): Promise<Response> => {
+    callCount += 1;
+
+    if (callCount === 1) {
+      return makeFakeResponse({ message: 'rate limited' }, 429, false);
+    }
+
+    return makeFakeResponse({
+      choices: [{ message: { content: 'retried' } }],
+      model: 'deepseek-v4-flash',
+      usage: { prompt_tokens: 2, completion_tokens: 3, cached_tokens: 1 }
+    });
+  });
+
+  const transport = new FetchTransport({
+    apiKey: 'token',
+    fetch: fakeFetch,
+    retry: {
+      retries: 2,
+      baseMs: 5,
+      sleep: async (ms) => {
+        sleepDelays.push(ms);
+      }
+    }
+  });
+
+  const response = await transport.chat({
+    model: 'deepseek-v4-flash',
+    messages: [{ role: 'user', content: 'hello' }],
+    reasoning: true
+  });
+
+  expect(response).toEqual({
+    content: 'retried',
+    model: 'deepseek-v4-flash',
+    usage: {
+      promptTokens: 2,
+      completionTokens: 3,
+      cachedTokens: 1
+    }
+  });
+  expect(fakeFetch).toHaveBeenCalledTimes(2);
+  expect(callCount).toBe(2);
+  expect(sleepDelays).toEqual([5]);
+});
+
 it('chat can disable thinking and maps snake_case usage to camelCase', async () => {
   const fakeFetch = vi.fn(async () => {
     return makeFakeResponse({
