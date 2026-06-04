@@ -7,3 +7,4 @@ export type { Claim } from './brain/executor';
 export { TraceStore } from './trace/trace-store';
 export { MockModelClient } from './model/mock-model-client';
 export { Kernel as DefaultKernel } from './kernel';
+export { KernelHost } from './host/kernel-host';
