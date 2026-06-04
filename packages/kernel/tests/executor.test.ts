@@ -11,13 +11,26 @@ const step: PlanStep = {
 };
 
 describe('executeStep', () => {
-  it('uses runner to execute and produces a Claim bound to acceptance criteria', async () => {
-    const model = new MockModelClient({ grader: [], runner: ['Scan complete, 12 files found'] });
+  it('parses strict JSON tool calls and returns them in claim', async () => {
+    const model = new MockModelClient({
+      grader: [],
+      runner: [
+        JSON.stringify({
+          calls: [{ tool: 'write_file', input: { path: 'a.txt', content: 'x' } }]
+        })
+      ]
+    });
 
     const claim = await executeStep(model, step);
 
     expect(claim.stepId).toBe('S1');
     expect(claim.acIds).toContain('AC1');
-    expect(claim.summary).toContain('Scan');
+    expect(claim.calls).toEqual([{ tool: 'write_file', input: { path: 'a.txt', content: 'x' } }]);
+  });
+
+  it('rejects non-JSON runner output', async () => {
+    const model = new MockModelClient({ grader: [], runner: ['done'] });
+
+    await expect(executeStep(model, step)).rejects.toThrow('executeStep: model response is not valid JSON');
   });
 });

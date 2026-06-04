@@ -2,10 +2,16 @@ export { Kernel } from './kernel';
 export { captureIntent } from './brain/intent';
 export { planTask } from './brain/planner';
 export { executeStep } from './brain/executor';
+export type { PlannedCall } from './hands/evidence-provider';
 export { Orchestrator } from './brain/orchestrator';
 export { needsClarification } from './brain/clarify';
 export type { Claim } from './brain/executor';
 export { TraceStore } from './trace/trace-store';
+export { ToolRegistry } from './hands/tool';
+export { ToolEvidenceProvider } from './hands/evidence-provider';
+export { ExecTool } from './hands/tools/exec';
+export { FileExistsTool, WriteFileTool } from './hands/tools/fs';
+export { Workspace } from './hands/workspace';
 export { FetchTransport } from './model/deepseek/transport';
 export {
   buildCapabilityReport,
@@ -18,6 +24,9 @@ export {
 } from './model/deepseek/probe';
 export { MockModelClient } from './model/mock-model-client';
 export { DeepSeekModelClient } from './model/deepseek/client';
+export { VerificationEngine } from './conscience/engine';
+export { CompletionGate } from './conscience/gate';
+export { CommandExitOracle, FileExistsOracle, FileDiffOracle } from './conscience/oracles/deterministic';
 export {
   DEFAULT_DEEPSEEK_BASE_URL,
   makeDeepSeekClient,

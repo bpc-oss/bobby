@@ -17,22 +17,33 @@ export class ToolEvidenceProvider {
     this.plans.set(stepId, calls);
   }
 
-  async evidenceFor(stepId: string, acIds: string[]): Promise<Evidence[]> {
+  async evidenceFor(
+    stepId: string,
+    acIds: string[],
+    calls: ReadonlyArray<PlannedCall> = this.plans.get(stepId) ?? []
+  ): Promise<Evidence[]> {
     if (acIds.length === 0) {
       throw new Error('acIds must include at least one acceptance criterion id');
     }
 
-    const calls = this.plans.get(stepId) ?? [];
-    const acId = acIds[0];
+    if (calls.length === 0) {
+      throw new Error(`No calls found for step ${stepId}`);
+    }
+
     const out: Evidence[] = [];
 
-    for (const call of calls) {
-      const res = await this.registry.get(call.tool).run(call.input, { acId, claimId: stepId });
-      for (const evidence of res.evidence) {
-        out.push(evidence);
-        const path = (evidence.payload as { path?: unknown }).path;
-        if (typeof path === 'string') {
-          this.touched.push(path);
+    for (const acId of acIds) {
+      for (const call of calls) {
+        const res = await this.registry.get(call.tool).run(call.input, { acId, claimId: stepId });
+        for (const evidence of res.evidence) {
+          out.push({
+            ...evidence,
+            acId
+          });
+          const path = (evidence.payload as { path?: unknown }).path;
+          if (typeof path === 'string') {
+            this.touched.push(path);
+          }
         }
       }
     }

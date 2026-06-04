@@ -1,12 +1,25 @@
 #!/usr/bin/env node
 import {
   KernelHost,
+  ToolRegistry,
+  ToolEvidenceProvider,
+  ExecTool,
+  WriteFileTool,
+  FileExistsTool,
+  Workspace,
+  VerificationEngine,
+  CompletionGate,
   makeDeepSeekClientFromBobbyConfig,
   probeAndWriteCapabilities,
+  CommandExitOracle,
+  FileExistsOracle,
+  FileDiffOracle,
+  type PlannedCall,
   type ModelClient
 } from '@bobby/kernel';
 import { runHeadless } from './headless';
 import { pathToFileURL } from 'node:url';
+import type { Evidence } from '@bobby/shared';
 
 export type CliIO = {
   argv: string[];
@@ -23,7 +36,38 @@ const setupPrompt =
 
 type RunCliOptions = {
   makeModel?: () => Promise<ModelClient>;
+  makeConscience?: () => {
+    engine: VerificationEngine;
+    gate: CompletionGate;
+    evidenceFor: (
+      stepId: string,
+      acIds: string[],
+      calls?: ReadonlyArray<PlannedCall>
+    ) => Evidence[] | Promise<Evidence[]>;
+  };
   probe?: () => Promise<string>;
+};
+
+const defaultConscience = (workspaceRoot = process.cwd()): {
+  engine: VerificationEngine;
+  gate: CompletionGate;
+  evidenceFor: (stepId: string, acIds: string[], calls?: ReadonlyArray<PlannedCall>) => Evidence[] | Promise<Evidence[]>;
+} => {
+  const registry = new ToolRegistry();
+  const ws = new Workspace(workspaceRoot);
+  const provider = new ToolEvidenceProvider(registry);
+
+  registry.register(new ExecTool(workspaceRoot));
+  registry.register(new WriteFileTool(ws));
+  registry.register(new FileExistsTool(ws));
+
+  return {
+    engine: new VerificationEngine([new CommandExitOracle(), new FileExistsOracle(), new FileDiffOracle()]),
+    gate: new CompletionGate(),
+    evidenceFor: (stepId: string, acIds: string[], calls?: ReadonlyArray<PlannedCall>) => {
+      return provider.evidenceFor(stepId, acIds, calls);
+    }
+  };
 };
 
 function printHelp(io: CliIO): void {
@@ -49,8 +93,9 @@ async function runCommand(io: CliIO, args: string[], options: RunCliOptions): Pr
 
   try {
     const model = await (options.makeModel ?? makeDefaultModel)();
-    const host = new KernelHost(() => model);
-    const result = await runHeadless(host, task);
+    const conscience = (options.makeConscience ?? defaultConscience)();
+    const host = new KernelHost(() => model, conscience);
+    const result = await runHeadless(host, task, io.log);
     io.exit(result.exitCode);
   } catch (err) {
     handleError(io, err);

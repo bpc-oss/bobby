@@ -16,7 +16,10 @@ const stepsJson = JSON.stringify([
 
 describe('Orchestrator', () => {
   it('runs intent to plan to step to final events and stores the trace', async () => {
-    const model = new MockModelClient({ grader: [contractJson, stepsJson], runner: ['done'] });
+    const model = new MockModelClient({
+      grader: [contractJson, stepsJson],
+      runner: [JSON.stringify({ calls: [{ tool: 'write_file', input: { path: 'a.txt', content: 'x' } }] })]
+    });
     const orchestrator = new Orchestrator(model);
     const seen: string[] = [];
     orchestrator.on((event) => seen.push(event.type));
@@ -28,7 +31,10 @@ describe('Orchestrator', () => {
   });
 
   it('always emits failed final_result before M2 validation exists', async () => {
-    const model = new MockModelClient({ grader: [contractJson, stepsJson], runner: ['done'] });
+    const model = new MockModelClient({
+      grader: [contractJson, stepsJson],
+      runner: [JSON.stringify({ calls: [{ tool: 'write_file', input: { path: 'a.txt', content: 'x' } }] })]
+    });
     const orchestrator = new Orchestrator(model);
 
     const taskId = await orchestrator.startTask('help me do work');

@@ -6,6 +6,7 @@ import { TraceStore } from '../trace/trace-store';
 import type { ModelClient } from '../model/model-client';
 import type { VerificationEngine } from '../conscience/engine';
 import type { CompletionGate } from '../conscience/gate';
+import type { PlannedCall } from '../hands/evidence-provider';
 
 type Listener = (event: KernelEvent) => void;
 let taskCounter = 0;
@@ -18,7 +19,11 @@ const createTaskId = (): string => {
 export interface ConscienceDeps {
   engine: VerificationEngine;
   gate: CompletionGate;
-  evidenceFor: (stepId: string, acIds: string[]) => Evidence[] | Promise<Evidence[]>;
+  evidenceFor: (
+    stepId: string,
+    acIds: string[],
+    calls?: ReadonlyArray<PlannedCall>
+  ) => Evidence[] | Promise<Evidence[]>;
 }
 
 export class Orchestrator {
@@ -56,13 +61,13 @@ export class Orchestrator {
 
     for (const step of steps) {
       this.emit(taskId, { type: 'step_started', taskId, stepId: step.id });
-      await executeStep(this.model, step);
+      const claim = await executeStep(this.model, step);
 
       if (!this.conscience) {
         continue;
       }
 
-      const evidence = await this.conscience.evidenceFor(step.id, step.satisfiesAcIds);
+      const evidence = await this.conscience.evidenceFor(step.id, claim.acIds, claim.calls);
       for (const e of evidence) {
         this.emit(taskId, { type: 'evidence_produced', taskId, evidence: e });
       }

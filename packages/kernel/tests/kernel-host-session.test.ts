@@ -26,7 +26,7 @@ const makeHost = (): KernelHost =>
     () =>
       new MockModelClient({
         grader: [contractJson, stepsJson],
-        runner: ['runner output']
+        runner: [JSON.stringify({ calls: [{ tool: 'write_file', input: { path: 'a.txt', content: 'x' } }] })]
       })
   );
 

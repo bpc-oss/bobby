@@ -85,8 +85,8 @@ it('md and TS prompts keep exact text alignment', () => {
 it('prompts contain anti-self-praise and evidence constraints', () => {
   expect(INTENT_SYSTEM_PROMPT).toContain('不许自我表扬');
   expect(PLAN_SYSTEM_PROMPT).toContain('不许自我表扬');
-  expect(EXEC_SYSTEM_PROMPT).toContain('不许自我表扬');
   expect(PRO_REVIEW_SYSTEM_PROMPT).toContain('不许自我表扬');
+  expect(EXEC_SYSTEM_PROMPT).toContain('不得用“done/completed/verified”之类语句当作完成态');
 
   expect(INTENT_SYSTEM_PROMPT).toContain('证据');
   expect(PLAN_SYSTEM_PROMPT).toContain('证据');
@@ -115,7 +115,10 @@ it('planTask sends the plan system prompt', async () => {
 });
 
 it('executeStep sends the execution system prompt', async () => {
-  const model = new RecordingModelClient({ grader: [], runner: ['scan done'] });
+  const model = new RecordingModelClient({
+    grader: [],
+    runner: [JSON.stringify({ calls: [{ tool: 'write_file', input: { path: 'a.txt', content: 'x' } }] })]
+  });
   await executeStep(model, plan[0]);
 
   expect(model.messages[0]?.role).toBe('runner');

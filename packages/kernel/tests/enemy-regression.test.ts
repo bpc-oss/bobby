@@ -9,6 +9,10 @@ import type { Evidence } from '@bobby/shared';
 
 const liarRunnerText = '我已经全部仔细检查完了，没问题';
 
+const validRunnerJson = JSON.stringify({
+  calls: [{ tool: 'write_file', input: { path: 'tmp.txt', content: 'x' } }]
+});
+
 const contractJson = JSON.stringify({
   goal: 'g',
   acceptanceCriteria: [{ id: 'AC1', desc: 'd', oracleHint: 'review' }],
@@ -18,7 +22,7 @@ const contractJson = JSON.stringify({
 });
 
 const stepsJson = JSON.stringify([
-  { id: 'S1', desc: '执行可核验动作', satisfiesAcIds: ['AC1'], dependsOn: [] }
+  { id: 'S1', desc: '执行可验证动作', satisfiesAcIds: ['AC1'], dependsOn: [] }
 ]);
 
 const evidenceFor = (): Evidence[] => [
@@ -28,7 +32,7 @@ const evidenceFor = (): Evidence[] => [
     evidenceType: 'quote_with_location',
     payload: { items: [{ loc: 'L1', note: 'ok' }], expected: 3 },
     producedBy: 'tool'
-  },
+  }
 ];
 
 const evidenceForComplete = (): Evidence[] => [
@@ -41,13 +45,16 @@ const evidenceForComplete = (): Evidence[] => [
       expected: 3
     },
     producedBy: 'tool'
-  },
+  }
 ];
 
-const runTask = async (evidenceProvider: () => Evidence[]): Promise<'done' | 'failed' | 'blocked'> => {
+const runTask = async (
+  evidenceProvider: () => Evidence[],
+  runnerOutput: string = validRunnerJson
+): Promise<'done' | 'failed' | 'blocked'> => {
   const model = new MockModelClient({
     grader: [contractJson, stepsJson],
-    runner: [liarRunnerText]
+    runner: [runnerOutput]
   });
 
   const orchestrator = new Orchestrator(model, {
@@ -68,14 +75,31 @@ const runTask = async (evidenceProvider: () => Evidence[]): Promise<'done' | 'fa
 };
 
 describe('M6 Task 5 enemy regression', () => {
+  it('rejects plain-text runner output that claims completion without tool calls', async () => {
+    const model = new MockModelClient({
+      grader: [contractJson, stepsJson],
+      runner: [liarRunnerText]
+    });
+
+    const orchestrator = new Orchestrator(model, {
+      engine: new VerificationEngine([new CoverageOracle()]),
+      gate: new CompletionGate(),
+      evidenceFor: evidenceFor
+    });
+
+    await expect(orchestrator.startTask('build and verify')).rejects.toThrow(
+      'executeStep: model response is not valid JSON'
+    );
+  });
+
   it('fails when only 1/3 coverage is provided despite a completion claim', async () => {
-    const status = await runTask(evidenceFor);
+    const status = await runTask(evidenceFor, validRunnerJson);
 
     expect(status).toBe('failed');
   });
 
   it('passes when 3/3 coverage is provided', async () => {
-    const status = await runTask(evidenceForComplete);
+    const status = await runTask(evidenceForComplete, validRunnerJson);
 
     expect(status).toBe('done');
   });

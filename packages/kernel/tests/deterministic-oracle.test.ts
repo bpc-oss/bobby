@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CommandExitOracle, FileExistsOracle } from '../src/conscience/oracles/deterministic';
+import { CommandExitOracle, FileDiffOracle, FileExistsOracle } from '../src/conscience/oracles/deterministic';
 import type { AcceptanceCriterion, Evidence } from '@bobby/shared';
 
 const ac: AcceptanceCriterion = { id: 'AC1', desc: 'd', oracleHint: 'run' };
@@ -63,5 +63,26 @@ describe('FileExistsOracle', () => {
     const verdict = await oracle.judge(ac, [makeEvidence('file_exists', { exists: true }), makeEvidence('file_exists', {})]);
     expect(verdict.result).toBe('fail');
     expect(verdict.detail).toBe('file existence check failed: {}');
+  });
+});
+
+describe('FileDiffOracle', () => {
+  const oracle = new FileDiffOracle();
+
+  it('file_diff with bytes>0 and non-empty path -> pass', async () => {
+    const verdict = await oracle.judge(ac, [makeEvidence('file_diff', { path: '/tmp/a.txt', bytes: 4 })]);
+    expect(verdict.result).toBe('pass');
+  });
+
+  it('file_diff with bytes 0 -> fail', async () => {
+    const verdict = await oracle.judge(ac, [makeEvidence('file_diff', { path: '/tmp/a.txt', bytes: 0 })]);
+    expect(verdict.result).toBe('fail');
+    expect(verdict.detail).toContain('file diff evidence check failed');
+  });
+
+  it('file_diff with empty path -> fail', async () => {
+    const verdict = await oracle.judge(ac, [makeEvidence('file_diff', { path: '', bytes: 1 })]);
+    expect(verdict.result).toBe('fail');
+    expect(verdict.detail).toContain('"path":""');
   });
 });

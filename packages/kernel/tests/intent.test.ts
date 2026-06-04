@@ -25,4 +25,19 @@ describe('captureIntent', () => {
 
     await expect(captureIntent(model, 'x')).rejects.toThrow();
   });
+
+  it('throws when acceptanceCriteria is empty', async () => {
+    const noAcJson = JSON.stringify({
+      goal: 'Missing criteria',
+      acceptanceCriteria: [],
+      constraints: [],
+      inputs: [],
+      outOfScope: []
+    });
+    const model = new MockModelClient({ grader: [noAcJson], runner: [] });
+
+    await expect(captureIntent(model, 'x')).rejects.toThrow(
+      'captureIntent: invalid task contract schema at acceptanceCriteria:'
+    );
+  });
 });
