@@ -1,6 +1,6 @@
 {
   "name": "@bobby/cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "bin": {
     "bobby": "dist/index.js"
