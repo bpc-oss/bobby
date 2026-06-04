@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "jsx": "react-jsx",
+    "paths": {
+      "@bobby/shared": ["../shared/src/index.ts"],
+      "@bobby/kernel": ["../kernel/src/index.ts"]
+    }
+  },
+  "include": ["src", "tests"]
+}
