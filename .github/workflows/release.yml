@@ -6,10 +6,9 @@ on:
       - 'v*'
 
 jobs:
-  npm:
+  verify:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
     steps:
       - uses: actions/checkout@v4
@@ -18,23 +17,13 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
-      - run: node --version && npm --version
-      - name: Configure npm auth token for non-OIDC publish path
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -n "${NPM_TOKEN}" ]; then
-            echo "NODE_AUTH_TOKEN=${NPM_TOKEN}" >> "$GITHUB_ENV"
-          fi
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -r build && pnpm -r test
-      - run: pnpm --filter @bobby/shared publish --no-git-checks
-      - run: pnpm --filter @bobby/kernel publish --no-git-checks
-      - run: pnpm --filter @bobby/cli publish --no-git-checks
+      - run: pnpm lint
+      - run: pnpm -r build
+      - run: pnpm -r test
 
   desktop:
-    needs: npm
+    needs: verify
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -49,9 +38,8 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @bobby/gui run package:publish
         env:
