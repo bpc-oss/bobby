@@ -19,3 +19,5 @@ linux:
   category: Development
 publish:
   - provider: github
+    owner: bpc-oss
+    repo: bobby
