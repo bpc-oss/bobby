@@ -33,6 +33,8 @@ jobs:
   desktop:
     needs: npm
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       matrix:
         os:
@@ -51,3 +53,5 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @bobby/gui run package:publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

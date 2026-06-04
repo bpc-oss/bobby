@@ -5,6 +5,10 @@
   "bin": {
     "bobby": "dist/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bpc-oss/bobby"
+  },
   "scripts": {
     "build": "tsup src/index.ts --format esm",
     "test": "vitest run",
