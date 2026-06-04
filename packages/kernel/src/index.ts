@@ -27,4 +27,5 @@ export { Kernel as DefaultKernel } from './kernel';
 export { KernelHost } from './host/kernel-host';
 export { Config, DEFAULT_SETTINGS, type Settings } from './config/config';
 export { MemorySecretStore, type SecretStore } from './config/keychain';
+export { ConstraintsLibrary } from './config/constraints-library';
 export type { ModelClient, ModelMessage, ModelRole, ModelResponse } from './model/model-client';
