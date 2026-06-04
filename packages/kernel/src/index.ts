@@ -1,0 +1,9 @@
+export { Kernel } from './kernel';
+export { captureIntent } from './brain/intent';
+export { planTask } from './brain/planner';
+export { executeStep } from './brain/executor';
+export { Orchestrator } from './brain/orchestrator';
+export type { Claim } from './brain/executor';
+export { TraceStore } from './trace/trace-store';
+export { MockModelClient } from './model/mock-model-client';
+export { Kernel as DefaultKernel } from './kernel';
