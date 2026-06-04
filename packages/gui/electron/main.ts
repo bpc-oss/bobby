@@ -2,6 +2,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { KernelHost, makeDeepSeekClientFromBobbyConfig } from '@bobby/kernel';
+import { initAutoUpdate } from './updater';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -9,6 +10,18 @@ let pendingHost: Promise<KernelHost | null> | null = null;
 let hostInitError: Error | null = null;
 
 let mainWindow: BrowserWindow | null = null;
+
+const notifySystem = (message: string) => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.webContents.send('kernel:event', {
+    type: 'error',
+    taskId: 'system',
+    message
+  });
+};
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
@@ -66,8 +79,9 @@ ipcMain.handle('kernel:command', async (_event, cmd) => {
 });
 
 app.whenReady().then(() => {
-  void bootstrap();
   createWindow();
+  void bootstrap();
+  void initAutoUpdate(notifySystem);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
