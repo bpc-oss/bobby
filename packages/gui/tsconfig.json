@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "paths": {
+      "@bobby/shared": ["../shared/src/index.ts"],
+      "@bobby/kernel": ["../kernel/src/index.ts"]
+    }
+  },
+  "include": ["src", "electron", "tests"]
+}
