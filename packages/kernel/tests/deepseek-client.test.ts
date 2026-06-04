@@ -41,6 +41,7 @@ it('runner role uses runnerModel and returns content + raw transport response', 
   expect(calls).toHaveLength(1);
   expect(calls[0]!.model).toBe('runner-model');
   expect(calls[0]!.messages).toBe(messages);
+  expect(calls[0]!.reasoning).toBe(false);
 });
 
 it('grader with json enabled uses graderModel and sets jsonMode+reasoning when supported', async () => {
@@ -68,6 +69,26 @@ it('grader with json enabled uses graderModel and sets jsonMode+reasoning when s
   expect(calls[0]!.reasoning).toBe(true);
 });
 
+it('grader disables reasoning when report does not support it', async () => {
+  const calls: ChatRequest[] = [];
+  const transport: HttpTransport = {
+    async chat(req) {
+      calls.push(req);
+      return { content: 'grader-response', model: req.model };
+    }
+  };
+  const client = new DeepSeekModelClient({
+    apiKey: 'secret-key',
+    report: createReport({ useReasoning: false, useJsonMode: true }),
+    transport
+  });
+
+  const messages: ModelMessage[] = [{ role: 'system', content: 'plan' }];
+  await client.complete('grader', messages, { json: true });
+
+  expect(calls[0]!.reasoning).toBe(false);
+});
+
 it('grader does not set jsonMode when report does not support it', async () => {
   const calls: ChatRequest[] = [];
   const transport: HttpTransport = {
@@ -87,27 +108,6 @@ it('grader does not set jsonMode when report does not support it', async () => {
 
   expect(calls).toHaveLength(1);
   expect(calls[0]!.jsonMode).toBeUndefined();
-});
-
-it('runner never sets reasoning, even when capability is available', async () => {
-  const calls: ChatRequest[] = [];
-  const transport: HttpTransport = {
-    async chat(req) {
-      calls.push(req);
-      return { content: 'runner-response', model: req.model };
-    }
-  };
-  const client = new DeepSeekModelClient({
-    apiKey: 'secret-key',
-    report: createReport({ useReasoning: true }),
-    transport
-  });
-
-  const messages: ModelMessage[] = [{ role: 'assistant', content: 'status' }];
-  await client.complete('runner', messages);
-
-  expect(calls).toHaveLength(1);
-  expect(calls[0]!.reasoning).toBeUndefined();
 });
 
 it('passes-through original messages to transport unchanged', async () => {

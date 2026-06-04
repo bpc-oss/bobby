@@ -18,7 +18,7 @@ export class DeepSeekModelClient implements ModelClient {
     const req: ChatRequest = {
       model,
       messages,
-      ...(role === 'grader' && this.deps.report.useReasoning ? { reasoning: true } : {}),
+      reasoning: role === 'grader' ? !!this.deps.report.useReasoning : false,
       ...(opts?.json === true && this.deps.report.useJsonMode ? { jsonMode: true } : {})
     };
 

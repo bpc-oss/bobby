@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+vi.mock('../src/headless', () => ({
+  runHeadless: vi.fn()
+}));
+
+import type { ModelClient } from '@bobby/kernel';
 import { runCli } from '../src/index';
+import { runHeadless } from '../src/headless';
 
 const collectOutput = (): {
   logs: string[];
@@ -47,13 +53,29 @@ describe('runCli', () => {
     expect(exits).toEqual([1]);
   });
 
-  it('prints model-not-configured error and exits 1 for run', async () => {
+  it('prints configuration error and exits 1 for run', async () => {
     const { io, logs, exits } = collectOutput();
     io.argv = ['run', 'do', 'task'];
 
     await runCli(io);
 
-    expect(logs.join('\n')).toContain('未配置模型');
+    expect(logs.join('\n')).toContain('未配置');
+    expect(logs.join('\n')).not.toContain('deepseek-key');
     expect(exits).toEqual([1]);
+  });
+
+  it('uses injected makeModel for run and exits with headless result', async () => {
+    const { io, exits } = collectOutput();
+    io.argv = ['run', 'hello', 'world'];
+
+    const mockedRunHeadless = vi.mocked(runHeadless);
+    mockedRunHeadless.mockResolvedValueOnce({ exitCode: 0, status: 'done' });
+
+    const model: ModelClient = { complete: vi.fn() };
+
+    await runCli(io, { makeModel: async () => model });
+
+    expect(mockedRunHeadless).toHaveBeenCalledTimes(1);
+    expect(exits).toEqual([0]);
   });
 });

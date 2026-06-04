@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { KernelHost } from '@bobby/kernel';
+import { KernelHost, makeDeepSeekClientFromBobbyConfig, type ModelClient } from '@bobby/kernel';
 import { runHeadless } from './headless';
 import { pathToFileURL } from 'node:url';
 
@@ -9,19 +9,23 @@ export type CliIO = {
   exit: (code: number) => void | never;
 };
 
-export function makeDefaultModel(): never {
-  throw new Error('未配置模型：请在 M6 后配置 DeepSeek Key');
+export async function makeDefaultModel(): Promise<ModelClient> {
+  return makeDeepSeekClientFromBobbyConfig();
 }
 
 const setupPrompt =
   'Bobby CLI — 配置 DeepSeek Key 后开始（见 M6）。';
+
+type RunCliOptions = {
+  makeModel?: () => Promise<ModelClient>;
+};
 
 function printHelp(io: CliIO): void {
   io.log(setupPrompt);
   io.log('用法：bobby run "<task>" | bobby interactive');
 }
 
-export async function runCli(io: CliIO): Promise<void> {
+export async function runCli(io: CliIO, options: RunCliOptions = {}): Promise<void> {
   const [cmd, ...args] = io.argv;
 
   if (!cmd) {
@@ -37,8 +41,9 @@ export async function runCli(io: CliIO): Promise<void> {
       return;
     }
 
-    const host = new KernelHost(makeDefaultModel);
     try {
+      const model = await (options.makeModel ?? makeDefaultModel)();
+      const host = new KernelHost(() => model);
       const result = await runHeadless(host, task);
       io.exit(result.exitCode);
     } catch (err) {

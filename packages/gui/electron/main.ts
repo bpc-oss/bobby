@@ -1,14 +1,12 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { KernelHost } from '@bobby/kernel';
-
-const host = new KernelHost(() => {
-  throw new Error('未配置 DeepSeek Key（见设置/首启向导）');
-});
-
+import { KernelHost, makeDeepSeekClientFromBobbyConfig } from '@bobby/kernel';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+let pendingHost: Promise<KernelHost | null> | null = null;
+let hostInitError: Error | null = null;
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -30,22 +28,45 @@ const createWindow = () => {
   }
 };
 
-const bootstrap = () => {
-  host.subscribe((event) => {
+const createHost = async () => {
+  try {
+    const model = await makeDeepSeekClientFromBobbyConfig();
+    return new KernelHost(() => model);
+  } catch (err) {
+    if (err instanceof Error) {
+      hostInitError = err;
+    } else {
+      hostInitError = new Error('Kernel 启动失败');
+    }
+    return null;
+  }
+};
+
+const bootstrap = async () => {
+  const runtimeHost = await (pendingHost ?? (pendingHost = createHost()));
+  if (!runtimeHost) {
+    return;
+  }
+
+  runtimeHost.subscribe((event) => {
     if (!mainWindow || mainWindow.isDestroyed()) {
       return;
     }
 
     mainWindow.webContents.send('kernel:event', event);
   });
-
-  ipcMain.handle('kernel:command', async (_event, cmd) => {
-    await host.send(cmd);
-  });
 };
 
+ipcMain.handle('kernel:command', async (_event, cmd) => {
+  const currentHost = await (pendingHost ?? (pendingHost = createHost()));
+  if (!currentHost) {
+    throw hostInitError ?? new Error('Kernel 主机未就绪，请先完成配置');
+  }
+  await currentHost.send(cmd);
+});
+
 app.whenReady().then(() => {
-  bootstrap();
+  void bootstrap();
   createWindow();
 
   app.on('activate', () => {
