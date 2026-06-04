@@ -1,11 +1,15 @@
 {
   "name": "@bobby/gui",
   "version": "0.0.0",
+  "description": "Bobby GUI application",
+  "author": "Bobby",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build && tsup electron/main.ts electron/preload.ts --format esm --out-dir dist-electron",
+    "package": "pnpm build && node -e \"const fs=require('node:fs');const path=require('node:path');const {spawnSync}=require('node:child_process');const src=path.join(process.cwd(),'electron-builder.yml');const tmp=path.join(process.cwd(),'electron-builder.package.local.yml');let status=1;const clean=()=>{try{fs.unlinkSync(tmp);}catch{}};try{const lines=fs.readFileSync(src,'utf8').split(/\\r?\\n/);const out=[];let skipping=false;for(const line of lines){if(!skipping&&/^publish:\\s*$/.test(line)){skipping=true;continue;}if(skipping){if(line.length===0||/^[^\\s]/.test(line)){skipping=false;} else {continue;}}if(!skipping) out.push(line);}fs.writeFileSync(tmp,out.join('\\n'));const result=spawnSync(process.execPath,[require.resolve('electron-builder/out/cli/cli.js'),'--config',tmp,'--publish','never'],{stdio:'inherit'});status=result.status ?? 0;} finally {clean();}process.exit(status);\"",
+    "package:publish": "pnpm build && electron-builder --config electron-builder.yml --publish onTag",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -13,7 +17,6 @@
     "@bobby/kernel": "workspace:*",
     "@bobby/shared": "workspace:*",
     "@vitejs/plugin-react": "^4.3.0",
-    "electron": "^31.0.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "vite": "^5.3.0"
@@ -22,6 +25,8 @@
     "@testing-library/react": "^16.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "electron": "^31.0.0",
+    "electron-builder": "24.13.3",
     "jsdom": "^24.0.0"
   }
 }

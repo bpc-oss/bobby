@@ -1,0 +1,21 @@
+appId: dev.bobby.app
+productName: Bobby
+directories:
+  output: release
+files:
+  - dist/**
+  - dist-electron/**
+mac:
+  target:
+    - dmg
+  category: public.app-category.developer-tools
+win:
+  target:
+    - nsis
+  signAndEditExecutable: false
+linux:
+  target:
+    - AppImage
+  category: Development
+publish:
+  - provider: github

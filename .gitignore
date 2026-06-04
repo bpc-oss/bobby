@@ -4,3 +4,7 @@ dist
 *.log
 .env
 coverage
+packages/gui/release/
+packages/gui/dist-electron/
+packages/gui/release-verify*/
+packages/gui/electron-builder.package.local.yml
