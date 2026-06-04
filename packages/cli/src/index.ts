@@ -31,6 +31,53 @@ function printHelp(io: CliIO): void {
   io.log('Usage: bobby run "<task>" | bobby interactive | bobby probe');
 }
 
+function handleError(io: CliIO, err: unknown): void {
+  if (err instanceof Error) {
+    io.log(err.message);
+    return;
+  }
+  io.log(String(err));
+}
+
+async function runCommand(io: CliIO, args: string[], options: RunCliOptions): Promise<void> {
+  const task = args.join(' ').trim();
+  if (!task) {
+    printHelp(io);
+    io.exit(1);
+    return;
+  }
+
+  try {
+    const model = await (options.makeModel ?? makeDefaultModel)();
+    const host = new KernelHost(() => model);
+    const result = await runHeadless(host, task);
+    io.exit(result.exitCode);
+  } catch (err) {
+    handleError(io, err);
+    io.exit(1);
+  }
+}
+
+function interactiveCommand(io: CliIO): void {
+  io.log('Interactive mode not enabled in this milestone yet.');
+}
+
+async function probeCommand(io: CliIO, options: RunCliOptions): Promise<void> {
+  try {
+    const reportPath = await (options.probe ?? probeAndWriteCapabilities)();
+    io.log(`DeepSeek capability report written to: ${reportPath}`);
+  } catch (err) {
+    handleError(io, err);
+    io.exit(1);
+  }
+}
+
+function unsupportedCommand(io: CliIO, cmd: string): void {
+  io.log(`Unknown command: ${cmd}`);
+  io.log('Supported commands: run, interactive, probe');
+  io.exit(1);
+}
+
 export async function runCli(io: CliIO, options: RunCliOptions = {}): Promise<void> {
   const [cmd, ...args] = io.argv;
 
@@ -40,52 +87,21 @@ export async function runCli(io: CliIO, options: RunCliOptions = {}): Promise<vo
   }
 
   if (cmd === 'run') {
-    const task = args.join(' ').trim();
-    if (!task) {
-      printHelp(io);
-      io.exit(1);
-      return;
-    }
-
-    try {
-      const model = await (options.makeModel ?? makeDefaultModel)();
-      const host = new KernelHost(() => model);
-      const result = await runHeadless(host, task);
-      io.exit(result.exitCode);
-    } catch (err) {
-      if (err instanceof Error) {
-        io.log(err.message);
-      } else {
-        io.log(String(err));
-      }
-      io.exit(1);
-    }
+    await runCommand(io, args, options);
     return;
   }
 
   if (cmd === 'interactive') {
-    io.log('Interactive mode not enabled in this milestone yet.');
+    interactiveCommand(io);
     return;
   }
 
   if (cmd === 'probe') {
-    try {
-      const reportPath = await (options.probe ?? probeAndWriteCapabilities)();
-      io.log(`DeepSeek capability report written to: ${reportPath}`);
-    } catch (err) {
-      if (err instanceof Error) {
-        io.log(err.message);
-      } else {
-        io.log(String(err));
-      }
-      io.exit(1);
-    }
+    await probeCommand(io, options);
     return;
   }
 
-  io.log(`Unknown command: ${cmd}`);
-  io.log('Supported commands: run, interactive, probe');
-  io.exit(1);
+  unsupportedCommand(io, cmd);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

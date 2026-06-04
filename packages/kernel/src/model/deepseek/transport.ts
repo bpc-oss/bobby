@@ -51,6 +51,52 @@ export interface DeepSeekChatResponse {
   };
 }
 
+function buildChatRequestBody(req: ChatRequest): string {
+  return JSON.stringify({
+    model: req.model,
+    messages: req.messages,
+    stream: false,
+    ...(req.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+    thinking: { type: req.reasoning ? 'enabled' : 'disabled' },
+    ...(req.reasoning ? { reasoning_effort: 'high' } : {})
+  });
+}
+
+function makeHttpError(status: number): Error & { status: number } {
+  const error = new Error(`DeepSeek request failed with status ${status}`) as Error & { status: number };
+  error.status = status;
+  return error;
+}
+
+function mapUsage(usage: DeepSeekChatResponse['usage']): ChatResponse['usage'] {
+  if (
+    usage &&
+    typeof usage === 'object' &&
+    usage.prompt_tokens !== undefined &&
+    usage.completion_tokens !== undefined
+  ) {
+    return {
+      promptTokens: Number(usage.prompt_tokens),
+      completionTokens: Number(usage.completion_tokens),
+      cachedTokens: usage.cached_tokens === undefined ? undefined : Number(usage.cached_tokens)
+    };
+  }
+
+  return undefined;
+}
+
+function extractContent(raw: DeepSeekChatResponse): string {
+  return typeof raw.choices?.[0]?.message?.content === 'string' ? raw.choices[0].message.content : '';
+}
+
+function mapChatResponse(raw: DeepSeekChatResponse, requestModel: string): ChatResponse {
+  return {
+    content: extractContent(raw),
+    model: typeof raw.model === 'string' ? raw.model : requestModel,
+    usage: mapUsage(raw.usage)
+  };
+}
+
 export class FetchTransport implements HttpTransport {
   private readonly baseUrl: string;
   private readonly fetchImpl: FetchFn;
@@ -70,43 +116,14 @@ export class FetchTransport implements HttpTransport {
           'content-type': 'application/json',
           authorization: `Bearer ${this.opts.apiKey}`
         },
-        body: JSON.stringify({
-          model: req.model,
-          messages: req.messages,
-          stream: false,
-          ...(req.jsonMode ? { response_format: { type: 'json_object' } } : {}),
-          thinking: { type: req.reasoning ? 'enabled' : 'disabled' },
-          ...(req.reasoning ? { reasoning_effort: 'high' } : {})
-        })
+        body: buildChatRequestBody(req)
       });
 
       if (!response.ok) {
-        const error = new Error(`DeepSeek request failed with status ${response.status}`) as Error & { status: number };
-        error.status = response.status;
-        throw error;
+        throw makeHttpError(response.status);
       }
 
-      const raw = (await response.json()) as DeepSeekChatResponse;
-      const content =
-        typeof raw.choices?.[0]?.message?.content === 'string' ? raw.choices[0].message.content : '';
-      const usage =
-        raw.usage &&
-        typeof raw.usage === 'object' &&
-        raw.usage.prompt_tokens !== undefined &&
-        raw.usage.completion_tokens !== undefined
-          ? {
-              promptTokens: Number(raw.usage.prompt_tokens),
-              completionTokens: Number(raw.usage.completion_tokens),
-              cachedTokens:
-                raw.usage.cached_tokens === undefined ? undefined : Number(raw.usage.cached_tokens)
-            }
-          : undefined;
-
-      return {
-        content,
-        model: typeof raw.model === 'string' ? raw.model : req.model,
-        usage
-      };
+      return mapChatResponse((await response.json()) as DeepSeekChatResponse, req.model);
     };
 
     if (this.retryConfig === false) {

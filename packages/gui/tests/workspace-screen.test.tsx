@@ -32,7 +32,10 @@ describe('workspace UI smoke', () => {
   });
 
   it('smoke renders workspace core areas', async () => {
-    const onEvent = (_cb: (event: KernelEvent) => void) => () => {};
+    const onEvent = (callback: (event: KernelEvent) => void) => {
+      void callback;
+      return () => {};
+    };
     const startTask = vi.fn().mockResolvedValue(undefined);
     const approveGate = vi.fn().mockResolvedValue(undefined);
 

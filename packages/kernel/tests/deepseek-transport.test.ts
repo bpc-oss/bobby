@@ -9,22 +9,15 @@ const makeFakeResponse = (body: unknown, status = 200, ok = true) =>
     json: async () => body
   }) as Response;
 
-const readJson = async (value: string): Promise<unknown> => {
-  const raw = JSON.parse(value);
-  return raw;
-};
+const parseJson = async (value: string): Promise<Record<string, unknown>> => JSON.parse(value);
 
 it('chat sends DeepSeek-compatible request including response_format and thinking mode', async () => {
   const calls: Array<{ url: string; init: RequestInit }> = [];
-
   const fakeFetch = vi.fn(async (url: string, init?: RequestInit): Promise<Response> => {
-    calls.push({
-      url,
-      init: init ?? {}
-    });
+    calls.push({ url, init: init ?? {} });
 
     if (typeof init?.body === 'string') {
-      const parsed = (await readJson(init.body)) as Record<string, unknown>;
+      const parsed = await parseJson(init.body);
       expect(parsed.model).toBe('deepseek-v4-flash');
       expect(parsed.messages).toEqual([{ role: 'user', content: 'hello' }]);
       expect(parsed.stream).toBe(false);
@@ -40,10 +33,7 @@ it('chat sends DeepSeek-compatible request including response_format and thinkin
     });
   });
 
-  const transport = new FetchTransport({
-    apiKey: 'token',
-    fetch: fakeFetch
-  });
+  const transport = new FetchTransport({ apiKey: 'token', fetch: fakeFetch });
 
   const response = await transport.chat({
     model: 'deepseek-v4-flash',
@@ -73,7 +63,6 @@ it('chat retries on 429 with retry delay and succeeds on the second attempt', as
 
   const fakeFetch = vi.fn(async (): Promise<Response> => {
     callCount += 1;
-
     if (callCount === 1) {
       return makeFakeResponse({ message: 'rate limited' }, 429, false);
     }
