@@ -50,11 +50,12 @@ const evidenceForComplete = (): Evidence[] => [
 
 const runTask = async (
   evidenceProvider: () => Evidence[],
-  runnerOutput: string = validRunnerJson
+  runnerOutputs: string[] = [validRunnerJson, validRunnerJson],
+  graderOutputs: string[] = []
 ): Promise<'done' | 'failed' | 'blocked'> => {
   const model = new MockModelClient({
-    grader: [contractJson, stepsJson],
-    runner: [runnerOutput]
+    grader: [contractJson, stepsJson, ...graderOutputs],
+    runner: [...runnerOutputs]
   });
 
   const orchestrator = new Orchestrator(model, {
@@ -93,13 +94,13 @@ describe('M6 Task 5 enemy regression', () => {
   });
 
   it('fails when only 1/3 coverage is provided despite a completion claim', async () => {
-    const status = await runTask(evidenceFor, validRunnerJson);
+    const status = await runTask(evidenceFor, [validRunnerJson, validRunnerJson], [validRunnerJson]);
 
     expect(status).toBe('failed');
   });
 
   it('passes when 3/3 coverage is provided', async () => {
-    const status = await runTask(evidenceForComplete, validRunnerJson);
+    const status = await runTask(evidenceForComplete);
 
     expect(status).toBe('done');
   });

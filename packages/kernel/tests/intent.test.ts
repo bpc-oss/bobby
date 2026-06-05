@@ -41,3 +41,24 @@ describe('captureIntent', () => {
     );
   });
 });
+
+it('captureIntent keeps only machine-checkable constraints from model output', async () => {
+  const noisyContractJson = JSON.stringify({
+    goal: 'Create hello file',
+    acceptanceCriteria: [{ id: 'AC1', desc: "hello.txt contains exactly 'hi'", oracleHint: 'file' }],
+    constraints: [
+      { id: 'C1', desc: 'Content must be the string hi', check: 'string' },
+      { id: 'C2', desc: 'Verification command must run', check: 'run' },
+      { id: 'C3', desc: 'Do not touch legacy files', check: 'path:src/legacy/' }
+    ],
+    inputs: [],
+    outOfScope: []
+  });
+  const model = new MockModelClient({ grader: [noisyContractJson], runner: [] });
+
+  const contract = await captureIntent(model, 'create hello.txt');
+
+  expect(contract.constraints).toEqual([
+    { id: 'C3', desc: 'Do not touch legacy files', check: 'path:src/legacy/' }
+  ]);
+});

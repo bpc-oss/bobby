@@ -53,6 +53,7 @@ function parseCapabilities(raw: unknown): CapabilityReport {
     useFim: candidate.useFim!,
     useCaching: candidate.useCaching!,
     useReasoning: candidate.useReasoning!,
+    useStreaming: isBoolean(candidate.useStreaming) ? candidate.useStreaming : false,
     contextWindow: candidate.contextWindow!
   };
 }

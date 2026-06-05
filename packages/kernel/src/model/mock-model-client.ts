@@ -2,17 +2,19 @@ import type {
   ModelClient,
   ModelMessage,
   ModelRole,
-  ModelResponse
+  ModelResponse,
+  ModelCallOptions
 } from './model-client';
 
 export class MockModelClient implements ModelClient {
+  public readonly calls: Array<{ role: ModelRole; messages: ModelMessage[]; opts?: ModelCallOptions }> = [];
+
   constructor(
     private readonly responses: Record<ModelRole, string[]>
   ) {}
 
-  async complete(role: ModelRole, messages: ModelMessage[], opts?: { json?: boolean }): Promise<ModelResponse> {
-    void messages;
-    void opts;
+  async complete(role: ModelRole, messages: ModelMessage[], opts?: ModelCallOptions): Promise<ModelResponse> {
+    this.calls.push({ role, messages, opts });
     const queue = this.responses[role];
 
     if (!queue || queue.length === 0) {

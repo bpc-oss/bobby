@@ -14,13 +14,29 @@ import {
   CommandExitOracle,
   FileExistsOracle,
   FileDiffOracle,
+  NoForbiddenPathChecker,
+  type ConscienceDeps,
   type PlannedCall,
   type ModelClient
 } from '@bobby/kernel';
 import { runHeadless } from './headless';
-import { pathToFileURL } from 'node:url';
-import type { Evidence } from '@bobby/shared';
-
+import {
+  canStartInteractive,
+  runInteractiveSession,
+  type InteractiveDeps,
+  type InteractiveHandlers
+} from './interactive';
+import {
+  getOnboardingStatus,
+  isReadyForTasks,
+  promptForDeepSeekKey,
+  readDeepSeekKeyFromEnv,
+  renderOnboarding,
+  saveDeepSeekKey,
+  type OnboardingDeps
+} from './onboarding';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 export type CliIO = {
   argv: string[];
   log: (msg: string) => void;
@@ -31,28 +47,16 @@ export async function makeDefaultModel(): Promise<ModelClient> {
   return makeDeepSeekClientFromBobbyConfig();
 }
 
-const setupPrompt =
-  'Bobby CLI — Configure DeepSeek Key before running (see M6).';
-
 type RunCliOptions = {
   makeModel?: () => Promise<ModelClient>;
-  makeConscience?: () => {
-    engine: VerificationEngine;
-    gate: CompletionGate;
-    evidenceFor: (
-      stepId: string,
-      acIds: string[],
-      calls?: ReadonlyArray<PlannedCall>
-    ) => Evidence[] | Promise<Evidence[]>;
-  };
+  makeConscience?: () => ConscienceDeps;
   probe?: () => Promise<string>;
+  onboarding?: OnboardingDeps;
+  interactive?: InteractiveDeps;
+  promptForKey?: () => Promise<string>;
 };
 
-const defaultConscience = (workspaceRoot = process.cwd()): {
-  engine: VerificationEngine;
-  gate: CompletionGate;
-  evidenceFor: (stepId: string, acIds: string[], calls?: ReadonlyArray<PlannedCall>) => Evidence[] | Promise<Evidence[]>;
-} => {
+const defaultConscience = (workspaceRoot = process.cwd()): ConscienceDeps => {
   const registry = new ToolRegistry();
   const ws = new Workspace(workspaceRoot);
   const provider = new ToolEvidenceProvider(registry);
@@ -64,15 +68,18 @@ const defaultConscience = (workspaceRoot = process.cwd()): {
   return {
     engine: new VerificationEngine([new CommandExitOracle(), new FileExistsOracle(), new FileDiffOracle()]),
     gate: new CompletionGate(),
+    context: () => provider.context(),
+    constraintCheckers: [new NoForbiddenPathChecker()],
     evidenceFor: (stepId: string, acIds: string[], calls?: ReadonlyArray<PlannedCall>) => {
       return provider.evidenceFor(stepId, acIds, calls);
     }
   };
 };
 
-function printHelp(io: CliIO): void {
-  io.log(setupPrompt);
-  io.log('Usage: bobby run "<task>" | bobby interactive | bobby probe');
+function printOnboarding(io: CliIO, options: RunCliOptions, status = getOnboardingStatus(options.onboarding)): void {
+  for (const line of renderOnboarding(status)) {
+    io.log(line);
+  }
 }
 
 function handleError(io: CliIO, err: unknown): void {
@@ -83,10 +90,33 @@ function handleError(io: CliIO, err: unknown): void {
   io.log(String(err));
 }
 
+function shouldSkipSetupPreflight(options: RunCliOptions): boolean {
+  return options.makeModel !== undefined;
+}
+
+function preflightTaskSetup(io: CliIO, options: RunCliOptions): boolean {
+  if (shouldSkipSetupPreflight(options)) {
+    return true;
+  }
+
+  const status = getOnboardingStatus(options.onboarding);
+  if (isReadyForTasks(status)) {
+    return true;
+  }
+
+  printOnboarding(io, options, status);
+  return false;
+}
+
 async function runCommand(io: CliIO, args: string[], options: RunCliOptions): Promise<void> {
   const task = args.join(' ').trim();
   if (!task) {
-    printHelp(io);
+    printOnboarding(io, options);
+    io.exit(1);
+    return;
+  }
+
+  if (!preflightTaskSetup(io, options)) {
     io.exit(1);
     return;
   }
@@ -103,8 +133,53 @@ async function runCommand(io: CliIO, args: string[], options: RunCliOptions): Pr
   }
 }
 
-function interactiveCommand(io: CliIO): void {
-  io.log('Interactive mode not enabled in this milestone yet.');
+async function runWithoutProcessExit(
+  io: CliIO,
+  action: (safeIo: CliIO) => Promise<void>
+): Promise<number> {
+  let exitCode = 0;
+  await action({
+    ...io,
+    exit: (code) => {
+      exitCode = code;
+    }
+  });
+  return exitCode;
+}
+
+function printInteractiveHelp(io: CliIO): void {
+  io.log('Interactive commands');
+  io.log('  <task>    Run a natural-language task in this directory');
+  io.log('  /status   Show Bobby setup status');
+  io.log('  /probe    Refresh the DeepSeek capability report');
+  io.log('  /help     Show this help');
+  io.log('  /exit     Quit');
+}
+
+async function interactiveCommand(io: CliIO, options: RunCliOptions): Promise<void> {
+  if (!preflightTaskSetup(io, options)) {
+    io.exit(1);
+    return;
+  }
+
+  const handlers: InteractiveHandlers = {
+    runTask: async (task) => runWithoutProcessExit(io, (safeIo) => runCommand(safeIo, [task], options)),
+    createHost: async () => {
+      const model = await (options.makeModel ?? makeDefaultModel)();
+      const conscience = (options.makeConscience ?? defaultConscience)();
+      return new KernelHost(() => model, conscience);
+    },
+    printHelp: () => printInteractiveHelp(io),
+    printStatus: () => printOnboarding(io, options),
+    probe: async () => runWithoutProcessExit(io, (safeIo) => probeCommand(safeIo, options))
+  };
+
+  try {
+    await runInteractiveSession(io, handlers, options.interactive);
+  } catch (err) {
+    handleError(io, err);
+    io.exit(1);
+  }
 }
 
 async function probeCommand(io: CliIO, options: RunCliOptions): Promise<void> {
@@ -117,9 +192,50 @@ async function probeCommand(io: CliIO, options: RunCliOptions): Promise<void> {
   }
 }
 
+async function loginCommand(io: CliIO, args: string[], options: RunCliOptions): Promise<void> {
+  const supportedFlags = new Set(['--from-env', '--skip-probe']);
+  const unknownFlags = args.filter((arg) => !supportedFlags.has(arg));
+  if (unknownFlags.length > 0) {
+    io.log(`Unknown login option: ${unknownFlags.join(' ')}`);
+    io.log('Usage: bobby login [--from-env] [--skip-probe]');
+    io.exit(1);
+    return;
+  }
+
+  const fromEnv = args.includes('--from-env');
+  const skipProbe = args.includes('--skip-probe');
+
+  try {
+    const apiKey = fromEnv
+      ? readDeepSeekKeyFromEnv(options.onboarding)
+      : await (options.promptForKey ?? (() => promptForDeepSeekKey(options.onboarding)))();
+
+    if (!apiKey) {
+      io.log('DEEPSEEK_API_KEY was not found. Run bobby login and paste your key, or set it first.');
+      io.exit(1);
+      return;
+    }
+
+    const keyPath = saveDeepSeekKey(apiKey, options.onboarding);
+    io.log(`DeepSeek key saved to: ${keyPath}`);
+
+    if (skipProbe) {
+      io.log('Skipped capability probe. Run bobby probe before the first task.');
+      return;
+    }
+
+    const reportPath = await (options.probe ?? probeAndWriteCapabilities)();
+    io.log(`Capability report written to: ${reportPath}`);
+    io.log('Bobby is ready. Try: bobby run "Create hello.txt with exactly hi, then verify with cmd /c type hello.txt"');
+  } catch (err) {
+    handleError(io, err);
+    io.exit(1);
+  }
+}
+
 function unsupportedCommand(io: CliIO, cmd: string): void {
   io.log(`Unknown command: ${cmd}`);
-  io.log('Supported commands: run, interactive, probe');
+  io.log('Supported commands: login, run, interactive, probe, help');
   io.exit(1);
 }
 
@@ -127,7 +243,23 @@ export async function runCli(io: CliIO, options: RunCliOptions = {}): Promise<vo
   const [cmd, ...args] = io.argv;
 
   if (!cmd) {
-    io.log(setupPrompt);
+    const status = getOnboardingStatus(options.onboarding);
+    if (isReadyForTasks(status) && canStartInteractive(options.interactive)) {
+      await interactiveCommand(io, options);
+      return;
+    }
+
+    printOnboarding(io, options, status);
+    return;
+  }
+
+  if (cmd === 'help' || cmd === '--help' || cmd === '-h') {
+    printOnboarding(io, options);
+    return;
+  }
+
+  if (cmd === 'login') {
+    await loginCommand(io, args, options);
     return;
   }
 
@@ -137,7 +269,7 @@ export async function runCli(io: CliIO, options: RunCliOptions = {}): Promise<vo
   }
 
   if (cmd === 'interactive') {
-    interactiveCommand(io);
+    await interactiveCommand(io, options);
     return;
   }
 
@@ -149,7 +281,19 @@ export async function runCli(io: CliIO, options: RunCliOptions = {}): Promise<vo
   unsupportedCommand(io, cmd);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export function isCliEntrypoint(argvPath: string | undefined, moduleUrl = import.meta.url): boolean {
+  if (!argvPath) {
+    return false;
+  }
+
+  try {
+    return realpathSync(argvPath) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return moduleUrl === pathToFileURL(argvPath).href;
+  }
+}
+
+if (isCliEntrypoint(process.argv[1])) {
   void runCli({
     argv: process.argv.slice(2),
     log: console.log,

@@ -24,6 +24,7 @@ it('chat sends DeepSeek-compatible request including response_format and thinkin
       expect(parsed.thinking).toEqual({ type: 'enabled' });
       expect(parsed.reasoning_effort).toBe('high');
       expect(parsed.response_format).toEqual({ type: 'json_object' });
+      expect(parsed.bobbyCache).toBeUndefined();
     }
 
     return makeFakeResponse({
@@ -55,6 +56,70 @@ it('chat sends DeepSeek-compatible request including response_format and thinkin
     completionTokens: 4,
     cachedTokens: 5
   });
+});
+
+it('chat sends reasoning_effort when explicitly configured', async () => {
+  const calls: Array<{ url: string; init: RequestInit }> = [];
+  const fakeFetch = vi.fn(async (url: string, init?: RequestInit): Promise<Response> => {
+    calls.push({ url, init: init ?? {} });
+
+    if (typeof init?.body === 'string') {
+      const parsed = await parseJson(init.body);
+      expect(parsed.model).toBe('deepseek-v4-flash');
+      expect(parsed.thinking).toEqual({ type: 'enabled' });
+      expect(parsed.reasoning_effort).toBe('medium');
+    }
+
+    return makeFakeResponse({
+      choices: [{ message: { content: 'ok' } }],
+      model: 'deepseek-v4-flash',
+      usage: { prompt_tokens: 3, completion_tokens: 4, cached_tokens: 5 }
+    });
+  });
+
+  const transport = new FetchTransport({ apiKey: 'token', fetch: fakeFetch });
+
+  await transport.chat({
+    model: 'deepseek-v4-flash',
+    messages: [{ role: 'user', content: 'hello' }],
+    reasoningEffort: 'medium'
+  });
+
+  expect(calls).toHaveLength(1);
+});
+
+it('chat keeps local cacheMetadata out of serialized HTTP body', async () => {
+  const calls: Array<{ url: string; init: RequestInit }> = [];
+  const fakeFetch = vi.fn(async (url: string, init?: RequestInit): Promise<Response> => {
+    calls.push({ url, init: init ?? {} });
+
+    if (typeof init?.body === 'string') {
+      const parsed = await parseJson(init.body);
+      expect(parsed).not.toHaveProperty('bobbyCache');
+      expect(parsed).not.toHaveProperty('cacheMetadata');
+    }
+
+    return makeFakeResponse({
+      choices: [{ message: { content: 'ok' } }],
+      model: 'deepseek-v4-flash',
+      usage: { prompt_tokens: 3, completion_tokens: 4, cached_tokens: 5 }
+    });
+  });
+
+  const transport = new FetchTransport({ apiKey: 'token', fetch: fakeFetch });
+
+  await transport.chat({
+    model: 'deepseek-v4-flash',
+    messages: [{ role: 'user', content: 'hello' }],
+    cacheMetadata: {
+      prefix: 'stable',
+      prefixHash: 'f379ccb92b9116442dc65bdc35648a85d3786b34779db7f704a901fa07b00cb6',
+      sessionId: 'pro-1',
+      tools: ['read_file', 'grep', 'replace_text', 'file_exists']
+    }
+  });
+
+  expect(calls).toHaveLength(1);
 });
 
 it('chat retries on 429 with retry delay and succeeds on the second attempt', async () => {

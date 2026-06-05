@@ -14,6 +14,20 @@ npm exec pnpm@9 -- install
 
 3. 准备 DeepSeek Key（你的密钥）：
 
+```bash
+bobby login
+```
+
+如果你已经设置了 `DEEPSEEK_API_KEY`（当前 shell，或 Windows User/Machine 环境变量），可以直接导入：
+
+```bash
+bobby login --from-env
+```
+
+`bobby login` 会将 Key 写入本地 `~/.bobby/key`，并生成 `~/.bobby/capabilities.json`。
+
+手动写入仍然可作为备用路径：
+
 ```powershell
 New-Item -ItemType Directory -Force -Path "$HOME/.bobby"
 Set-Content "$HOME/.bobby/key" "<你的 DeepSeek Key>" -Encoding utf8
@@ -21,9 +35,9 @@ Set-Content "$HOME/.bobby/key" "<你的 DeepSeek Key>" -Encoding utf8
 
 > 仅示例，不要在任何输出里泄露真实 Key。
 
-## 2. 先做能力探测（`bobby probe`）
+## 2. 刷新能力探测（`bobby probe`）
 
-源码环境下必须先做全工作区构建，再运行探测：
+`bobby login` 默认会生成能力报告；如果你手动写入了 Key，或想刷新模型能力报告，再运行探测：
 
 ```bash
 npm exec pnpm@9 -- -r build
@@ -36,15 +50,29 @@ node packages/cli/dist/index.js probe
 
 ```bash
 npm exec pnpm@9 -- -r build
+node packages/cli/dist/index.js
+```
+
+默认入口会启动交互模式。进入后直接输入任务，或输入 `/help` 查看命令，输入 `/exit` 退出。
+
+一次性执行可以使用 `run`：
+
+```bash
 node packages/cli/dist/index.js run "把 README.md 内容翻译成英文"
 ```
 
-CLI 返回任务日志与证据文件；没有可验证证据不应声明“已完成”。
+CLI 返回任务日志与证据；没有可验证证据不应声明“已完成”。
 
 你也可以本地做命令级安装（不走 npm registry）：
 
 ```bash
 npm exec pnpm@9 -- --filter @bobby/cli link --global
+bobby
+```
+
+或一次性执行：
+
+```bash
 bobby run "把 README.md 内容翻译成英文"
 ```
 

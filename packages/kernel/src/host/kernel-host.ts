@@ -3,6 +3,7 @@ import { KernelCommandSchema, type KernelCommand, type KernelEvent } from '@bobb
 import type { ConscienceDeps } from '../brain/orchestrator';
 import { Orchestrator } from '../brain/orchestrator';
 import { TraceStore } from '../trace/trace-store';
+import { classifyIntent } from '../brain/triage';
 
 type Listener = (event: KernelEvent) => void;
 type GateDecision = 'allow' | 'deny';
@@ -13,6 +14,7 @@ export class KernelHost {
   private readonly trace = new TraceStore();
   private readonly sessionAnswers = new Map<string, string[]>();
   private readonly abortedTasks = new Set<string>();
+  private taskCounter = 0;
 
   constructor(
     private readonly makeModel: () => ModelClient,
@@ -73,9 +75,50 @@ export class KernelHost {
   }
 
   private async handleStartTask(cmd: { type: 'startTask'; input: string }): Promise<void> {
-    const orchestrator = new Orchestrator(this.makeModel(), this.conscienceDeps);
-    orchestrator.on((event) => this.emit(event));
-    await orchestrator.startTask(cmd.input);
+    const intent = await classifyIntent(cmd.input);
+    const taskId = this.makeTaskId();
+
+    switch (intent) {
+      case 'GREETING': {
+        this.emit({
+          type: 'direct_answer',
+          taskId,
+          text: '你好，我在的，需要我帮你做点什么？'
+        });
+        return;
+      }
+      case 'QUESTION': {
+        this.emit({
+          type: 'direct_answer',
+          taskId,
+          text: '我先给你一个简短回复：我已收到你的问题，先放到会话里后续继续。'
+        });
+        return;
+      }
+      case 'COMMAND': {
+        this.emit({
+          type: 'direct_answer',
+          taskId,
+          text: '命令类输入先做保守处理：我先不执行文件改动相关操作。'
+        });
+        return;
+      }
+      case 'TASK':
+      default: {
+        try {
+          const orchestrator = new Orchestrator(this.makeModel(), this.conscienceDeps);
+          orchestrator.on((event) => this.emit(event));
+          await orchestrator.startTask(cmd.input);
+        } catch (error: unknown) {
+          // Never let a task error crash the host/CLI: surface it as an
+          // error event + a failed final_result so the UI can render it.
+          const message = error instanceof Error ? error.message : String(error);
+          this.emit({ type: 'error', taskId, message });
+          this.emit({ type: 'final_result', taskId, status: 'failed' });
+        }
+        return;
+      }
+    }
   }
 
   private async handleAnswer(cmd: { type: 'answer'; taskId: string; reply: string }): Promise<void> {
@@ -115,5 +158,10 @@ export class KernelHost {
         reason
       });
     });
+  }
+
+  private makeTaskId(): string {
+    this.taskCounter += 1;
+    return `task-${Date.now()}-${this.taskCounter}`;
   }
 }

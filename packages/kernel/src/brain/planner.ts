@@ -1,11 +1,11 @@
 import { PlanStep, PlanStepSchema, TaskContract } from '@bobby/shared';
 import { z } from 'zod';
 import type { ModelClient } from '../model/model-client';
-import { PLAN_SYSTEM_PROMPT } from './system-prompts';
+import { GRADER_SYSTEM_PROMPT } from './system-prompts';
 
 export async function planTask(model: ModelClient, contract: TaskContract): Promise<PlanStep[]> {
   const response = await model.complete('grader', [
-    { role: 'system', content: PLAN_SYSTEM_PROMPT },
+    { role: 'system', content: GRADER_SYSTEM_PROMPT },
     { role: 'user', content: JSON.stringify(contract) }
   ], { json: true });
 

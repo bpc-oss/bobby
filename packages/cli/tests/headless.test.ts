@@ -89,6 +89,38 @@ it('logs plan/step/evidence/final status lines from kernel events', async () => 
   expect(output).toContain('[status] done');
 });
 
+it('returns done when direct_answer is emitted without final_result', async () => {
+  const logs: string[] = [];
+  let subscriber: (event: unknown) => void = () => {};
+  const unsubscribe = vi.fn();
+
+  const host = {
+    subscribe: vi.fn().mockImplementation((fn: (event: unknown) => void) => {
+      subscriber = fn;
+      return unsubscribe;
+    }),
+    send: vi.fn().mockResolvedValue(undefined)
+  } as unknown as KernelHost;
+
+  const run = runHeadless(host, 'hi', (msg) => {
+    logs.push(msg);
+  });
+
+  subscriber({
+    type: 'direct_answer',
+    taskId: 'task-1',
+    text: '你好，我在的'
+  });
+
+  const result = await run;
+
+  const output = logs.join('\n');
+  expect(result.status).toBe('done');
+  expect(result.exitCode).toBe(0);
+  expect(output).toContain('你好，我在的');
+  expect(output).toContain('[status] done');
+});
+
 it('returns exitCode non-zero when final_result status is failed', async () => {
   const host = makeHost({
     evidence: [

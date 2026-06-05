@@ -270,3 +270,30 @@ it('terminates process on timeout and returns non-zero exit', async () => {
   expect(payload.signal).toBe('SIGTERM');
   expect(result.result).toMatchObject({ exitCode: expect.any(Number) });
 });
+
+it('returns command_output evidence (never throws) when the binary does not exist', async () => {
+  const tool = new ExecTool(process.cwd());
+
+  const result = await tool.run(
+    {
+      cmd: '__bobby_no_such_binary__',
+      args: ['a', '=', 'a']
+    },
+    {
+      acId,
+      claimId
+    }
+  );
+
+  const evidence = result.evidence[0];
+  expect(evidence?.evidenceType).toBe('command_output');
+
+  const payload = evidence?.payload as {
+    exitCode?: number;
+    stderr?: string;
+    spawnError?: string;
+  };
+  expect(payload.exitCode).not.toBe(0);
+  expect(String(payload.stderr ?? payload.spawnError ?? '')).toMatch(/ENOENT|spawn|not.*found|no such/i);
+  expect(result.result).toMatchObject({ exitCode: payload.exitCode });
+});

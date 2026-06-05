@@ -16,9 +16,13 @@ export interface ConstraintChecker {
   check(c: Constraint, ctx: ExecContext): ConstraintResult;
 }
 
+export function isMachineCheckableConstraintCheck(check: string): boolean {
+  return check.startsWith('path:');
+}
+
 export class NoForbiddenPathChecker implements ConstraintChecker {
   matches(c: Constraint): boolean {
-    return c.check.startsWith('path:');
+    return isMachineCheckableConstraintCheck(c.check);
   }
 
   check(c: Constraint, ctx: ExecContext): ConstraintResult {

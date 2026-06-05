@@ -43,19 +43,24 @@ export class ExecTool implements Tool {
     const { cmd, args, timeoutMs } = parsed;
     const outputs = await this.spawnCommand(cmd, args, timeoutMs);
 
+    const payload: Record<string, unknown> = {
+      cmd,
+      args,
+      exitCode: outputs.exitCode,
+      stdout: outputs.stdout,
+      stderr: outputs.stderr,
+      signal: outputs.signal,
+      timedOut: outputs.timedOut
+    };
+    if (outputs.spawnError !== undefined) {
+      payload.spawnError = outputs.spawnError;
+    }
+
     const evidence: Evidence = {
       claimId: ctx.claimId,
       acId: ctx.acId,
       evidenceType: 'command_output',
-      payload: {
-        cmd,
-        args,
-        exitCode: outputs.exitCode,
-        stdout: outputs.stdout,
-        stderr: outputs.stderr,
-        signal: outputs.signal,
-        timedOut: outputs.timedOut
-      },
+      payload,
       producedBy: 'tool'
     };
 
@@ -251,6 +256,7 @@ export class ExecTool implements Tool {
     stderr: string;
     signal: NodeJS.Signals | null;
     timedOut: boolean;
+    spawnError?: string;
   }> {
     let stdout = '';
     let stderr = '';
@@ -272,18 +278,30 @@ export class ExecTool implements Tool {
       child.kill('SIGTERM');
     }, timeoutMs);
 
-    const close = await this.waitForProcessClose(child, timer);
-
-    signal = close.terminationSignal;
-
-    const exitCode = close.code === null && timedOut ? 143 : close.code ?? 1;
-    return {
-      exitCode,
-      stdout,
-      stderr,
-      signal,
-      timedOut
-    };
+    try {
+      const close = await this.waitForProcessClose(child, timer);
+      signal = close.terminationSignal;
+      const exitCode = close.code === null && timedOut ? 143 : close.code ?? 1;
+      return {
+        exitCode,
+        stdout,
+        stderr,
+        signal,
+        timedOut
+      };
+    } catch (error: unknown) {
+      // A spawn failure (e.g. ENOENT for a missing binary) MUST become
+      // evidence, never a thrown exception that crashes the agent (M3 §7).
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        exitCode: 127,
+        stdout,
+        stderr: stderr.length > 0 ? stderr : message,
+        signal: null,
+        timedOut,
+        spawnError: message
+      };
+    }
   }
 
   private bindOutputBuffer(

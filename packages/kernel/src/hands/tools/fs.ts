@@ -18,6 +18,7 @@ export interface ExistsInput {
 export class WriteFileTool implements Tool {
   readonly name = 'write_file';
   readonly permissionTier = 'L1' as const;
+  private static readonly maxEvidenceContentChars = 4096;
 
   constructor(private readonly ws: Workspace) {}
 
@@ -35,7 +36,8 @@ export class WriteFileTool implements Tool {
       evidenceType: 'file_diff',
       payload: {
         path: resolvedPath,
-        bytes: Buffer.byteLength(rawContent, 'utf8')
+        bytes: Buffer.byteLength(rawContent, 'utf8'),
+        content: this.contentForEvidence(rawContent)
       },
       producedBy: 'tool'
     };
@@ -61,6 +63,10 @@ export class WriteFileTool implements Tool {
       path: input.path,
       content: input.content
     };
+  }
+
+  private contentForEvidence(content: string): string | undefined {
+    return content.length <= WriteFileTool.maxEvidenceContentChars ? content : undefined;
   }
 }
 

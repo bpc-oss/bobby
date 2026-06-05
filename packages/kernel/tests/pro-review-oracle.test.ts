@@ -26,11 +26,12 @@ const evidenceWithSelfNarrative: Evidence[] = [
 ];
 
 class RecordingModelClient implements ModelClient {
-  public messages: Array<{ role: ModelRole; messages: ModelMessage[]; opts?: { json?: boolean } }> = [];
+  public messages: Array<{ role: ModelRole; messages: ModelMessage[]; opts?: Parameters<ModelClient['complete']>[2] }> =
+    [];
 
   constructor(private readonly responses: string[]) {}
 
-  async complete(role: ModelRole, messages: ModelMessage[], opts?: { json?: boolean }): Promise<ModelResponse> {
+  async complete(role: ModelRole, messages: ModelMessage[], opts?: Parameters<ModelClient['complete']>[2]): Promise<ModelResponse> {
     this.messages.push({ role, messages, opts });
 
     const content = this.responses.shift();

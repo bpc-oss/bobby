@@ -13,6 +13,11 @@ describe('Kernel API', () => {
     expect(() => KernelEventSchema.parse(e)).not.toThrow();
   });
 
+  it('accepts a direct_answer event', () => {
+    const e = { type: 'direct_answer', taskId: 't1', text: '你好，我可以帮你处理。' };
+    expect(() => KernelEventSchema.parse(e)).not.toThrow();
+  });
+
   it('rejects an unknown command type', () => {
     expect(() => KernelCommandSchema.parse({ type: 'nuke' })).toThrow();
   });

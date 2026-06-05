@@ -103,3 +103,29 @@ it('validates capabilities structure during load', async () => {
 
   await expect(loadDeepSeekConfig({ homeDir, readFile })).rejects.toThrow(/capabilities\\.json.*runnerModel|runne[rR]Model/i);
 });
+
+it('defaults missing useStreaming in older capability files to false', async () => {
+  const homeDir = '/tmp/bobby';
+  const readFile = createReadFile(
+    new Map([
+      [join(homeDir, '.bobby', 'key').replace(/\\\\/g, '/'), 'deepseek-key'],
+      [
+        join(homeDir, '.bobby', 'capabilities.json').replace(/\\\\/g, '/'),
+        JSON.stringify({
+          runnerModel: 'deepseek-v4-flash',
+          graderModel: 'deepseek-v4-pro',
+          useToolCalling: true,
+          useJsonMode: true,
+          useFim: false,
+          useCaching: true,
+          useReasoning: true,
+          contextWindow: 128000
+        })
+      ]
+    ])
+  );
+
+  const config = await loadDeepSeekConfig({ homeDir, readFile });
+
+  expect(config.report.useStreaming).toBe(false);
+});

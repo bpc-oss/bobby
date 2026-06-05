@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { join } from 'node:path';
 
 import {
@@ -8,55 +8,55 @@ import {
   type ProbeRaw
 } from '../src/model/deepseek/probe';
 
-describe('capability probe', () => {
-  it('builds report from default DeepSeek V4 probe raw', () => {
-    const raw = defaultDeepSeekProbeRaw();
-    const report = buildCapabilityReport(raw);
+it('builds report from default DeepSeek V4 probe raw', () => {
+  const raw = defaultDeepSeekProbeRaw();
+  const report = buildCapabilityReport(raw);
 
-    expect(report).toEqual({
-      runnerModel: 'deepseek-v4-flash',
-      graderModel: 'deepseek-v4-pro',
-      useToolCalling: true,
-      useJsonMode: true,
-      useFim: false,
-      useCaching: true,
-      useReasoning: true,
-      contextWindow: 1_000_000
-    });
+  expect(report).toEqual({
+    runnerModel: 'deepseek-v4-flash',
+    graderModel: 'deepseek-v4-pro',
+    useToolCalling: true,
+    useJsonMode: true,
+    useFim: false,
+    useCaching: true,
+    useReasoning: true,
+    useStreaming: false,
+    contextWindow: 1_000_000
+  });
+});
+
+it('writes capability report to ~/.bobby/capabilities.json with pretty JSON and no API key', async () => {
+  const homeDir = '/tmp/bobby';
+  let writtenPath = '';
+  let writtenContent = '';
+
+  const mkdir = vi.fn(async () => undefined);
+  const writeFile = vi.fn(async (_path: string, content: string) => {
+    writtenPath = _path;
+    writtenContent = content;
   });
 
-  it('writes capability report to ~/.bobby/capabilities.json with pretty JSON and no API key', async () => {
-    const homeDir = '/tmp/bobby';
-    let writtenPath = '';
-    let writtenContent = '';
+  const reportPath = await probeAndWriteCapabilities({ homeDir, mkdir, writeFile });
 
-    const mkdir = vi.fn(async () => undefined);
-    const writeFile = vi.fn(async (_path: string, content: string) => {
-      writtenPath = _path;
-      writtenContent = content;
-    });
+  expect(reportPath).toBe(join(homeDir, '.bobby', 'capabilities.json'));
+  expect(mkdir).toHaveBeenCalledWith(join(homeDir, '.bobby'), { recursive: true });
+  expect(writeFile).toHaveBeenCalledTimes(1);
 
-    const reportPath = await probeAndWriteCapabilities({ homeDir, mkdir, writeFile });
-
-    expect(reportPath).toBe(join(homeDir, '.bobby', 'capabilities.json'));
-    expect(mkdir).toHaveBeenCalledWith(join(homeDir, '.bobby'), { recursive: true });
-    expect(writeFile).toHaveBeenCalledTimes(1);
-
-    const parsed = JSON.parse(writtenContent);
-    expect(parsed).toEqual({
-      runnerModel: 'deepseek-v4-flash',
-      graderModel: 'deepseek-v4-pro',
-      useToolCalling: true,
-      useJsonMode: true,
-      useFim: false,
-      useCaching: true,
-      useReasoning: true,
-      contextWindow: 1_000_000
-    });
-    expect(writtenContent).toContain('\n');
-    expect(writtenContent).not.toContain('deepseek-key');
-    expect(writtenPath).toBe(reportPath);
+  const parsed = JSON.parse(writtenContent);
+  expect(parsed).toEqual({
+    runnerModel: 'deepseek-v4-flash',
+    graderModel: 'deepseek-v4-pro',
+    useToolCalling: true,
+    useJsonMode: true,
+    useFim: false,
+    useCaching: true,
+    useReasoning: true,
+    useStreaming: false,
+    contextWindow: 1_000_000
   });
+  expect(writtenContent).toContain('\n');
+  expect(writtenContent).not.toContain('deepseek-key');
+  expect(writtenPath).toBe(reportPath);
 });
 
 it('buildCapabilityReport: uses flash and pro models when present and maps specific capability flags', () => {
@@ -67,6 +67,7 @@ it('buildCapabilityReport: uses flash and pro models when present and maps speci
     fim: false,
     promptCaching: true,
     reasoningToggle: true,
+    streaming: true,
     contextWindow: 1024
   };
 
@@ -80,6 +81,7 @@ it('buildCapabilityReport: uses flash and pro models when present and maps speci
     useFim: false,
     useCaching: true,
     useReasoning: true,
+    useStreaming: true,
     contextWindow: 1024
   });
 });
@@ -92,6 +94,7 @@ it('buildCapabilityReport: falls back by index when flash/pro are not present', 
     fim: true,
     promptCaching: false,
     reasoningToggle: false,
+    streaming: false,
     contextWindow: 2048
   };
 
@@ -105,6 +108,7 @@ it('buildCapabilityReport: falls back by index when flash/pro are not present', 
     useFim: true,
     useCaching: false,
     useReasoning: false,
+    useStreaming: false,
     contextWindow: 2048
   });
 });
@@ -144,6 +148,7 @@ it('buildCapabilityReport: propagates all boolean capability flags from raw', ()
   expect(report.useFim).toBe(true);
   expect(report.useCaching).toBe(true);
   expect(report.useReasoning).toBe(false);
+  expect(report.useStreaming).toBe(false);
 });
 
 it('buildCapabilityReport: throws clear error when no models are available', () => {

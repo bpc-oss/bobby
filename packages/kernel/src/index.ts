@@ -12,6 +12,7 @@ export { ToolEvidenceProvider } from './hands/evidence-provider';
 export { ExecTool } from './hands/tools/exec';
 export { FileExistsTool, WriteFileTool } from './hands/tools/fs';
 export { Workspace } from './hands/workspace';
+export { createSnapshot, listSnapshots, restoreSnapshot } from './hands/snapshot';
 export { FetchTransport } from './model/deepseek/transport';
 export {
   buildCapabilityReport,
@@ -26,6 +27,9 @@ export { MockModelClient } from './model/mock-model-client';
 export { DeepSeekModelClient } from './model/deepseek/client';
 export { VerificationEngine } from './conscience/engine';
 export { CompletionGate } from './conscience/gate';
+export type { ConscienceDeps } from './brain/orchestrator';
+export { enforceConstraints, NoForbiddenPathChecker } from './conscience/constraints';
+export type { ConstraintChecker, ConstraintResult, ExecContext } from './conscience/constraints';
 export { CommandExitOracle, FileExistsOracle, FileDiffOracle } from './conscience/oracles/deterministic';
 export {
   DEFAULT_DEEPSEEK_BASE_URL,
@@ -40,3 +44,12 @@ export { MemorySecretStore, type SecretStore } from './config/keychain';
 export { ConstraintsLibrary } from './config/constraints-library';
 export { Telemetry } from './telemetry/telemetry';
 export type { ModelClient, ModelMessage, ModelRole, ModelResponse } from './model/model-client';
+export { loadSubAgents, type SubAgentLoadDiagnostic, type SubAgentLoadResult, type SubAgentDescriptor } from './subagent/agent-loader';
+export {
+  applySubAgentProposal,
+  dispatchSubAgent,
+  type SubAgentDispatchResult,
+  type SubagentMergeCheck,
+  type DispatchOptions,
+  type RunInWorktree
+} from './subagent/dispatch';

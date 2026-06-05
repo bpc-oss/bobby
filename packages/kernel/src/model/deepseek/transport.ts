@@ -4,7 +4,15 @@ export interface ChatRequest {
   model: string;
   messages: { role: string; content: string }[];
   jsonMode?: boolean;
+  reasoningEffort?: 'low' | 'medium' | 'high';
   reasoning?: boolean;
+  // Bobby-internal/cache hint for local observation only (not sent to API in this phase).
+  cacheMetadata?: {
+    prefix: string;
+    prefixHash: string;
+    sessionId: string;
+    tools: readonly string[];
+  };
 }
 
 export interface ChatResponse {
@@ -52,13 +60,18 @@ export interface DeepSeekChatResponse {
 }
 
 function buildChatRequestBody(req: ChatRequest): string {
+  const hasReasoningEffort = req.reasoningEffort !== undefined;
   return JSON.stringify({
     model: req.model,
     messages: req.messages,
     stream: false,
     ...(req.jsonMode ? { response_format: { type: 'json_object' } } : {}),
-    thinking: { type: req.reasoning ? 'enabled' : 'disabled' },
-    ...(req.reasoning ? { reasoning_effort: 'high' } : {})
+    thinking: { type: hasReasoningEffort || req.reasoning ? 'enabled' : 'disabled' },
+    ...(hasReasoningEffort
+      ? { reasoning_effort: req.reasoningEffort }
+      : req.reasoning
+        ? { reasoning_effort: 'high' }
+        : {})
   });
 }
 

@@ -43,6 +43,21 @@ describe('CommandExitOracle', () => {
     expect(verdict.result).toBe('fail');
     expect(verdict.detail).toContain('"exitCode":"1"');
   });
+
+  it('checks exact stdout when the AC requires exact command output', async () => {
+    const exactAc: AcceptanceCriterion = {
+      id: 'AC1',
+      desc: "The command outputs exactly 'hi' to stdout.",
+      oracleHint: 'run'
+    };
+
+    const pass = await oracle.judge(exactAc, [makeEvidence('command_output', { exitCode: 0, stdout: 'hi' })]);
+    const fail = await oracle.judge(exactAc, [makeEvidence('command_output', { exitCode: 0, stdout: 'hi\n' })]);
+
+    expect(pass.result).toBe('pass');
+    expect(fail.result).toBe('fail');
+    expect(fail.detail).toContain('stdout did not match exact expected text');
+  });
 });
 
 describe('FileExistsOracle', () => {
@@ -84,5 +99,24 @@ describe('FileDiffOracle', () => {
     const verdict = await oracle.judge(ac, [makeEvidence('file_diff', { path: '', bytes: 1 })]);
     expect(verdict.result).toBe('fail');
     expect(verdict.detail).toContain('"path":""');
+  });
+
+  it('checks exact file content when the AC requires exact content', async () => {
+    const exactAc: AcceptanceCriterion = {
+      id: 'AC1',
+      desc: "The content of hello.txt is exactly 'hi' (no extra spaces, newlines, or characters).",
+      oracleHint: 'file'
+    };
+
+    const pass = await oracle.judge(exactAc, [
+      makeEvidence('file_diff', { path: '/tmp/hello.txt', bytes: 2, content: 'hi' })
+    ]);
+    const fail = await oracle.judge(exactAc, [
+      makeEvidence('file_diff', { path: '/tmp/hello.txt', bytes: 3, content: 'hi\n' })
+    ]);
+
+    expect(pass.result).toBe('pass');
+    expect(fail.result).toBe('fail');
+    expect(fail.detail).toContain('file content did not match exact expected text');
   });
 });

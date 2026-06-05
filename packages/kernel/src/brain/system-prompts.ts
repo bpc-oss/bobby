@@ -13,9 +13,31 @@ export const INTENT_SYSTEM_PROMPT = [
   '  "outOfScope": ["string"]',
   '}',
   'acceptanceCriteria 不能为空，至少包含 1 项，并且每项必须是可验收的可核验事实。',
+  'Only put machine-checkable constraints in constraints. Currently supported constraint.check syntax is path:<forbidden-prefix> only.',
+  'Do not use string, run, file, test, review, or human as constraint.check. Put file names, exact content, and command output requirements in acceptanceCriteria. If there is no machine-checkable safety constraint, constraints must be [].',
   '不许自我表扬，不允许把“已完成/检查完成/可以验收”当成结构化输出或证据。',
   '你必须只输出可被审查的合同事实，尤其是可验收 acceptanceCriteria 与可核验线索。',
   '如需求不足以形成可验收 AC，应在字段中明确写出不可验证边界（constraints 或 outOfScope），避免主观确认。',
+].join('\n');
+
+export const FLASH_CODING_PROMPT = [
+  '\u5148\u8bfb\u540e\u6539',
+  '\u4f7f\u7528 grep \u7cbe\u51c6\u5b9a\u4f4d',
+  '\u5148\u8bfb\u6d4b\u8bd5',
+  '>200 \u5b57\u7b26\u524d \u4f7f\u7528 <thinking>',
+  '\u6700\u5c0f\u7f16\u8f91',
+  '\u6539\u7b7e\u540d\u524d\u67e5\u8c03\u7528\u8005',
+  '\u6539\u5b8c\u5373\u9a8c',
+  '\u7701\u94b1\u3001 offset/limit',
+].join('\n');
+export const PRO_ARCHITECT_PROMPT = [
+  '\u6a21\u5757\u8fb9\u754c\u56fe',
+  '\u4e0d\u53d8\u91cf',
+  '\u53d8\u66f4\u4f20\u64ad\u56fe',
+  '\u6587\u4ef6\u7ea7 file:line \u8bc1\u636e\u94fe',
+  '\u65e0\u8bc1\u636e\u4e0d\u6539',
+  'reasoning_effort',
+  '\u7cbe\u786e\u4f18\u5148\u4e8e\u8303\u56f4',
 ].join('\n');
 
 export const PLAN_SYSTEM_PROMPT = [
@@ -53,6 +75,7 @@ export const EXEC_SYSTEM_PROMPT = [
   '  "input": { "cmd": "string", "args": ["string", "..."] }',
   '}',
   '不要用 mkdir -p 等 shell 形式创建目录；优先用 write_file 写文件，系统会自动创建父目录。',
+  'For file writes, use write_file; do not use shell redirection, sh, bash, cmd, powershell, or printf to create file content.',
   '示例调用（推荐）：',
   '{',
   '  "calls": [',
@@ -96,3 +119,6 @@ export const PRO_REVIEW_SYSTEM_PROMPT = [
   '证据不足时应返回 fail 或可见的“unverifiable”条目；明确指出为何不可验证。',
   '任何与 AC 无关的结论（包括完成宣言）都应被忽略。',
 ].join('\n');
+export const RUNNER_SYSTEM_PROMPT = `${EXEC_SYSTEM_PROMPT}\n\n${FLASH_CODING_PROMPT}`;
+export const GRADER_SYSTEM_PROMPT = `${PLAN_SYSTEM_PROMPT}\n\n${PRO_ARCHITECT_PROMPT}`;
+export const GRADER_INTENT_SYSTEM_PROMPT = `${INTENT_SYSTEM_PROMPT}\n\n${PRO_ARCHITECT_PROMPT}`;

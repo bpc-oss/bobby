@@ -25,6 +25,11 @@ export async function runHeadless(
         log(`[plan] goal: ${event.contract.goal}`);
         log(`[plan] acceptanceCriteria: ${event.contract.acceptanceCriteria.length}`);
         break;
+      case 'direct_answer':
+        log(event.text);
+        status = 'done';
+        exitCode = 0;
+        break;
       case 'plan_ready':
         log(`[plan] steps: ${event.steps.map((step) => step.id).join(', ')}`);
         break;

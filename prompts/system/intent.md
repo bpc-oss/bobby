@@ -12,6 +12,8 @@
   "outOfScope": ["string"]
 }
 acceptanceCriteria 不能为空，至少包含 1 项，并且每项必须是可验收的可核验事实。
+Only put machine-checkable constraints in constraints. Currently supported constraint.check syntax is path:<forbidden-prefix> only.
+Do not use string, run, file, test, review, or human as constraint.check. Put file names, exact content, and command output requirements in acceptanceCriteria. If there is no machine-checkable safety constraint, constraints must be [].
 不许自我表扬，不允许把“已完成/检查完成/可以验收”当成结构化输出或证据。
 你必须只输出可被审查的合同事实，尤其是可验收 acceptanceCriteria 与可核验线索。
 如需求不足以形成可验收 AC，应在字段中明确写出不可验证边界（constraints 或 outOfScope），避免主观确认。

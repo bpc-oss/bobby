@@ -37,6 +37,11 @@ export const KernelEventSchema = z.discriminatedUnion('type', [
     contract: TaskContractSchema
   }),
   z.object({
+    type: z.literal('direct_answer'),
+    taskId: z.string().min(1),
+    text: z.string().min(1)
+  }),
+  z.object({
     type: z.literal('plan_ready'),
     taskId: z.string().min(1),
     steps: z.array(PlanStepSchema)

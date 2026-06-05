@@ -1,6 +1,13 @@
 import { expect, it } from 'vitest';
 
-import { splitCacheablePrefix } from '../src/model/deepseek/cache';
+import {
+  buildProCacheMetadata,
+  hashPrefix,
+  normalizePrefix,
+  PRO_CACHE_TOOLS,
+  getProSessionId,
+  splitCacheablePrefix
+} from '../src/model/deepseek/cache';
 import type { ModelMessage } from '../src/model/model-client';
 
 it('splits system messages into cacheablePrefix and user messages into dynamic', () => {
@@ -52,4 +59,44 @@ it('returns empty cacheablePrefix and all messages as dynamic when no system mes
   expect(result.dynamic).toEqual([user, assistant]);
   expect(result.dynamic[0]).toBe(user);
   expect(result.dynamic[1]).toBe(assistant);
+});
+
+it('builds consistent stable prefix hash for repeated identical Pro cache context', () => {
+  const messages: ModelMessage[] = [
+    { role: 'system', content: 'A: stable system prompt.' },
+    { role: 'system', content: 'B: stable project rules.' },
+    { role: 'user', content: 'ask' }
+  ];
+
+  const first = buildProCacheMetadata(messages).prefixHash;
+  const second = buildProCacheMetadata(messages).prefixHash;
+
+  expect(first).toBe(second);
+});
+
+it('normalizes same system context prefix to < 2K payload and hashes deterministically', () => {
+  const longSystemPrompt = 'x'.repeat(2100);
+  const messages: ModelMessage[] = [{ role: 'system', content: longSystemPrompt }];
+
+  const prefix = normalizePrefix(messages);
+  const hash = hashPrefix(prefix);
+
+  expect(prefix.length).toBeLessThanOrEqual(2000);
+  expect(hash).toBe(hashPrefix(prefix));
+});
+
+it('keeps Pro cache sessionId stable within 60-minute window and rotates afterward', () => {
+  const start = new Date('2026-06-05T10:00:00.000Z');
+  const almostSameWindow = new Date('2026-06-05T10:59:59.999Z');
+  const nextWindow = new Date('2026-06-05T11:00:00.000Z');
+
+  expect(getProSessionId(start)).toBe(getProSessionId(almostSameWindow));
+  expect(getProSessionId(start)).not.toBe(getProSessionId(nextWindow));
+});
+
+it('exposes compact Pro tool table and enforces <=4 tools', () => {
+  const tools = buildProCacheMetadata([]).tools;
+
+  expect(tools.length).toBeLessThanOrEqual(4);
+  expect(tools).toEqual(PRO_CACHE_TOOLS);
 });

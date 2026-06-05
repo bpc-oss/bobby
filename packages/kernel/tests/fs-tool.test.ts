@@ -44,7 +44,8 @@ it('writes a file and returns file_diff evidence, then file_exists returns true'
       producedBy: 'tool',
       payload: {
         path: expect.stringContaining(nestedPath),
-        bytes: Buffer.byteLength(content)
+        bytes: Buffer.byteLength(content),
+        content
       }
     });
 

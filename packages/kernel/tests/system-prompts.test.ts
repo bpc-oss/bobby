@@ -6,7 +6,10 @@ import {
   EXEC_SYSTEM_PROMPT,
   INTENT_SYSTEM_PROMPT,
   PLAN_SYSTEM_PROMPT,
-  PRO_REVIEW_SYSTEM_PROMPT
+  PRO_REVIEW_SYSTEM_PROMPT,
+  GRADER_INTENT_SYSTEM_PROMPT,
+  GRADER_SYSTEM_PROMPT,
+  RUNNER_SYSTEM_PROMPT,
 } from '../src/brain/system-prompts';
 import { captureIntent } from '../src/brain/intent';
 import { executeStep } from '../src/brain/executor';
@@ -18,7 +21,7 @@ import type { ModelClient, ModelMessage, ModelResponse, ModelRole } from '../src
 type RecordedMessage = {
   role: ModelRole;
   messages: ModelMessage[];
-  opts?: { json?: boolean };
+  opts?: Parameters<ModelClient['complete']>[2];
 };
 
 class RecordingModelClient implements ModelClient {
@@ -26,7 +29,7 @@ class RecordingModelClient implements ModelClient {
 
   constructor(private readonly responses: Record<ModelRole, string[]>) {}
 
-  async complete(role: ModelRole, messages: ModelMessage[], opts?: { json?: boolean }): Promise<ModelResponse> {
+  async complete(role: ModelRole, messages: ModelMessage[], opts?: Parameters<ModelClient['complete']>[2]): Promise<ModelResponse> {
     this.messages.push({ role, messages, opts });
 
     const response = this.responses[role]?.shift();
@@ -94,13 +97,50 @@ it('prompts contain anti-self-praise and evidence constraints', () => {
   expect(PRO_REVIEW_SYSTEM_PROMPT).toContain('证据');
 });
 
+it('runner assembled prompt includes Flash coding rules', () => {
+  expect(RUNNER_SYSTEM_PROMPT).toContain('\u5148\u8bfb\u540e\u6539');
+  expect(RUNNER_SYSTEM_PROMPT).toContain('\u6700\u5c0f\u7f16\u8f91');
+  expect(RUNNER_SYSTEM_PROMPT).toContain('JSON');
+  expect(RUNNER_SYSTEM_PROMPT).toContain('\u8bc1\u636e');
+  expect(RUNNER_SYSTEM_PROMPT).toContain('done/completed/verified');
+});
+
+it('grader assembled prompt includes Pro architecture rules', () => {
+  expect(GRADER_SYSTEM_PROMPT).toContain('\u8bc1\u636e\u94fe');
+  expect(GRADER_SYSTEM_PROMPT).toContain('\u4e0d\u53d8\u91cf');
+  expect(GRADER_SYSTEM_PROMPT).toContain('JSON');
+  expect(GRADER_SYSTEM_PROMPT).toContain('\u8bc1\u636e');
+  expect(GRADER_SYSTEM_PROMPT).toContain('\u4e0d\u8bb8\u81ea\u6211\u8868\u626c');
+});
+
+it('grader intent assembled prompt includes Pro architecture rules', () => {
+  expect(GRADER_INTENT_SYSTEM_PROMPT).toContain('\u8bc1\u636e\u94fe');
+  expect(GRADER_INTENT_SYSTEM_PROMPT).toContain('\u4e0d\u53d8\u91cf');
+  expect(GRADER_INTENT_SYSTEM_PROMPT).toContain('JSON');
+  expect(GRADER_INTENT_SYSTEM_PROMPT).toContain('\u8bc1\u636e');
+  expect(GRADER_INTENT_SYSTEM_PROMPT).toContain('\u4e0d\u8bb8\u81ea\u6211\u8868\u626c');
+});
+
+it('base prompts still keep JSON-only and evidence constraints', () => {
+  expect(INTENT_SYSTEM_PROMPT).toContain('JSON');
+  expect(PLAN_SYSTEM_PROMPT).toContain('JSON');
+  expect(EXEC_SYSTEM_PROMPT).toContain('JSON');
+  expect(PRO_REVIEW_SYSTEM_PROMPT).toContain('JSON');
+});
+
+it('intent and runner prompts forbid vague generated constraint checks and shell file writes', () => {
+  expect(INTENT_SYSTEM_PROMPT).toContain('Only put machine-checkable constraints in constraints');
+  expect(INTENT_SYSTEM_PROMPT).toContain('Do not use string, run, file, test, review, or human as constraint.check');
+  expect(EXEC_SYSTEM_PROMPT).toContain('For file writes, use write_file; do not use shell redirection');
+});
+
 it('captureIntent sends the intent system prompt', async () => {
   const model = new RecordingModelClient({ grader: [contractJson], runner: [] });
   await captureIntent(model, 'organize files');
 
   expect(model.messages[0]?.role).toBe('grader');
   expect(model.messages[0]?.messages).toHaveLength(2);
-  expect(model.messages[0]?.messages[0]?.content).toBe(INTENT_SYSTEM_PROMPT);
+  expect(model.messages[0]?.messages[0]?.content).toBe(GRADER_INTENT_SYSTEM_PROMPT);
   expect(model.messages[0]?.messages[0]?.role).toBe('system');
 });
 
@@ -110,7 +150,7 @@ it('planTask sends the plan system prompt', async () => {
 
   expect(model.messages[0]?.role).toBe('grader');
   expect(model.messages[0]?.messages).toHaveLength(2);
-  expect(model.messages[0]?.messages[0]?.content).toBe(PLAN_SYSTEM_PROMPT);
+  expect(model.messages[0]?.messages[0]?.content).toBe(GRADER_SYSTEM_PROMPT);
   expect(model.messages[0]?.messages[0]?.role).toBe('system');
 });
 
@@ -123,7 +163,7 @@ it('executeStep sends the execution system prompt', async () => {
 
   expect(model.messages[0]?.role).toBe('runner');
   expect(model.messages[0]?.messages).toHaveLength(2);
-  expect(model.messages[0]?.messages[0]?.content).toBe(EXEC_SYSTEM_PROMPT);
+  expect(model.messages[0]?.messages[0]?.content).toBe(RUNNER_SYSTEM_PROMPT);
   expect(model.messages[0]?.messages[0]?.role).toBe('system');
 });
 

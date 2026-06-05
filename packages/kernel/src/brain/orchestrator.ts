@@ -1,12 +1,21 @@
-import { type Evidence, KernelEvent, type Verdict } from '@bobby/shared';
+import { type AcceptanceCriterion, type Evidence, KernelEvent, type Verdict } from '@bobby/shared';
+import type { PlanStep } from '@bobby/shared';
 import { captureIntent } from './intent';
-import { executeStep } from './executor';
+import { executeStep, type Claim } from './executor';
 import { planTask } from './planner';
 import { TraceStore } from '../trace/trace-store';
 import type { ModelClient } from '../model/model-client';
 import type { VerificationEngine } from '../conscience/engine';
+import { buildEscalationPlan, type EscalationPlan } from '../model/deepseek/escalation';
+import { allocateBudget, estimateDifficulty, scoreToTier, type DifficultyBudget } from '../model/deepseek/difficulty';
+import {
+  type ConstraintChecker,
+  type ExecContext,
+  enforceConstraints
+} from '../conscience/constraints';
 import type { CompletionGate } from '../conscience/gate';
 import type { PlannedCall } from '../hands/evidence-provider';
+import { parseTestOutput, formatTestFailureContext, type ParsedTestOutput } from '../conscience/test-feedback';
 
 type Listener = (event: KernelEvent) => void;
 let taskCounter = 0;
@@ -14,6 +23,72 @@ let taskCounter = 0;
 const createTaskId = (): string => {
   taskCounter += 1;
   return `task-${Date.now()}-${taskCounter}`;
+};
+
+const extractOutputText = (entry: Evidence): string | undefined => {
+  if (entry.evidenceType !== 'command_output' && entry.evidenceType !== 'test_run') {
+    return undefined;
+  }
+
+  const payload = entry.payload as Record<string, unknown>;
+  return typeof payload.stdout === 'string'
+    ? payload.stdout
+    : typeof payload.stderr === 'string'
+      ? payload.stderr
+      : typeof payload.output === 'string'
+        ? payload.output
+        : undefined;
+};
+
+const addParsedOutput = (
+  merged: ParsedTestOutput,
+  failuresSeen: Set<string>,
+  parsed: ParsedTestOutput
+): void => {
+  merged.passCount = Math.max(merged.passCount, parsed.passCount);
+  merged.failCount = Math.max(merged.failCount, parsed.failCount);
+
+  for (const failure of parsed.failures) {
+    const key = `${failure.file}|${failure.title}|${failure.message}`;
+    if (!failuresSeen.has(key)) {
+      failuresSeen.add(key);
+      merged.failures.push(failure);
+    }
+  }
+
+  for (const file of parsed.files) {
+    if (!merged.files.includes(file)) {
+      merged.files.push(file);
+    }
+  }
+
+  for (const message of parsed.errorMessages) {
+    if (!merged.errorMessages.includes(message)) {
+      merged.errorMessages.push(message);
+    }
+  }
+};
+
+const buildMergedFailureContext = (evidence: Evidence[]): ParsedTestOutput => {
+  const merged: ParsedTestOutput = {
+    passCount: 0,
+    failCount: 0,
+    failures: [],
+    files: [],
+    errorMessages: []
+  };
+  const failuresSeen = new Set<string>();
+
+  for (const entry of evidence) {
+    const output = extractOutputText(entry);
+    if (!output?.trim()) {
+      continue;
+    }
+    const parsed = parseTestOutput(output);
+    addParsedOutput(merged, failuresSeen, parsed);
+  }
+
+  return merged;
 };
 
 export interface ConscienceDeps {
@@ -24,6 +99,9 @@ export interface ConscienceDeps {
     acIds: string[],
     calls?: ReadonlyArray<PlannedCall>
   ) => Evidence[] | Promise<Evidence[]>;
+  constraintCheckers?: ConstraintChecker[];
+  context?: () => ExecContext;
+  getExecContext?: () => ExecContext | Promise<ExecContext>;
 }
 
 export class Orchestrator {
@@ -51,9 +129,9 @@ export class Orchestrator {
 
   async startTask(input: string): Promise<string> {
     const taskId = createTaskId();
-
     const contract = await captureIntent(this.model, input);
     this.emit(taskId, { type: 'intent_proposed', taskId, contract });
+    const budget: DifficultyBudget = allocateBudget(scoreToTier(estimateDifficulty(contract)));
 
     const steps = await planTask(this.model, contract);
     this.emit(taskId, { type: 'plan_ready', taskId, steps });
@@ -61,31 +139,192 @@ export class Orchestrator {
 
     for (const step of steps) {
       this.emit(taskId, { type: 'step_started', taskId, stepId: step.id });
-      const claim = await executeStep(this.model, step);
-
       if (!this.conscience) {
+        await executeStep(this.model, step);
         continue;
       }
 
-      const evidence = await this.conscience.evidenceFor(step.id, claim.acIds, claim.calls);
-      for (const e of evidence) {
-        this.emit(taskId, { type: 'evidence_produced', taskId, evidence: e });
-      }
-
-      const relevantAcs = contract.acceptanceCriteria.filter((ac) => step.satisfiesAcIds.includes(ac.id));
-      for (const ac of relevantAcs) {
-        const verdict = await this.conscience.engine.verify(ac, evidence);
-        verdicts.set(ac.id, verdict);
-        this.emit(taskId, { type: 'verdict', taskId, verdict });
-      }
+      await this.runVerifiedStep(
+        taskId,
+        step,
+        contract.acceptanceCriteria,
+        verdicts,
+        this.conscience,
+        budget
+      );
     }
 
     let status: 'done' | 'failed' | 'blocked' = 'failed';
     if (this.conscience) {
-      status = this.conscience.gate.evaluate(contract, verdicts, []).status;
+      const ctx = await this.getContext(this.conscience);
+      const constraintResults = enforceConstraints(
+        contract.constraints,
+        ctx,
+        this.conscience.constraintCheckers ?? []
+      );
+      status = this.conscience.gate.evaluate(contract, verdicts, constraintResults).status;
     }
 
     this.emit(taskId, { type: 'final_result', taskId, status });
     return taskId;
+  }
+
+  private async runVerifiedStep(
+    taskId: string,
+    step: PlanStep,
+    criteria: AcceptanceCriterion[],
+    verdicts: Map<string, Verdict>,
+    conscience: ConscienceDeps,
+    budget: DifficultyBudget
+  ): Promise<void> {
+    const result = await this.runRunnerAttempts(taskId, step, criteria, verdicts, conscience, budget);
+    if (result.stepDone || result.blockedOnNeedHuman) {
+      return;
+    }
+
+    const graderPlan: EscalationPlan = buildEscalationPlan('grader', result.runnerFailures);
+    await this.runGraderAttempt(
+      taskId,
+      step,
+      criteria,
+      verdicts,
+      conscience,
+      graderPlan.role,
+      graderPlan.model,
+      graderPlan.reasoning_effort
+    );
+  }
+
+  private async runRunnerAttempts(
+    taskId: string,
+    step: PlanStep,
+    criteria: AcceptanceCriterion[],
+    verdicts: Map<string, Verdict>,
+    conscience: ConscienceDeps,
+    budget: DifficultyBudget
+  ): Promise<{ stepDone: boolean; runnerFailures: number; blockedOnNeedHuman: boolean }> {
+    let runnerFailures = 0;
+    let retryContext: string | undefined;
+    const shouldStopRunnerLoop = (needsPro: boolean, failureCount: number): boolean =>
+      needsPro || failureCount >= budget.maxRetries;
+
+    while (runnerFailures < budget.maxRetries) {
+      const plan = buildEscalationPlan('runner', runnerFailures, budget);
+      for (let turn = 0; turn < plan.maxTurns; turn += 1) {
+        const claim = await executeStep(this.model, step, {
+          role: plan.role,
+          model: plan.model,
+          reasoningEffort: plan.reasoning_effort,
+          retryContext
+        });
+
+        const claimResult = await this.processClaim(taskId, conscience, claim, step, criteria, verdicts);
+        if (claimResult.result === 'pass') {
+          return { stepDone: true, runnerFailures, blockedOnNeedHuman: false };
+        }
+
+        if (claimResult.context) {
+          retryContext = claimResult.context;
+        }
+
+        if (claimResult.result === 'need_human') {
+          return { stepDone: false, runnerFailures, blockedOnNeedHuman: true };
+        }
+
+        runnerFailures += 1;
+        if (shouldStopRunnerLoop(claim.needsPro ?? false, runnerFailures)) {
+          return { stepDone: false, runnerFailures, blockedOnNeedHuman: false };
+        }
+      }
+    }
+
+    return {
+      stepDone: false,
+      runnerFailures,
+      blockedOnNeedHuman: false
+    };
+  }
+
+  private async runGraderAttempt(
+    taskId: string,
+    step: PlanStep,
+    criteria: AcceptanceCriterion[],
+    verdicts: Map<string, Verdict>,
+    conscience: ConscienceDeps,
+    role: EscalationPlan['role'],
+    model?: string,
+    reasoningEffort?: 'low' | 'medium' | 'high'
+  ): Promise<boolean> {
+    const plan: Pick<EscalationPlan, 'role' | 'model' | 'reasoning_effort'> = {
+      role,
+      model,
+      reasoning_effort: reasoningEffort
+    };
+    const claim = await executeStep(this.model, step, {
+      role: plan.role,
+      model: plan.model,
+      reasoningEffort: plan.reasoning_effort
+    });
+
+    const result = await this.processClaim(taskId, conscience, claim, step, criteria, verdicts);
+    return result.result === 'pass';
+  }
+
+  private async processClaim(
+    taskId: string,
+    conscience: ConscienceDeps,
+    claim: Claim,
+    step: PlanStep,
+    criteria: AcceptanceCriterion[],
+    verdicts: Map<string, Verdict>
+  ): Promise<{ result: 'pass' | 'fail' | 'need_human'; context?: string }> {
+    const evidence = await conscience.evidenceFor(step.id, claim.acIds, claim.calls);
+    for (const e of evidence) {
+      this.emit(taskId, { type: 'evidence_produced', taskId, evidence: e });
+    }
+
+    const relevantAcs = criteria.filter((ac) => step.satisfiesAcIds.includes(ac.id));
+    const verdictsResult = await Promise.all(
+      relevantAcs.map(async (ac) => {
+        const verdict = await conscience.engine.verify(ac, evidence);
+        verdicts.set(ac.id, verdict);
+        this.emit(taskId, { type: 'verdict', taskId, verdict });
+        return verdict.result;
+      })
+    );
+
+    if (verdictsResult.includes('fail')) {
+      return { result: 'fail', context: this.buildRetryContext(evidence) };
+    }
+
+    if (verdictsResult.includes('need_human')) {
+      return { result: 'need_human' };
+    }
+
+    return { result: 'pass' };
+  }
+
+  private buildRetryContext(evidence: Evidence[]): string | undefined {
+    const merged = buildMergedFailureContext(evidence);
+    if (merged.failCount === 0 && merged.failures.length === 0 && merged.errorMessages.length === 0) {
+      return undefined;
+    }
+
+    return formatTestFailureContext(merged);
+  }
+
+  private async getContext(deps: ConscienceDeps): Promise<ExecContext> {
+    if (deps.context !== undefined) {
+      return deps.context();
+    }
+
+    if (deps.getExecContext !== undefined) {
+      return await deps.getExecContext();
+    }
+
+    return {
+      touchedPaths: [],
+      networkCalls: []
+    };
   }
 }

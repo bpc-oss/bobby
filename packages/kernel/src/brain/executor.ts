@@ -1,7 +1,7 @@
 import type { PlanStep } from '@bobby/shared';
 import { z } from 'zod';
-import type { ModelClient } from '../model/model-client';
-import { EXEC_SYSTEM_PROMPT } from './system-prompts';
+import type { ModelClient, ModelRole, ReasoningEffort } from '../model/model-client';
+import { RUNNER_SYSTEM_PROMPT } from './system-prompts';
 import type { PlannedCall } from '../hands/evidence-provider';
 
 export interface Claim {
@@ -9,6 +9,7 @@ export interface Claim {
   acIds: string[];
   summary: string;
   calls: PlannedCall[];
+  needsPro?: boolean;
 }
 
 const RunnerCallSchema = z.object({
@@ -17,16 +18,33 @@ const RunnerCallSchema = z.object({
 });
 
 const RunnerResponseSchema = z.object({
-  calls: z.array(RunnerCallSchema).min(1)
+  calls: z.array(RunnerCallSchema).min(1),
+  needsPro: z.boolean().optional()
 });
 
-export async function executeStep(model: ModelClient, step: PlanStep): Promise<Claim> {
+export interface ExecuteStepOptions {
+  role?: ModelRole;
+  model?: string;
+  reasoningEffort?: ReasoningEffort;
+  retryContext?: string;
+}
+
+export async function executeStep(model: ModelClient, step: PlanStep, options: ExecuteStepOptions = {}): Promise<Claim> {
+  const role = options.role ?? 'runner';
+  const prompt = options.retryContext
+    ? `${step.desc}\n\n${options.retryContext}`
+    : step.desc;
+
   const response = await model.complete(
-    'runner',
+    role,
     [
-    { role: 'system', content: EXEC_SYSTEM_PROMPT },
-    { role: 'user', content: step.desc }
-  ], { json: true });
+    { role: 'system', content: RUNNER_SYSTEM_PROMPT },
+    { role: 'user', content: prompt }
+  ], {
+    json: true,
+    model: options.model,
+    reasoningEffort: options.reasoningEffort
+  });
 
   let parsed: unknown;
   try {
@@ -52,6 +70,7 @@ export async function executeStep(model: ModelClient, step: PlanStep): Promise<C
     stepId: step.id,
     acIds: step.satisfiesAcIds,
     summary: response.content,
-    calls: plan.calls
+    calls: plan.calls,
+    needsPro: plan.needsPro
   };
 }
