@@ -6,26 +6,32 @@ type StatusLineProps = {
   vm: VM;
 };
 
-const formatStatusLine = (vm: VM): string[] => {
-  const status = vm.status;
+const statusIcon: Record<string, string> = {
+  idle: '○',
+  running: '◉',
+  done: '✓',
+  failed: '✗',
+  blocked: '⊘'
+};
 
-  const pieces = [
-    `status: ${status}`,
-    `stream: ${vm.streamingMode}`,
-    vm.status === 'running' ? 'spinner: *' : undefined,
-    vm.currentActivity && `activity: ${vm.currentActivity}`,
-    vm.usageModel && `model=${vm.usageModel}`,
-    typeof vm.promptTokens === 'number' && `prompt=${vm.promptTokens}`,
-    typeof vm.completionTokens === 'number' && `completion=${vm.completionTokens}`,
-    typeof vm.cachedTokens === 'number' && `cached=${vm.cachedTokens}`,
-    typeof vm.spentUsd === 'number' && `spentUsd: $${vm.spentUsd.toFixed(2)}`,
-    typeof vm.costUsd === 'number' && `cost=$${vm.costUsd}`,
-    typeof vm.proCalls === 'number' && `proCalls: ${vm.proCalls}`,
-    typeof vm.flashCalls === 'number' && `flashCalls: ${vm.flashCalls}`,
-    typeof vm.contextPercent === 'number' && `contextPercent: ${vm.contextPercent.toFixed(2)}%`
+const formatStatusLine = (vm: VM): string[] => {
+  const pieces: string[] = [
+    `${statusIcon[vm.status] ?? '?'} ${vm.status}`
   ];
 
-  return pieces.filter((piece): piece is string => typeof piece === 'string');
+  if (vm.usageModel) {
+    pieces.push(vm.usageModel);
+  }
+
+  if (typeof vm.spentUsd === 'number') {
+    pieces.push(`$${vm.spentUsd.toFixed(2)}`);
+  }
+
+  if (typeof vm.costUsd === 'number' && typeof vm.spentUsd !== 'number') {
+    pieces.push(`$${vm.costUsd.toFixed(4)}`);
+  }
+
+  return pieces;
 };
 
 export function StatusLine({ vm }: StatusLineProps): JSX.Element {

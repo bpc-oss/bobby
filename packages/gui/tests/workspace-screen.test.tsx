@@ -1,8 +1,9 @@
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 
 import type { Evidence, KernelEvent } from '@bobby/shared';
+import { useChatStore } from '../src/store/chat-store';
 
 import { EvidencePanel } from '../src/components/EvidencePanel';
 import { Workspace } from '../src/screens/Workspace';
@@ -13,8 +14,7 @@ type KernelClientMock = {
   onEvent: (callback: (event: KernelEvent) => void) => () => void;
 };
 
-function noopOnEvent(callback: (event: KernelEvent) => void): () => void {
-  void callback;
+function noopOnEvent(_callback: (event: KernelEvent) => void): () => void {
   return () => {};
 }
 
@@ -26,63 +26,58 @@ function makeKernelClientMock(): KernelClientMock {
   };
 }
 
-function expectEvidenceFileExistsPlainLanguageEntry(): void {
-  render(
-    <EvidencePanel
-      evidence={[
-        {
-          claimId: 'c1',
-          acId: 'AC1',
-          evidenceType: 'file_exists',
-          payload: { exists: true, path: '/x/a.txt' },
-          producedBy: 'tool'
-        } satisfies Evidence
-      ]}
-    />
-  );
-
-  expect(screen.getByText('path: /x/a.txt')).toBeTruthy();
-}
-
-function expectWorkspaceCoreAreasToRender(): void {
-  const client = makeKernelClientMock();
-  const { container } = render(<Workspace kernelClient={client} />);
-
-  expect(container.querySelector('#bobby-chat-input')).toBeTruthy();
-  expect(container.querySelector('.workspace-grid')).toBeTruthy();
-  expect(container.querySelector('.workspace-footer')).toBeTruthy();
-}
-
-function expectAlwaysDecisionToReachKernelClient(): void {
-  const client = makeKernelClientMock();
-
-  render(
-    <Workspace
-      initialState={{
-        steps: [],
-        evidence: [],
-        status: 'running',
-        pendingGate: {
-          gateId: 'gate-always',
-          reason: 'net-access'
-        }
-      }}
-      kernelClient={client}
-    />
-  );
-
-  const alwaysButton = screen.getByRole('button', { name: 'Always' });
-  fireEvent.click(alwaysButton);
-
-  expect(client.approveGate).toHaveBeenCalledWith('gate-always', 'always');
-}
+beforeEach(() => {
+  useChatStore.setState({
+    blocks: [],
+    liveReasoning: '',
+    liveAssistant: '',
+    liveToolContent: '',
+    busy: false,
+    status: 'idle',
+    error: null,
+    costUsd: 0,
+    model: null
+  });
+});
 
 describe('workspace UI smoke', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('renders evidence file_exists as plain-language entry', expectEvidenceFileExistsPlainLanguageEntry);
-  it('smoke renders workspace core areas', expectWorkspaceCoreAreasToRender);
-  it('sends always decision to kernel client when gate is confirmed', expectAlwaysDecisionToReachKernelClient);
+  it('renders evidence file_exists as plain-language entry', () => {
+    render(
+      <EvidencePanel
+        evidence={[
+          {
+            claimId: 'c1',
+            acId: 'AC1',
+            evidenceType: 'file_exists',
+            payload: { exists: true, path: '/x/a.txt' },
+            producedBy: 'tool'
+          } satisfies Evidence
+        ]}
+      />
+    );
+
+    expect(screen.getByText('path: /x/a.txt')).toBeTruthy();
+  });
+
+  it('smoke renders workspace core areas', () => {
+    const client = makeKernelClientMock();
+    const { container } = render(<Workspace kernelClient={client} />);
+
+    expect(screen.getByPlaceholderText(/Describe your task/)).toBeTruthy();
+    expect(screen.getByText('Send')).toBeTruthy();
+    expect(screen.getByText('Bobby')).toBeTruthy();
+  });
+
+  it('sendMessage calls client.startTask via store', async () => {
+    const client = makeKernelClientMock();
+    useChatStore.getState().setClient(client);
+    useChatStore.getState().sendMessage('hello world');
+    await vi.waitFor(() => {
+      expect(client.startTask).toHaveBeenCalledWith('hello world');
+    });
+  });
 });

@@ -1,4 +1,5 @@
-import { autoUpdater } from 'electron-updater';
+import pkg from 'electron-updater';
+const { autoUpdater } = pkg as any;
 
 export interface MinimalAutoUpdater {
   on(event: 'update-available' | 'update-downloaded', listener: () => void): void;

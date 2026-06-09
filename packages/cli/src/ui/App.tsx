@@ -279,10 +279,10 @@ const createPlanDecisionHandler = (
   const planIdentity = getPlanIdentity(vm);
 
   return (decision) => {
-    appendLocalLine(`plan decision: ${decision}`);
+    appendLocalLine('');
     if (decision === 'approve' || decision === 'reject') {
       if (!vm.currentTaskId) {
-        appendLocalLine('plan decision: no active task');
+        appendLocalLine('');
         return;
       }
 
@@ -295,7 +295,7 @@ const createPlanDecisionHandler = (
     }
 
     if (!vm.currentTaskId) {
-      appendLocalLine('plan decision: no active task');
+      appendLocalLine('');
       return;
     }
 
@@ -304,7 +304,7 @@ const createPlanDecisionHandler = (
     }
 
     setPendingPlanEditTaskId(vm.currentTaskId);
-    appendLocalLine('plan edit: enter revised instructions on next input');
+    appendLocalLine('');
   };
 };
 
@@ -328,7 +328,7 @@ const createSubmitHandler = (
 
     void onPlanDecision?.(pendingPlanEditTaskId, 'edit', line);
     setPendingPlanEditTaskId(null);
-    appendLine('plan decision: edit sent');
+    appendLine('');
   };
 };
 

@@ -25,25 +25,25 @@ function feedLifecycleEvents(vmInput = initialVM()) {
   return reduceEvent(vm3, { type: 'final_result', taskId: 'task-1', status: 'done' });
 }
 
-it('reduces intent/plan/step/final_result into rendered output lines', () => {
+it('reduces intent/plan/step/final_result into clean output lines', () => {
   const vm = feedLifecycleEvents();
 
   expect(vm.status).toBe('done');
-  expect(vm.streamingMode).toBe('event');
-  expect(vm.lines.some((line) => line.includes('goal: build cli'))).toBe(true);
-  expect(vm.lines.some((line) => line.includes('plan:'))).toBe(true);
-  expect(vm.lines.some((line) => line.includes('step: S1'))).toBe(true);
-  expect(vm.lines.some((line) => line.includes('status: done'))).toBe(true);
+  expect(vm.goal).toBe('build cli');
+  expect(vm.currentPlan).toHaveLength(1);
+  expect(vm.activeSteps).toContain('S1');
+  expect(vm.lines.some((line) => line.includes('Done.'))).toBe(true);
 });
 
-it('adds direct answer lines for direct_answer events', () => {
+it('adds direct answer lines without debug prefix', () => {
   const vm = reduceEvent(initialVM(), {
     type: 'direct_answer',
     taskId: 'task-1',
     text: '你好，我在的'
   });
 
-  expect(vm.lines.some((line) => line.includes('answer: 你好，我在的'))).toBe(true);
+  expect(vm.lines.some((line) => line.includes('你好，我在的'))).toBe(true);
+  expect(vm.lines.some((line) => line.startsWith('answer:'))).toBe(false);
 });
 
 it('keeps failed final_result status', () => {
@@ -53,10 +53,10 @@ it('keeps failed final_result status', () => {
     status: 'failed'
   });
   expect(vm.status).toBe('failed');
-  expect(vm.lines.some((line) => line.includes('status: failed'))).toBe(true);
+  expect(vm.lines.some((line) => line.includes('Failed.'))).toBe(true);
 });
 
-it('renders tool_called and error lines with ASCII labels', () => {
+it('renders tool_called as structured items and errors without prefix', () => {
   const withTool = reduceEvent(initialVM(), {
     type: 'tool_called',
     taskId: 'task-1',
@@ -69,8 +69,8 @@ it('renders tool_called and error lines with ASCII labels', () => {
     message: 'boom'
   });
 
-  expect(withTool.lines.some((line) => line.includes('tool: cmd /c echo ok'))).toBe(true);
-  expect(withError.lines.some((line) => line.includes('error: boom'))).toBe(true);
+  expect(withTool.items.some((item) => item.kind === 'tool')).toBe(true);
+  expect(withError.lines.some((line) => line.includes('boom'))).toBe(true);
 });
 
 it('clears pendingGate after step_started', () => {
@@ -116,7 +116,7 @@ it('clears pendingGate after final_result', () => {
   );
 
   expect(vm.pendingGate).toBeUndefined();
-  expect(vm.lines.some((line) => line.includes('status: done'))).toBe(true);
+  expect(vm.lines.some((line) => line.includes('Done.'))).toBe(true);
 });
 
 it('clears pendingGate after error', () => {
@@ -136,10 +136,10 @@ it('clears pendingGate after error', () => {
   );
 
   expect(vm.pendingGate).toBeUndefined();
-  expect(vm.lines.some((line) => line.includes('error: boom'))).toBe(true);
+  expect(vm.lines.some((line) => line.includes('boom'))).toBe(true);
 });
 
-it('tracks evidence and verdict lines', () => {
+it('tracks evidence as structured items, shows only non-pass verdicts', () => {
   const withEvidence = reduceEvent(initialVM(), {
     type: 'evidence_produced',
     taskId: 'task-1',
@@ -152,7 +152,7 @@ it('tracks evidence and verdict lines', () => {
     }
   });
 
-  const withVerdict = reduceEvent(withEvidence, {
+  const withPassVerdict = reduceEvent(withEvidence, {
     type: 'verdict',
     taskId: 'task-1',
     verdict: {
@@ -164,8 +164,21 @@ it('tracks evidence and verdict lines', () => {
     }
   });
 
-  expect(withEvidence.lines.some((line) => line.includes('evidence: AC-1/file_diff'))).toBe(true);
-  expect(withVerdict.lines.some((line) => line.includes('verdict: AC-1/pass'))).toBe(true);
+  const withFailVerdict = reduceEvent(withEvidence, {
+    type: 'verdict',
+    taskId: 'task-1',
+    verdict: {
+      claimId: 'C2',
+      acId: 'AC-2',
+      oracleTier: 'T1',
+      result: 'fail',
+      detail: 'mismatch'
+    }
+  });
+
+  expect(withEvidence.items.some((item) => item.kind === 'evidence')).toBe(true);
+  expect(withPassVerdict.lines.some((line) => line.includes('verdict'))).toBe(false);
+  expect(withFailVerdict.lines.some((line) => line.includes('AC-2: fail'))).toBe(true);
 });
 
 it('accumulates assistant deltas by sequence order within a task', () => {
@@ -235,7 +248,7 @@ it('switches streamingMode to sse for all delta event kinds', () => {
   });
 });
 
-it('accumulates tool deltas and retains stream ordering by sequence', () => {
+it('accumulates tool deltas without debug prefix', () => {
   const vm = reduceEvent(
     initialVM(),
     {
@@ -255,7 +268,9 @@ it('accumulates tool deltas and retains stream ordering by sequence', () => {
     content: 'stderr'
   });
 
-  expect(withChunk.lines.some((line) => line.includes('[tool] chunk stderr start bash init'))).toBe(true);
+  expect(withChunk.lines.some((line) => line.includes('start bash init'))).toBe(true);
+  expect(withChunk.lines.some((line) => line.includes('chunk stderr'))).toBe(true);
+  expect(withChunk.lines.some((line) => line.startsWith('[tool]'))).toBe(false);
 });
 
 it('updates usage fields from usage_delta', () => {

@@ -10,6 +10,7 @@ export default defineConfig({
       '@bobby/kernel': resolve(__dirname, '../kernel/src/index.ts')
     }
   },
+  base: './',
   build: {
     outDir: 'dist'
   }

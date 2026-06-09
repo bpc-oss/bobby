@@ -110,12 +110,12 @@ const createHost = (events: KernelEvent[]): HostStub => ({
   }
 });
 
-it('renders goal/plan/step/done lines from vm', () => {
+it('renders clean output lines from vm', () => {
   const { lastFrame } = render(
     <App
       initialVm={{
         ...initialVM(),
-        lines: ['goal: build demo', 'plan: S1', 'step: S1', 'status: done'],
+        lines: ['Hello, world', 'Done.'],
         items: [
           { kind: 'line', text: 'goal: build demo' },
           { kind: 'line', text: 'plan: S1' },
@@ -427,7 +427,7 @@ it('clears visible transcript entries but keeps input and status line', async ()
     <App
       initialVm={{
         ...initialVM(),
-        lines: ['goal: build demo', 'plan: 1 steps (S1)', 'step: S1', 'status: done'],
+        lines: ['Hello, world', 'Done.'],
         items: [
           { kind: 'line', text: 'goal: build demo' },
           { kind: 'line', text: 'plan: 1 steps (S1)' },
@@ -454,7 +454,7 @@ it('clears visible transcript entries but keeps input and status line', async ()
   expect(frame).not.toContain('goal: build demo');
   expect(frame).not.toContain('plan: 1 steps (S1)');
   expect(frame).not.toContain('step: S1');
-  expect(frame).toContain('status: done');
+  expect(frame).toContain('✓ done');
   expect(frame).toContain('input');
 });
 
@@ -472,7 +472,7 @@ it('shows new direct_answer and step_started events after clear', async () => {
       initialVm={{
         ...initialVM(),
         currentTaskId: 'task-1',
-        lines: ['goal: build demo', 'plan: 1 steps (S1)', 'step: S1'],
+        lines: ['Hello, world', 'Done.'],
         items: [
           { kind: 'line', text: 'goal: build demo' },
           { kind: 'line', text: 'plan: 1 steps (S1)' },
@@ -503,8 +503,7 @@ it('shows new direct_answer and step_started events after clear', async () => {
   const frame = app.lastFrame();
   expect(frame).not.toContain('goal: build demo');
   expect(frame).not.toContain('step: S1');
-  expect(frame).toContain('answer: fresh answer');
-  expect(frame).toContain('step: S2');
+  expect(frame).toContain('fresh answer');
 });
 
 it('forwards /undo slash command to host slash handler', async () => {
@@ -934,10 +933,7 @@ it('renders rich lines after receiving host events', async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   const frame = lastFrame();
-  expect(frame).toContain('goal: build cli');
-  expect(frame).toContain('plan: 1 steps (S1)');
-  expect(frame).toContain('step: S1');
   expect(frame).toContain('* exec(node --version)');
   expect(frame).toContain('command_output(exitCode=1');
-  expect(frame).toContain('status: done');
+  expect(frame).toContain('Done.');
 });

@@ -125,51 +125,42 @@ const replaceTaskStreamItem = (
 };
 
 const reduceIntent = (vm: VM, e: Extract<KernelEvent, { type: 'intent_proposed' }>): VM => {
-  const next = { ...rememberTask(vm, e.taskId), goal: e.contract.goal, status: 'running' as const };
-  return appendLine(next, `goal: ${e.contract.goal}`);
+  return { ...rememberTask(vm, e.taskId), goal: e.contract.goal, status: 'running' as const };
 };
 
-const reducePlan = (vm: VM, e: Extract<KernelEvent, { type: 'plan_ready' }>): VM => {
-  const next = {
-    ...rememberTask(vm, e.taskId),
-    currentPlan: e.steps,
-    planSteps: e.steps.map((step) => step.id),
-    currentActivity: 'planning'
-  };
-  return appendLine(next, `plan: ${e.steps.length} steps (${e.steps.map((s) => s.id).join(', ')})`);
-};
+const reducePlan = (vm: VM, e: Extract<KernelEvent, { type: 'plan_ready' }>): VM => ({
+  ...rememberTask(vm, e.taskId),
+  currentPlan: e.steps,
+  planSteps: e.steps.map((step) => step.id),
+  currentActivity: 'planning'
+});
 
-const reduceStep = (vm: VM, e: Extract<KernelEvent, { type: 'step_started' }>): VM =>
-  appendLine(
-    {
-      ...rememberTask(vm, e.taskId),
-      pendingGate: undefined,
-      status: 'running',
-      activeSteps: [...vm.activeSteps, e.stepId],
-      currentActivity: `step:${e.stepId}`
-    },
-    `step: ${e.stepId}`
-  );
+const reduceStep = (vm: VM, e: Extract<KernelEvent, { type: 'step_started' }>): VM => ({
+  ...rememberTask(vm, e.taskId),
+  pendingGate: undefined,
+  status: 'running',
+  activeSteps: [...vm.activeSteps, e.stepId],
+  currentActivity: `step:${e.stepId}`
+});
 
 const reduceTool = (vm: VM, e: Extract<KernelEvent, { type: 'tool_called' }>): VM => ({
-  ...appendLine(rememberTask(vm, e.taskId), `tool: ${e.tool}`),
+  ...rememberTask(vm, e.taskId),
   currentActivity: `tool:${e.tool}`,
-  items: [...vm.items, { kind: 'line', text: `tool: ${e.tool}` }, { kind: 'tool', event: e }],
+  items: [...vm.items, { kind: 'tool', event: e }],
   assistantDeltaBuckets: vm.assistantDeltaBuckets,
   reasoningDeltaBuckets: vm.reasoningDeltaBuckets,
   toolDeltaBuckets: vm.toolDeltaBuckets
 });
 
-const reduceEvidence = (vm: VM, e: Extract<KernelEvent, { type: 'evidence_produced' }>): VM => {
-  const text = `evidence: ${e.evidence.acId}/${e.evidence.evidenceType}`;
-  return {
-    ...appendLine(rememberTask(vm, e.taskId), text),
-    items: [...vm.items, { kind: 'line', text }, { kind: 'evidence', evidence: e.evidence }],
-    assistantDeltaBuckets: vm.assistantDeltaBuckets,
-    reasoningDeltaBuckets: vm.reasoningDeltaBuckets,
-    toolDeltaBuckets: vm.toolDeltaBuckets
-  };
-};
+const reduceEvidence = (vm: VM, e: Extract<KernelEvent, { type: 'evidence_produced' }>): VM => ({
+  ...rememberTask(vm, e.taskId),
+  items: [...vm.items, { kind: 'evidence', evidence: e.evidence }],
+  assistantDeltaBuckets: vm.assistantDeltaBuckets,
+  reasoningDeltaBuckets: vm.reasoningDeltaBuckets,
+  toolDeltaBuckets: vm.toolDeltaBuckets
+});
+
+const finalStatusLabel: Record<string, string> = { done: 'Done.', failed: 'Failed.', blocked: 'Blocked.' };
 
 const reduceFinal = (vm: VM, e: Extract<KernelEvent, { type: 'final_result' }>): VM =>
   appendLine(
@@ -179,7 +170,7 @@ const reduceFinal = (vm: VM, e: Extract<KernelEvent, { type: 'final_result' }>):
       status: e.status,
       currentActivity: undefined
     },
-    `status: ${e.status}`
+    finalStatusLabel[e.status] ?? e.status
   );
 
 const setStreamingModeSse = (vm: VM): VM => ({ ...vm, streamingMode: 'sse' as const });
@@ -206,7 +197,7 @@ const reduceReasoningDelta = (vm: VM, e: Extract<KernelEvent, { type: 'reasoning
     sequence: normalizeSequence(e.sequence),
     content: e.content
   });
-  const content = `[reasoning] ${joinChunks(nextBuckets[e.taskId] ?? [])}`;
+  const content = joinChunks(nextBuckets[e.taskId] ?? []);
   const vmWithState = setStreamingModeSse(rememberTask(vm, e.taskId));
   const vmWithBuckets = { ...vmWithState, reasoningDeltaBuckets: nextBuckets };
   const withLine = appendTextLine(vmWithBuckets, content);
@@ -237,7 +228,7 @@ const reduceToolDelta = (vm: VM, e: Extract<KernelEvent, { type: 'tool_delta' }>
     sequence: normalizeSequence(e.sequence),
     content: formatToolDeltaLine(e)
   });
-  const content = `[tool] ${joinChunks(nextBuckets[e.taskId] ?? [], ' ')}`;
+  const content = joinChunks(nextBuckets[e.taskId] ?? [], ' ');
   const vmWithState = setStreamingModeSse(rememberTask(vm, e.taskId));
   const vmWithBuckets = { ...vmWithState, toolDeltaBuckets: nextBuckets };
   const withLine = appendTextLine(vmWithBuckets, content);
@@ -262,15 +253,19 @@ export function reduceEvent(vm: VM, e: KernelEvent): VM {
     case 'intent_proposed':
       return reduceIntent(vm, e);
     case 'direct_answer':
-      return appendLine(rememberTask(vm, e.taskId), `answer: ${e.text}`);
+      return appendLine(rememberTask(vm, e.taskId), e.text);
     case 'plan_ready':
       return reducePlan(vm, e);
     case 'step_started':
       return reduceStep(vm, e);
     case 'tool_called':
       return reduceTool(vm, e);
-    case 'verdict':
-      return appendLine(rememberTask(vm, e.taskId), `verdict: ${e.verdict.acId}/${e.verdict.result}`);
+    case 'verdict': {
+      if (e.verdict.result !== 'pass') {
+        return appendLine(rememberTask(vm, e.taskId), `${e.verdict.acId}: ${e.verdict.result}`);
+      }
+      return rememberTask(vm, e.taskId);
+    }
     case 'evidence_produced':
       return reduceEvidence(vm, e);
     case 'assistant_delta':
@@ -288,7 +283,7 @@ export function reduceEvent(vm: VM, e: KernelEvent): VM {
     case 'final_result':
       return reduceFinal(vm, e);
     case 'error':
-      return appendLine({ ...rememberTask(vm, e.taskId), pendingGate: undefined }, `error: ${e.message}`);
+      return appendLine({ ...rememberTask(vm, e.taskId), pendingGate: undefined }, e.message);
     default:
       return vm;
   }
