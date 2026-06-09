@@ -1,8 +1,10 @@
 import { type AcceptanceCriterion, type Evidence, KernelEvent, type Verdict } from '@bobby/shared';
 import type { PlanStep } from '@bobby/shared';
+import type { TaskContract } from '@bobby/shared';
 import { captureIntent } from './intent';
 import { executeStep, type Claim } from './executor';
 import { planTask } from './planner';
+import { needsClarification } from './clarify';
 import { TraceStore } from '../trace/trace-store';
 import type { ModelClient } from '../model/model-client';
 import type { VerificationEngine } from '../conscience/engine';
@@ -20,6 +22,11 @@ import { parseTestOutput, formatTestFailureContext, type ParsedTestOutput } from
 type Listener = (event: KernelEvent) => void;
 let taskCounter = 0;
 
+type PlanDecision =
+  | { decision: 'approve' }
+  | { decision: 'reject' }
+  | { decision: 'edit'; instructions: string };
+type PlanDecisionResolver = (taskId: string) => Promise<PlanDecision>;
 const createTaskId = (): string => {
   taskCounter += 1;
   return `task-${Date.now()}-${taskCounter}`;
@@ -97,7 +104,8 @@ export interface ConscienceDeps {
   evidenceFor: (
     stepId: string,
     acIds: string[],
-    calls?: ReadonlyArray<PlannedCall>
+    calls?: ReadonlyArray<PlannedCall>,
+    acCriteria?: AcceptanceCriterion[]
   ) => Evidence[] | Promise<Evidence[]>;
   constraintCheckers?: ConstraintChecker[];
   context?: () => ExecContext;
@@ -110,7 +118,8 @@ export class Orchestrator {
 
   constructor(
     private readonly model: ModelClient,
-    private readonly conscience?: ConscienceDeps
+    private readonly conscience?: ConscienceDeps,
+    private readonly requestPlanDecision: PlanDecisionResolver = async () => ({ decision: 'approve' })
   ) {}
 
   on(fn: Listener): () => void {
@@ -127,16 +136,60 @@ export class Orchestrator {
     }
   }
 
-  async startTask(input: string): Promise<string> {
-    const taskId = createTaskId();
+  async startTask(input: string, taskId = createTaskId()): Promise<string> {
     const contract = await captureIntent(this.model, input);
     this.emit(taskId, { type: 'intent_proposed', taskId, contract });
-    const budget: DifficultyBudget = allocateBudget(scoreToTier(estimateDifficulty(contract)));
 
-    const steps = await planTask(this.model, contract);
-    this.emit(taskId, { type: 'plan_ready', taskId, steps });
+    if (needsClarification(contract).should) {
+      this.emitDirectAnswer(taskId);
+      return taskId;
+    }
+
+    await this.runPlannedTask(taskId, contract);
+    return taskId;
+  }
+
+  private emitDirectAnswer(taskId: string): void {
+    this.emit(taskId, {
+      type: 'direct_answer',
+      taskId,
+      text: '你想让我具体做什么？请给我一个明确任务或要修改的文件。'
+    });
+  }
+
+  private async runPlannedTask(taskId: string, contract: TaskContract): Promise<void> {
+    const budget: DifficultyBudget = allocateBudget(scoreToTier(estimateDifficulty(contract)));
+    let revisionInstructions: string | undefined;
     const verdicts = new Map<string, Verdict>();
 
+    while (true) {
+      const steps = await planTask(this.model, contract, revisionInstructions);
+      const decisionPromise = this.requestPlanDecision(taskId);
+      this.emit(taskId, { type: 'plan_ready', taskId, steps });
+
+      const decision = await decisionPromise;
+      if (decision.decision === 'approve') {
+        await this.executeSteps(taskId, steps, contract, verdicts, budget);
+        await this.emitFinalResult(taskId, contract, verdicts);
+        return;
+      }
+
+      if (decision.decision === 'reject') {
+        this.emit(taskId, { type: 'final_result', taskId, status: 'blocked' });
+        return;
+      }
+
+      revisionInstructions = decision.instructions;
+    }
+  }
+
+  private async executeSteps(
+    taskId: string,
+    steps: PlanStep[],
+    contract: TaskContract,
+    verdicts: Map<string, Verdict>,
+    budget: DifficultyBudget
+  ): Promise<void> {
     for (const step of steps) {
       this.emit(taskId, { type: 'step_started', taskId, stepId: step.id });
       if (!this.conscience) {
@@ -153,7 +206,13 @@ export class Orchestrator {
         budget
       );
     }
+  }
 
+  private async emitFinalResult(
+    taskId: string,
+    contract: TaskContract,
+    verdicts: Map<string, Verdict>
+  ): Promise<void> {
     let status: 'done' | 'failed' | 'blocked' = 'failed';
     if (this.conscience) {
       const ctx = await this.getContext(this.conscience);
@@ -166,7 +225,6 @@ export class Orchestrator {
     }
 
     this.emit(taskId, { type: 'final_result', taskId, status });
-    return taskId;
   }
 
   private async runVerifiedStep(
@@ -278,12 +336,17 @@ export class Orchestrator {
     criteria: AcceptanceCriterion[],
     verdicts: Map<string, Verdict>
   ): Promise<{ result: 'pass' | 'fail' | 'need_human'; context?: string }> {
-    const evidence = await conscience.evidenceFor(step.id, claim.acIds, claim.calls);
+    const relevantAcs = criteria.filter((ac) => step.satisfiesAcIds.includes(ac.id));
+    const evidence = await conscience.evidenceFor(
+      step.id,
+      claim.acIds,
+      claim.calls,
+      relevantAcs
+    );
     for (const e of evidence) {
       this.emit(taskId, { type: 'evidence_produced', taskId, evidence: e });
     }
 
-    const relevantAcs = criteria.filter((ac) => step.satisfiesAcIds.includes(ac.id));
     const verdictsResult = await Promise.all(
       relevantAcs.map(async (ac) => {
         const verdict = await conscience.engine.verify(ac, evidence);

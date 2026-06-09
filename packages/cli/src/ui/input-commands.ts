@@ -2,6 +2,7 @@ export const slashCommands = [
   'help',
   'clear',
   'status',
+  'probe',
   'cost',
   'undo',
   'agents',
@@ -20,17 +21,30 @@ export type SlashCommandInput = {
   normalized: string;
 };
 
+export type UnknownSlashCommandInput = {
+  kind: 'unknown_slash';
+  command: string;
+  args: string[];
+  normalized: string;
+};
+
 export type TextInput = {
   kind: 'text';
   value: string;
 };
 
-export type ParsedInputLine = SlashCommandInput | TextInput;
+export type ParsedInputLine = SlashCommandInput | UnknownSlashCommandInput | TextInput;
 
 const CONTINUE_WINDOW_MS = 500;
 
 type CtrlCState = {
   lastPressedAt: number | null;
+};
+
+export type CtrlCUpdate = {
+  shouldAbort: boolean;
+  shouldExit: boolean;
+  nextState: CtrlCState;
 };
 
 export const isKnownSlashCommand = (value: string): value is SlashCommand =>
@@ -44,13 +58,13 @@ export function parseInputLine(rawInput: string): ParsedInputLine {
 
   const textWithoutSlash = trimmed.slice(1);
   if (!textWithoutSlash) {
-    return { kind: 'text', value: trimmed };
+    return { kind: 'unknown_slash', command: '', args: [], normalized: trimmed };
   }
 
   const [command, ...args] = textWithoutSlash.split(/\s+/);
   const normalized = command.toLowerCase();
   if (!isKnownSlashCommand(normalized)) {
-    return { kind: 'text', value: trimmed };
+    return { kind: 'unknown_slash', command: normalized, args, normalized: trimmed };
   }
 
   return {
@@ -65,10 +79,10 @@ export function makeInitialCtrlCState(): CtrlCState {
   return { lastPressedAt: null };
 }
 
-export function updateCtrlCState(state: CtrlCState, now: number): { aborted: boolean; nextState: CtrlCState } {
+export function updateCtrlCState(state: CtrlCState, now: number): CtrlCUpdate {
   if (state.lastPressedAt !== null && now - state.lastPressedAt <= CONTINUE_WINDOW_MS) {
-    return { aborted: true, nextState: { lastPressedAt: null } };
+    return { shouldAbort: false, shouldExit: true, nextState: { lastPressedAt: null } };
   }
 
-  return { aborted: false, nextState: { lastPressedAt: now } };
+  return { shouldAbort: true, shouldExit: false, nextState: { lastPressedAt: now } };
 }

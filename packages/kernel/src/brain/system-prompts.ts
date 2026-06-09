@@ -76,6 +76,8 @@ export const EXEC_SYSTEM_PROMPT = [
   '}',
   '不要用 mkdir -p 等 shell 形式创建目录；优先用 write_file 写文件，系统会自动创建父目录。',
   'For file writes, use write_file; do not use shell redirection, sh, bash, cmd, powershell, or printf to create file content.',
+  'On Windows, avoid shell builtins: test, rm, cat, ls, touch.',
+  'Prefer node/python for execution and use write_file/file_exists for file operations and assertions when possible.',
   '示例调用（推荐）：',
   '{',
   '  "calls": [',
@@ -122,3 +124,8 @@ export const PRO_REVIEW_SYSTEM_PROMPT = [
 export const RUNNER_SYSTEM_PROMPT = `${EXEC_SYSTEM_PROMPT}\n\n${FLASH_CODING_PROMPT}`;
 export const GRADER_SYSTEM_PROMPT = `${PLAN_SYSTEM_PROMPT}\n\n${PRO_ARCHITECT_PROMPT}`;
 export const GRADER_INTENT_SYSTEM_PROMPT = `${INTENT_SYSTEM_PROMPT}\n\n${PRO_ARCHITECT_PROMPT}`;
+export const FORBIDDEN_WIN32_COMMANDS = ['test', 'rm', 'cat', 'ls', 'touch'] as const;
+
+export const getRunnerSystemPrompt = (platform: string = process.platform): string => {
+  return `${RUNNER_SYSTEM_PROMPT}\n\nCurrent platform: ${platform?.toLowerCase()}`;
+};

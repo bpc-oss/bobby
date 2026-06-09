@@ -44,7 +44,7 @@ const createWindow = () => {
 const createHost = async () => {
   try {
     const model = await makeDeepSeekClientFromBobbyConfig();
-    return new KernelHost(() => model);
+    return new KernelHost(() => model, undefined, process.cwd(), true);
   } catch (err) {
     if (err instanceof Error) {
       hostInitError = err;

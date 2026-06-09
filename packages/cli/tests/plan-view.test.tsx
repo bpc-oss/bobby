@@ -38,15 +38,22 @@ it('renders plan step details for all fields', () => {
   const { lastFrame } = render(<PlanView steps={steps} onDecision={() => {}} />);
   const frame = lastFrame() ?? '';
 
+  expect(frame).toContain('Plan');
   expect(frame).toContain('S1');
   expect(frame).toContain('Initialize repository');
-  expect(frame).toContain('dependsOn: (none)');
-  expect(frame).toContain('satisfiesAcIds: AC1');
+  expect(frame).toContain('S1: Initialize repository');
+  expect(frame).not.toContain('dependsOn:');
+  expect(frame).not.toContain('depends on (none)');
+  expect(frame).not.toContain('satisfiesAcIds:');
+  expect(frame).not.toContain('AC1');
 
   expect(frame).toContain('S2');
   expect(frame).toContain('Run baseline tests');
-  expect(frame).toContain('dependsOn: S1');
-  expect(frame).toContain('satisfiesAcIds: AC2');
+  expect(frame).toContain('S2: Run baseline tests');
+  expect(frame).not.toContain('dependsOn:');
+  expect(frame).not.toContain('satisfiesAcIds: AC2');
+  expect(frame).toContain('depends on S1');
+  expect(frame).not.toContain('AC2');
 });
 
 it('displays approve/edit/reject actions', () => {
@@ -58,7 +65,35 @@ it('displays approve/edit/reject actions', () => {
   expect(frame).toContain('[r] reject');
 });
 
-it('fires onDecision with reject when user presses r', async () => {
+it('fires onDecision with approve when user presses a', () => {
+  const onDecision = vi.fn();
+  capturedUseInput = null;
+  render(<PlanView steps={steps} onDecision={onDecision} />);
+  if (!capturedUseInput) {
+    throw new Error('useInput callback was not captured');
+  }
+
+  const callback = capturedUseInput as KeyCallback;
+  callback('a', { return: false } as Parameters<KeyCallback>[1]);
+
+  expect(onDecision).toHaveBeenCalledWith('approve');
+});
+
+it('fires onDecision with edit when user presses e', () => {
+  const onDecision = vi.fn();
+  capturedUseInput = null;
+  render(<PlanView steps={steps} onDecision={onDecision} />);
+  if (!capturedUseInput) {
+    throw new Error('useInput callback was not captured');
+  }
+
+  const callback = capturedUseInput as KeyCallback;
+  callback('e', { return: false } as Parameters<KeyCallback>[1]);
+
+  expect(onDecision).toHaveBeenCalledWith('edit');
+});
+
+it('fires onDecision with reject when user presses r', () => {
   const onDecision = vi.fn();
   capturedUseInput = null;
   render(<PlanView steps={steps} onDecision={onDecision} />);
@@ -67,7 +102,5 @@ it('fires onDecision with reject when user presses r', async () => {
   }
   const callback = capturedUseInput as KeyCallback;
   callback('r', { return: false } as Parameters<KeyCallback>[1]);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
   expect(onDecision).toHaveBeenCalledWith('reject');
 });

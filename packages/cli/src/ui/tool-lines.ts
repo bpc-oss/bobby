@@ -1,6 +1,8 @@
 import type { Evidence } from '@bobby/shared';
 
-const MAX_OUTPUT_PREVIEW = 120;
+const MAX_OUTPUT_LINES = 6;
+const MAX_OUTPUT_LINE_WIDTH = 100;
+const ANSI_ESCAPE_PATTERN = /\u001b\[[0-?]*[ -/]*[@-~]/g;
 
 type Severity = 'pass' | 'fail' | 'neutral';
 
@@ -25,9 +27,26 @@ function asNumber(value: unknown): number | undefined {
   return undefined;
 }
 
-function truncateOutput(text: string): string {
-  const flattened = text.replace(/\n+/g, ' ');
-  return flattened.length <= MAX_OUTPUT_PREVIEW ? flattened : `${flattened.slice(0, MAX_OUTPUT_PREVIEW)}...`;
+function sanitizeOutputForPreview(text: string): string {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const withoutAnsi = normalized.replace(ANSI_ESCAPE_PATTERN, '');
+  const splitLines = withoutAnsi.split('\n');
+  while (splitLines.at(-1) === '') {
+    splitLines.pop();
+  }
+
+  const previewLines = splitLines.map((line) =>
+    line.length <= MAX_OUTPUT_LINE_WIDTH ? line : `${line.slice(0, MAX_OUTPUT_LINE_WIDTH)}...`
+  );
+
+  const shownLines = previewLines.slice(0, MAX_OUTPUT_LINES);
+  const hiddenLineCount = Math.max(previewLines.length - MAX_OUTPUT_LINES, 0);
+
+  if (hiddenLineCount > 0) {
+    return `${shownLines.join(' | ')} | ... (+${hiddenLineCount} lines)`;
+  }
+
+  return shownLines.join(' | ');
 }
 
 export function formatToolCalledLine(tool: string): string {
@@ -50,13 +69,13 @@ function summarizeCommandOutput(evidence: Evidence): EvidenceDisplay {
 
   const preferredPayload =
     !passed && asString(payload.stderr)
-      ? `stderr: ${truncateOutput(payload.stderr as string)}`
+      ? `stderr: ${sanitizeOutputForPreview(payload.stderr as string)}`
       : asString(payload.stdout)
-        ? `stdout: ${truncateOutput(payload.stdout as string)}`
+        ? `stdout: ${sanitizeOutputForPreview(payload.stdout as string)}`
         : asString(payload.output)
-          ? `output: ${truncateOutput(payload.output as string)}`
+          ? `output: ${sanitizeOutputForPreview(payload.output as string)}`
           : asString(payload.stderr)
-            ? `stderr: ${truncateOutput(payload.stderr as string)}`
+            ? `stderr: ${sanitizeOutputForPreview(payload.stderr as string)}`
             : undefined;
 
   const parts = [`${evidence.evidenceType}(exitCode=${exitCode ?? 'missing'}`];

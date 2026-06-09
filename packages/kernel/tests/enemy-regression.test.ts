@@ -14,10 +14,10 @@ const validRunnerJson = JSON.stringify({
 });
 
 const contractJson = JSON.stringify({
-  goal: 'g',
+  goal: 'Build tmp.txt and verify coverage evidence for the requested task',
   acceptanceCriteria: [{ id: 'AC1', desc: 'd', oracleHint: 'review' }],
   constraints: [],
-  inputs: [],
+  inputs: ['tmp.txt'],
   outOfScope: []
 });
 

@@ -1,10 +1,11 @@
 import React from 'react';
+import type { GateDecision } from '@bobby/shared';
 
 import { t } from '../lib/i18n';
 
 interface GateDialogProps {
   reason: string;
-  onDecide: (decision: 'allow' | 'deny') => void;
+  onDecide: (decision: GateDecision) => void;
 }
 
 export function GateDialog({ reason, onDecide }: GateDialogProps): JSX.Element {
@@ -16,6 +17,9 @@ export function GateDialog({ reason, onDecide }: GateDialogProps): JSX.Element {
       <div className="gate-buttons">
         <button className="gate-allow" onClick={() => onDecide('allow')}>
           {t('allow')}
+        </button>
+        <button className="gate-always" onClick={() => onDecide('always')}>
+          Always
         </button>
         <button className="gate-deny" onClick={() => onDecide('deny')}>
           {t('deny')}

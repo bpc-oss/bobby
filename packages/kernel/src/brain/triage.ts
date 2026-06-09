@@ -1,4 +1,4 @@
-export type Intent = 'GREETING' | 'QUESTION' | 'TASK' | 'COMMAND';
+export type Intent = 'GREETING' | 'QUESTION' | 'TASK' | 'COMMAND' | 'UNCLEAR';
 
 export interface TriageDeps {
   classifyWithModel?: (input: string) => Promise<Intent | null>;
@@ -114,6 +114,20 @@ const isSimpleQuestion = (input: string): boolean =>
   input.trim().endsWith('？') ||
   containsKeyword(normalize(input), QUESTION_TOKENS);
 
+const isDegenerateInput = (input: string): boolean => {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return true;
+  }
+
+  const compact = stripPunctuation(trimmed);
+  if (!compact) {
+    return true;
+  }
+
+  return compact.length <= 2;
+};
+
 export const classifyIntent = async (
   input: string,
   deps: TriageDeps = {}
@@ -132,6 +146,10 @@ export const classifyIntent = async (
 
   if (startsWithCommand(input)) {
     return 'COMMAND';
+  }
+
+  if (isDegenerateInput(input)) {
+    return 'UNCLEAR';
   }
 
   if (deps.classifyWithModel) {

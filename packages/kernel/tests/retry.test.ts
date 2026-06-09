@@ -8,6 +8,8 @@ const makeErrorWithStatus = (status: number): Error => {
   return error;
 };
 
+const makeFetchFailedError = (): TypeError => new TypeError('fetch failed');
+
 it('retries on 429 then succeeds and returns the response', async () => {
   let attempt = 0;
   const sleepDelays: number[] = [];
@@ -33,6 +35,64 @@ it('retries on 429 then succeeds and returns the response', async () => {
   expect(value).toBe('ok');
   expect(attempt).toBe(2);
   expect(sleepDelays).toEqual([8]);
+});
+
+it('retries on TypeError("fetch failed") and succeeds on retry', async () => {
+  let calls = 0;
+  const sleepDelays: number[] = [];
+
+  const value = await withRetry(
+    async () => {
+      calls += 1;
+      if (calls === 1) {
+        throw makeFetchFailedError();
+      }
+      return 'ok';
+    },
+    {
+      retries: 2,
+      baseMs: 8,
+      sleep: async (ms) => {
+        sleepDelays.push(ms);
+      }
+    }
+  );
+
+  expect(value).toBe('ok');
+  expect(calls).toBe(2);
+  expect(sleepDelays).toEqual([8]);
+});
+
+it('stops retrying after the configured limit and throws the final network error', async () => {
+  let calls = 0;
+  const sleepDelays: number[] = [];
+  const finalError = Object.assign(makeFetchFailedError(), { marker: 'last' });
+
+  await expect(
+    withRetry(
+      async () => {
+        calls += 1;
+        if (calls <= 2) {
+          throw makeFetchFailedError();
+        }
+
+        throw finalError;
+      },
+      {
+        retries: 2,
+        baseMs: 8,
+        sleep: async (ms) => {
+          sleepDelays.push(ms);
+        }
+      }
+    )
+  ).rejects.toMatchObject({
+    message: 'fetch failed',
+    marker: 'last'
+  });
+
+  expect(calls).toBe(3);
+  expect(sleepDelays).toEqual([8, 16]);
 });
 
 it('retries on retriable statuses and finally throws the last error', async () => {
@@ -90,9 +150,13 @@ it('does not retry non-retry statuses and throws immediately', async () => {
 });
 
 it('treats plain Error as non-retry by default', async () => {
+  let calls = 0;
+  const sleepDelays: number[] = [];
+
   await expect(
     withRetry(
       async () => {
+        calls += 1;
         throw new Error('network error');
       },
       {
@@ -106,6 +170,9 @@ it('treats plain Error as non-retry by default', async () => {
   ).rejects.toMatchObject({
     message: 'network error'
   });
+
+  expect(calls).toBe(1);
+  expect(sleepDelays).toEqual([]);
 });
 
 it('uses exponential delays and continues retrying while the request keeps failing', async () => {

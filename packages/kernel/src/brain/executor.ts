@@ -1,7 +1,7 @@
 import type { PlanStep } from '@bobby/shared';
 import { z } from 'zod';
 import type { ModelClient, ModelRole, ReasoningEffort } from '../model/model-client';
-import { RUNNER_SYSTEM_PROMPT } from './system-prompts';
+import { FORBIDDEN_WIN32_COMMANDS, getRunnerSystemPrompt } from './system-prompts';
 import type { PlannedCall } from '../hands/evidence-provider';
 
 export interface Claim {
@@ -22,15 +22,65 @@ const RunnerResponseSchema = z.object({
   needsPro: z.boolean().optional()
 });
 
+const isForbiddenWin32Command = (cmd: unknown): cmd is (typeof FORBIDDEN_WIN32_COMMANDS)[number] => {
+  if (typeof cmd !== 'string') {
+    return false;
+  }
+
+  return FORBIDDEN_WIN32_COMMANDS.includes(cmd.toLowerCase() as (typeof FORBIDDEN_WIN32_COMMANDS)[number]);
+};
+
+const getCommandToken = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const [commandToken] = trimmed.split(/\s+/);
+  return commandToken?.toLowerCase();
+};
+
+const getExecInputCommand = (input: Record<string, unknown>): string | undefined => {
+  const canonicalToken = getCommandToken(input.cmd);
+  if (canonicalToken) {
+    return canonicalToken;
+  }
+
+  return getCommandToken(input.command);
+};
+
+const assertRunnerCallsSafe = (calls: z.output<typeof RunnerResponseSchema>['calls'], platform: string): void => {
+  if (platform.toLowerCase() !== 'win32') {
+    return;
+  }
+
+  for (const [index, call] of calls.entries()) {
+    if (call.tool !== 'exec') {
+      continue;
+    }
+
+    const command = getExecInputCommand(call.input);
+    if (isForbiddenWin32Command(command)) {
+      throw new Error(`executeStep: invalid runner schema at calls.${index}.input.cmd: \`${command}\` is forbidden on win32`);
+    }
+  }
+};
+
 export interface ExecuteStepOptions {
   role?: ModelRole;
   model?: string;
   reasoningEffort?: ReasoningEffort;
   retryContext?: string;
+  platform?: NodeJS.Platform | string;
 }
 
 export async function executeStep(model: ModelClient, step: PlanStep, options: ExecuteStepOptions = {}): Promise<Claim> {
   const role = options.role ?? 'runner';
+  const platform = options.platform ?? process.platform;
   const prompt = options.retryContext
     ? `${step.desc}\n\n${options.retryContext}`
     : step.desc;
@@ -38,7 +88,7 @@ export async function executeStep(model: ModelClient, step: PlanStep, options: E
   const response = await model.complete(
     role,
     [
-    { role: 'system', content: RUNNER_SYSTEM_PROMPT },
+    { role: 'system', content: getRunnerSystemPrompt(platform) },
     { role: 'user', content: prompt }
   ], {
     json: true,
@@ -65,6 +115,7 @@ export async function executeStep(model: ModelClient, step: PlanStep, options: E
   }
 
   const plan = planResult.data;
+  assertRunnerCallsSafe(plan.calls, platform);
 
   return {
     stepId: step.id,

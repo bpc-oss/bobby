@@ -3,15 +3,27 @@ import { z } from 'zod';
 import type { ModelClient } from '../model/model-client';
 import { GRADER_SYSTEM_PROMPT } from './system-prompts';
 
-export async function planTask(model: ModelClient, contract: TaskContract): Promise<PlanStep[]> {
-  const response = await model.complete('grader', [
-    { role: 'system', content: GRADER_SYSTEM_PROMPT },
-    { role: 'user', content: JSON.stringify(contract) }
-  ], { json: true });
+const formatRevisionInstructions = (revisionInstructions?: string): string =>
+  revisionInstructions ? `\n\nRevision instructions from user:\n${revisionInstructions}` : '';
 
+const buildInitialPrompt = (contract: TaskContract, revisionInstructions?: string): string =>
+  `${JSON.stringify(contract)}${formatRevisionInstructions(revisionInstructions)}`;
+
+const buildRetryPrompt = (contract: TaskContract, reason: string, revisionInstructions?: string): string =>
+  `Previous grader output was invalid: ${reason}\n\nContract:\n${JSON.stringify(
+    contract
+  )}${formatRevisionInstructions(revisionInstructions)}\n\nReturn a valid JSON plan.`;
+
+const isRetryableValidationError = (message: string): boolean =>
+  message.startsWith('planTask: model response is not valid JSON') ||
+  message.startsWith('planTask: invalid plan schema') ||
+  message.startsWith('planTask: model output violates plan schema');
+
+const validatePlan = (raw: string, contract: TaskContract): PlanStep[] => {
   let parsed: unknown;
+
   try {
-    parsed = JSON.parse(response.content);
+    parsed = JSON.parse(raw);
   } catch {
     throw new Error('planTask: model response is not valid JSON');
   }
@@ -39,4 +51,32 @@ export async function planTask(model: ModelClient, contract: TaskContract): Prom
   }
 
   return steps;
+};
+
+export async function planTask(
+  model: ModelClient,
+  contract: TaskContract,
+  revisionInstructions?: string
+): Promise<PlanStep[]> {
+  let userPrompt = buildInitialPrompt(contract, revisionInstructions);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await model.complete('grader', [
+      { role: 'system', content: GRADER_SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt }
+    ], { json: true });
+
+    try {
+      return validatePlan(response.content, contract);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt === 1 || !isRetryableValidationError(message)) {
+        throw error;
+      }
+
+      userPrompt = buildRetryPrompt(contract, message, revisionInstructions);
+    }
+  }
+
+  throw new Error('planTask: retry attempts exhausted');
 }

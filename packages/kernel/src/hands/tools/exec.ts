@@ -258,25 +258,13 @@ export class ExecTool implements Tool {
     timedOut: boolean;
     spawnError?: string;
   }> {
-    let stdout = '';
-    let stderr = '';
     let timedOut = false;
     let signal: NodeJS.Signals | null = null;
 
-    const child = spawn(cmd, args, {
-      cwd: this.workspace.resolveInside('.')
-    });
-
-    this.bindOutputBuffer(child, (chunk) => {
-      stdout += String(chunk);
-    }, (chunk) => {
-      stderr += String(chunk);
-    });
-
-    const timer = setTimeout(() => {
+    const { child, getStdout, getStderr } = this.prepareCommandSpawn(cmd, args);
+    const timer = this.startTimeoutTimer(child, timeoutMs, () => {
       timedOut = true;
-      child.kill('SIGTERM');
-    }, timeoutMs);
+    });
 
     try {
       const close = await this.waitForProcessClose(child, timer);
@@ -284,8 +272,8 @@ export class ExecTool implements Tool {
       const exitCode = close.code === null && timedOut ? 143 : close.code ?? 1;
       return {
         exitCode,
-        stdout,
-        stderr,
+        stdout: getStdout(),
+        stderr: getStderr(),
         signal,
         timedOut
       };
@@ -295,13 +283,46 @@ export class ExecTool implements Tool {
       const message = error instanceof Error ? error.message : String(error);
       return {
         exitCode: 127,
-        stdout,
-        stderr: stderr.length > 0 ? stderr : message,
+        stdout: getStdout(),
+        stderr: getStderr().length > 0 ? getStderr() : message,
         signal: null,
         timedOut,
         spawnError: message
       };
     }
+  }
+
+  private prepareCommandSpawn(
+    cmd: string,
+    args: string[]
+  ): {
+    child: ReturnType<typeof spawn>;
+    getStdout: () => string;
+    getStderr: () => string;
+  } {
+    let stdout = '';
+    let stderr = '';
+    const child = spawn(cmd, args, {
+      cwd: this.workspace.resolveInside('.')
+    });
+    this.bindOutputBuffer(child, (chunk) => {
+      stdout += String(chunk);
+    }, (chunk) => {
+      stderr += String(chunk);
+    });
+
+    return {
+      child,
+      getStdout: () => stdout,
+      getStderr: () => stderr
+    };
+  }
+
+  private startTimeoutTimer(child: ReturnType<typeof spawn>, timeoutMs: number, onTimeout: () => void): NodeJS.Timeout {
+    return setTimeout(() => {
+      onTimeout();
+      child.kill('SIGTERM');
+    }, timeoutMs);
   }
 
   private bindOutputBuffer(

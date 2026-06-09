@@ -1,5 +1,6 @@
 export { Kernel } from './kernel';
 export { captureIntent } from './brain/intent';
+export { classifyIntent } from './brain/triage';
 export { planTask } from './brain/planner';
 export { executeStep } from './brain/executor';
 export type { PlannedCall } from './hands/evidence-provider';

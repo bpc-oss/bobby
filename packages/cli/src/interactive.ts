@@ -5,6 +5,8 @@ import { render } from 'ink';
 import type { KernelHost } from '@bobby/kernel';
 
 import { App } from './ui/App';
+import type { SlashCommandInput } from './ui/input-commands';
+import { parseInputLine } from './ui/input-commands';
 
 type PromptInput = NodeJS.ReadStream;
 type PromptOutput = NodeJS.WriteStream;
@@ -34,6 +36,45 @@ type Questioner = {
 };
 
 type InteractiveMode = 'line' | 'ink';
+const interactiveSlashHelp = '/help /clear /status /probe /cost /undo /agents /resume /exit';
+
+function maybeHandleLineSlashCommand(line: string, io: InteractiveIO): boolean {
+  if (!line.startsWith('/')) {
+    return false;
+  }
+
+  const parsed = parseInputLine(line);
+  const emptyResponses: Record<string, string> = {
+    cost: 'cost: no usage data yet',
+    undo: 'undo: no snapshots available',
+    clear: 'clear: transcript cleared',
+    agents: 'agents: no agents',
+    resume: 'resume: no resumable trace in current process'
+  };
+
+  if (parsed.kind === 'unknown_slash') {
+    io.log(`unknown command: ${parsed.normalized}`);
+    io.log(`commands: ${interactiveSlashHelp}`);
+    return true;
+  }
+
+  if (parsed.kind === 'slash') {
+    if (parsed.args.length === 0) {
+      const response = emptyResponses[parsed.command];
+      if (response) {
+        io.log(response);
+        io.log(`commands: ${interactiveSlashHelp}`);
+        return true;
+      }
+    }
+
+    io.log(`unknown command: ${parsed.normalized}`);
+    io.log(`commands: ${interactiveSlashHelp}`);
+    return true;
+  }
+
+  return false;
+}
 
 export function canStartInteractive(deps: InteractiveDeps = {}): boolean {
   if (deps.ask) {
@@ -114,6 +155,10 @@ async function handleInteractiveLine(
     return true;
   }
 
+  if (mode === 'line' && maybeHandleLineSlashCommand(line, io)) {
+    return true;
+  }
+
   if (mode === 'ink' && host) {
     await host.send({ type: 'startTask', input: line });
     return true;
@@ -153,6 +198,40 @@ async function runLineInteractive(
   }
 }
 
+const createInkSlashHandler = (host: KernelHost): ((input: SlashCommandInput) => Promise<void>) => {
+  return async (input): Promise<void> => {
+    switch (input.command) {
+      case 'undo':
+        await host.send({ type: 'restoreSnapshot', snapshotId: input.args[0] });
+        return;
+      case 'agents':
+        await host.send({ type: 'listAgents' });
+        return;
+      case 'resume':
+        await host.send({ type: 'resumeSession' });
+        return;
+      default:
+        return;
+    }
+  };
+};
+
+const createInkPlanDecisionHandler = (
+  host: KernelHost
+): ((taskId: string, decision: 'approve' | 'reject' | 'edit', instructions?: string) => Promise<void>) => {
+  return async (taskId, decision, instructions): Promise<void> => {
+    if (decision === 'edit') {
+      if (!instructions) {
+        return;
+      }
+      await host.send({ type: 'planDecision', taskId, decision, instructions });
+      return;
+    }
+
+    await host.send({ type: 'planDecision', taskId, decision });
+  };
+};
+
 async function runInkInteractive(
   io: InteractiveIO,
   handlers: InteractiveHandlers
@@ -177,9 +256,11 @@ async function runInkInteractive(
           io.log(error instanceof Error ? error.message : String(error));
         }
       },
+      onSlashCommand: createInkSlashHandler(host),
       onGate: async (gateId, decision) => {
         await host.send({ type: 'approveGate', gateId, decision });
       },
+      onPlanDecision: createInkPlanDecisionHandler(host),
       onAbort: async (taskId) => {
         await host.send({ type: 'abort', taskId });
       }

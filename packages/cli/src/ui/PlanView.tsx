@@ -34,8 +34,9 @@ export function PlanView({ steps, onDecision }: PlanViewProps): JSX.Element {
         {steps.map((step) => (
           <Box key={step.id} flexDirection="column" marginBottom={1}>
             <Text>{`${step.id}: ${step.desc}`}</Text>
-            <Text color="gray">{`dependsOn: ${step.dependsOn.join(', ') || '(none)'}`}</Text>
-            <Text color="gray">{`satisfiesAcIds: ${step.satisfiesAcIds.join(', ')}`}</Text>
+            {step.dependsOn.length > 0 ? (
+              <Text color="gray">{`depends on ${step.dependsOn.join(', ')}`}</Text>
+            ) : null}
           </Box>
         ))}
       </Box>

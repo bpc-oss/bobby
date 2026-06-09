@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
-import type { Evidence } from '@bobby/shared';
+import type { AcceptanceCriterion, Evidence } from '@bobby/shared';
 
 import { CompletionGate } from '../src/conscience/gate';
 import { CommandExitOracle, FileDiffOracle, FileExistsOracle } from '../src/conscience/oracles/deterministic';
@@ -28,10 +28,10 @@ type ContractOverrides = {
 
 const createContractJson = (overrides: ContractOverrides = {}) => {
   const contract = {
-    goal: 'g',
+    goal: 'Create report files with explicit workspace changes for the given task requirements',
     acceptanceCriteria: overrides.acceptanceCriteria ?? [{ id: 'AC1', desc: 'd', oracleHint: 'run' }],
     constraints: overrides.constraints ?? [],
-    inputs: overrides.inputs ?? [],
+    inputs: overrides.inputs ?? ['workspace'],
     outOfScope: overrides.outOfScope ?? []
   };
 
@@ -57,6 +57,10 @@ const stepsJson = JSON.stringify([
   { id: 'S1', desc: 'Do work', satisfiesAcIds: ['AC1'], dependsOn: [] }
 ]);
 
+const multiRunStepsJson = JSON.stringify([
+  { id: 'S1', desc: 'Do work for both ACs', satisfiesAcIds: ['AC1', 'AC2'], dependsOn: [] }
+]);
+
 const successRunnerCalls: { calls: PlannedCall[] } = {
   calls: [
     { tool: 'write_file', input: { path: 'demo/hello.py', content: 'print("hi")' } },
@@ -77,6 +81,13 @@ const commandAliasRunnerCalls: { calls: PlannedCall[] } = {
 
 const failedRunnerCalls: { calls: PlannedCall[] } = {
   calls: [{ tool: 'exec', input: { cmd: 'python', args: ['-c', 'import sys; sys.exit(1)'] } }]
+};
+
+const multiRunRunnerCalls: { calls: PlannedCall[] } = {
+  calls: [
+    { tool: 'exec', input: { cmd: 'python', args: ['-c', 'import sys; sys.exit(0)'] } },
+    { tool: 'exec', input: { cmd: 'python', args: ['-c', 'import sys; sys.exit(1)'] } }
+  ]
 };
 
 const unknownToolRunnerCalls: { calls: PlannedCall[] } = {
@@ -117,8 +128,12 @@ const makeConscience = (
     gate,
     context: options.context ?? (() => provider.context()),
     constraintCheckers: options.constraintCheckers ?? [new NoForbiddenPathChecker()],
-    evidenceFor: (stepId: string, acIds: string[], evidenceCalls?: ReadonlyArray<PlannedCall>) =>
-      provider.evidenceFor(stepId, acIds, evidenceCalls ?? calls)
+    evidenceFor: (
+      stepId: string,
+      acIds: string[],
+      evidenceCalls?: ReadonlyArray<PlannedCall>,
+      acCriteria?: AcceptanceCriterion[]
+    ) => provider.evidenceFor(stepId, acIds, evidenceCalls ?? calls, acCriteria ?? [])
   };
 };
 
@@ -161,14 +176,27 @@ const collectFinalStatus = async (
   runner: string,
   calls: PlannedCall[],
   createConstraints?: (workspaceRoot: string) => { id: string; desc: string; check: string }[],
-  options?: MakeConscienceOptions
+  options?: MakeConscienceOptions,
+  contractJson = simpleContractJson,
+  steps = stepsJson
 ): Promise<string> => {
   let final = '';
+  const createContractWithConstraints = (constraints: { id: string; desc: string; check: string }[] | undefined): string => {
+    const parsed = JSON.parse(contractJson) as Record<string, unknown>;
+    if (!constraints || constraints.length === 0) {
+      return JSON.stringify(parsed);
+    }
+
+    return JSON.stringify({
+      ...parsed,
+      constraints
+    });
+  };
 
   await withWorkspace(async (workspaceRoot) => {
     const constraints = createConstraints ? createConstraints(workspaceRoot) : [];
     const model = new MockModelClient({
-      grader: [createContractJson({ constraints }), stepsJson],
+      grader: [createContractWithConstraints(constraints), steps],
       runner: [runner]
     });
     const orchestrator = new Orchestrator(model, makeConscience(workspaceRoot, calls, options));
@@ -183,6 +211,7 @@ const collectFinalStatus = async (
 
   return final;
 };
+
 
 const collectFinalStatusByAttempts = async (
   runnerResponses: string[],
@@ -240,6 +269,43 @@ it('finishes as done when write_file is the only evidence-producing call', async
   );
 
   expect(final).toBe('done');
+});
+
+it('isolates run-command evidence between multiple run ACs in one step', async () => {
+  const contractJson = createContractJson({
+    acceptanceCriteria: [
+      { id: 'AC1', desc: 'AC1 command runs successfully', oracleHint: 'run' },
+      { id: 'AC2', desc: 'AC2 command fails', oracleHint: 'run' }
+    ]
+  });
+
+  let final = '';
+  const verdicts = new Map<string, string>();
+
+  await withWorkspace(async (workspaceRoot) => {
+    const model = new MockModelClient({
+      grader: [contractJson, multiRunStepsJson, JSON.stringify(multiRunRunnerCalls)],
+      runner: [
+        JSON.stringify(multiRunRunnerCalls),
+        JSON.stringify(multiRunRunnerCalls)
+      ]
+    });
+    const orchestrator = new Orchestrator(model, makeConscience(workspaceRoot, multiRunRunnerCalls.calls));
+    orchestrator.on((event) => {
+      if (event.type === 'verdict') {
+        verdicts.set(event.verdict.acId, event.verdict.result);
+      }
+      if (event.type === 'final_result') {
+        final = event.status;
+      }
+    });
+
+    await orchestrator.startTask('help me do work');
+  });
+
+  expect(final).toBe('failed');
+  expect(verdicts.get('AC1')).toBe('pass');
+  expect(verdicts.get('AC2')).toBe('fail');
 });
 
 it('retries runner on failure and finishes when second runner attempt passes', async () => {

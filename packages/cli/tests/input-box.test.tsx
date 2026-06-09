@@ -3,7 +3,7 @@ import { render } from 'ink-testing-library';
 import React from 'react';
 
 import { InputBox } from '../src/ui/InputBox';
-import type { SlashCommandInput } from '../src/ui/input-commands';
+import type { UnknownSlashCommandInput } from '../src/ui/input-commands';
 
 type KeyCallback = Parameters<typeof import('ink')['useInput']>[0];
 type MockKey = {
@@ -110,7 +110,21 @@ describe('InputBox submit flow', () => {
       command: 'help',
       args: [],
       normalized: '/help'
-    } satisfies SlashCommandInput);
+    });
+  });
+
+  it('routes unknown slash commands to onCommand and does not call onSubmit', async () => {
+    const onSubmit = vi.fn();
+    const onCommand = vi.fn();
+    await mountInputBox({ onSubmit, onCommand });
+    await triggerSubmit('/unknown thing');
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onCommand).toHaveBeenCalledWith({
+      kind: 'unknown_slash',
+      command: 'unknown',
+      args: ['thing'],
+      normalized: '/unknown thing'
+    } satisfies UnknownSlashCommandInput);
   });
 });
 
@@ -126,6 +140,30 @@ describe('InputBox history', () => {
     triggerKey('', { downArrow: true });
     expect(textInputProps?.value).toBe('second');
   });
+
+  it('restores the original draft when navigating down beyond latest history item', async () => {
+    await mountInputBox({});
+    await triggerSubmit('first');
+    await triggerSubmit('second');
+    await triggerChange('draft');
+    triggerKey('', { upArrow: true });
+    expect(textInputProps?.value).toBe('second');
+    triggerKey('', { upArrow: true });
+    expect(textInputProps?.value).toBe('first');
+    triggerKey('', { downArrow: true });
+    expect(textInputProps?.value).toBe('second');
+    triggerKey('', { downArrow: true });
+    expect(textInputProps?.value).toBe('draft');
+  });
+
+  it('keeps the draft unchanged when history is empty', async () => {
+    await mountInputBox({});
+    await triggerChange('draft');
+    triggerKey('', { upArrow: true });
+    expect(textInputProps?.value).toBe('draft');
+    triggerKey('', { downArrow: true });
+    expect(textInputProps?.value).toBe('draft');
+  });
 });
 
 describe('InputBox abort', () => {
@@ -136,15 +174,24 @@ describe('InputBox abort', () => {
     expect(onAbort).toHaveBeenCalledTimes(1);
   });
 
-  it('fires onAbort on double Ctrl+C', async () => {
+  it('fires onAbort on first Ctrl+C', async () => {
     const onAbort = vi.fn();
-    const nowSpy = vi.spyOn(Date, 'now');
     await mountInputBox({ onSubmit: () => {}, onAbort });
+    triggerKey('c', { ctrl: true });
+    expect(onAbort).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires onExit on second Ctrl+C within the continue window', async () => {
+    const onAbort = vi.fn();
+    const onExit = vi.fn();
+    const nowSpy = vi.spyOn(Date, 'now');
+    await mountInputBox({ onSubmit: () => {}, onAbort, onExit });
     nowSpy.mockReturnValueOnce(1000);
     nowSpy.mockReturnValueOnce(1300);
     triggerKey('c', { ctrl: true });
     triggerKey('c', { ctrl: true });
     expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onExit).toHaveBeenCalledTimes(1);
     nowSpy.mockRestore();
   });
 });

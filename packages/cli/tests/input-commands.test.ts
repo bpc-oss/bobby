@@ -16,6 +16,10 @@ describe('parseInputLine', () => {
     }
   });
 
+  it('parses /probe as known slash command', () => {
+    expect(parseInputLine('/probe')).toMatchObject({ kind: 'slash', command: 'probe' });
+  });
+
   it('is case-insensitive and trims', () => {
     expect(parseInputLine('   /Help   test ')).toMatchObject({
       kind: 'slash',
@@ -26,7 +30,19 @@ describe('parseInputLine', () => {
 
   it('keeps non-command text as text input', () => {
     expect(parseInputLine('hello world')).toEqual({ kind: 'text', value: 'hello world' });
-    expect(parseInputLine('/unknown thing')).toEqual({ kind: 'text', value: '/unknown thing' });
+  });
+
+  it('treats unknown slash commands as unknown_slash', () => {
+    expect(parseInputLine('/unknown thing')).toMatchObject({
+      kind: 'unknown_slash',
+      command: 'unknown',
+      args: ['thing'],
+      normalized: '/unknown thing'
+    });
+  });
+
+  it('treats bare slash input as unknown slash', () => {
+    expect(parseInputLine('/')).toEqual({ kind: 'unknown_slash', command: '', args: [], normalized: '/' });
   });
 });
 
@@ -38,19 +54,22 @@ describe('slash command helpers', () => {
 });
 
 describe('double Ctrl+C helper', () => {
-  it('detects abort on second press inside the window', () => {
+  it('maps first Ctrl+C press to abort', () => {
     const baseState = makeInitialCtrlCState();
 
     const first = updateCtrlCState(baseState, 1000);
-    expect(first).toMatchObject({ aborted: false, nextState: { lastPressedAt: 1000 } });
+    expect(first).toMatchObject({ shouldAbort: true, shouldExit: false, nextState: { lastPressedAt: 1000 } });
+  });
 
+  it('maps second Ctrl+C press inside the window to exit', () => {
+    const first = updateCtrlCState(makeInitialCtrlCState(), 1000);
     const second = updateCtrlCState(first.nextState, 1200);
-    expect(second).toMatchObject({ aborted: true, nextState: { lastPressedAt: null } });
+    expect(second).toMatchObject({ shouldAbort: false, shouldExit: true, nextState: { lastPressedAt: null } });
   });
 
   it('resets after timeout window misses a second press', () => {
     const first = updateCtrlCState(makeInitialCtrlCState(), 1000);
     const second = updateCtrlCState(first.nextState, 1700);
-    expect(second).toMatchObject({ aborted: false, nextState: { lastPressedAt: 1700 } });
+    expect(second).toMatchObject({ shouldAbort: true, shouldExit: false, nextState: { lastPressedAt: 1700 } });
   });
 });

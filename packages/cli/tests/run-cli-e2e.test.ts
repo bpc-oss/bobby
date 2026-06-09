@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { MockModelClient } from '@bobby/kernel';
 import { runCli } from '../src/index';
@@ -11,7 +11,7 @@ const contractJson = JSON.stringify({
   goal: 'Create and run hello.py',
   acceptanceCriteria: [{ id: 'AC1', desc: 'The hello script runs', oracleHint: 'run' }],
   constraints: [],
-  inputs: [],
+  inputs: ['demo/hello.py'],
   outOfScope: []
 });
 
@@ -121,6 +121,50 @@ describe('CLI e2e (mock executor)', () => {
       expect(output).toContain('[evidence] type=command_output');
       expect(output).toContain('[status] done');
       expect(output).not.toContain('[error]');
+    } finally {
+      process.chdir(originalCwd);
+      rmSync(workspaceRoot, { force: true, recursive: true });
+    }
+  });
+
+  it('answers clarify for degraded input without model and without planner signals', async () => {
+    const originalCwd = process.cwd();
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'bobby-cli-e2e-clarify-'));
+
+    process.chdir(workspaceRoot);
+
+    const logs: string[] = [];
+    const exits: number[] = [];
+    const makeModel = vi.fn(async () => {
+      return new MockModelClient({
+        grader: [contractJson, stepsJson],
+        runner: [runnerJson]
+      });
+    });
+    const io = {
+      argv: ['run', 'a'],
+      log: (msg: string) => {
+        logs.push(msg);
+      },
+      exit: (code: number) => {
+        exits.push(code);
+      }
+    };
+
+    try {
+      await runCli(io, {
+        makeModel
+      });
+
+      const output = logs.join('\n');
+      expect(exits).toEqual([0]);
+      expect(output).toContain('你想让我具体做什么？请给我一个明确任务或要修改的文件。');
+      expect(output).not.toContain('[plan]');
+      expect(output).not.toContain('[step]');
+      expect(output).not.toContain('[evidence]');
+      expect(makeModel).toHaveBeenCalledTimes(0);
+
+      expect(existsSync(join(workspaceRoot, 'demo', 'hello.py'))).toBe(false);
     } finally {
       process.chdir(originalCwd);
       rmSync(workspaceRoot, { force: true, recursive: true });

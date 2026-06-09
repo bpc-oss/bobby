@@ -10,6 +10,7 @@ import {
   GRADER_INTENT_SYSTEM_PROMPT,
   GRADER_SYSTEM_PROMPT,
   RUNNER_SYSTEM_PROMPT,
+  getRunnerSystemPrompt,
 } from '../src/brain/system-prompts';
 import { captureIntent } from '../src/brain/intent';
 import { executeStep } from '../src/brain/executor';
@@ -163,7 +164,7 @@ it('executeStep sends the execution system prompt', async () => {
 
   expect(model.messages[0]?.role).toBe('runner');
   expect(model.messages[0]?.messages).toHaveLength(2);
-  expect(model.messages[0]?.messages[0]?.content).toBe(RUNNER_SYSTEM_PROMPT);
+  expect(model.messages[0]?.messages[0]?.content).toBe(getRunnerSystemPrompt());
   expect(model.messages[0]?.messages[0]?.role).toBe('system');
 });
 

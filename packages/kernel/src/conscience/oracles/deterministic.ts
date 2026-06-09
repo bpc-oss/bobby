@@ -26,6 +26,35 @@ function extractExactText(desc: string): string | undefined {
   return bare?.[1];
 }
 
+function extractCommandExactText(desc: string): string | undefined {
+  if (!/\b(stdout|standard output|command output|outputs?|prints?|printed|print to|written|writes?)\b/i.test(desc)) {
+    return undefined;
+  }
+
+  return extractExactText(desc);
+}
+
+function hasFileContentExactContext(desc: string): boolean {
+  const exactMatch = desc.match(/\bexactly\b/i);
+  if (!exactMatch || exactMatch.index === undefined) {
+    return false;
+  }
+
+  const context = desc.slice(Math.max(0, exactMatch.index - 80), exactMatch.index);
+  const hasContentWord = /\b(content|text|string|contains|has)\b/i.test(context);
+  const hasContentWith = /\bwith\b/i.test(context) && !/\b(name|named|filename|file name|path)\b/i.test(context);
+
+  return hasContentWord || hasContentWith;
+}
+
+function extractFileExactText(desc: string): string | undefined {
+  if (!hasFileContentExactContext(desc)) {
+    return undefined;
+  }
+
+  return extractExactText(desc);
+}
+
 function exactStdoutFailure(payload: CommandOutputPayload, expected: string | undefined): boolean {
   if (expected === undefined) {
     return false;
@@ -52,7 +81,7 @@ export class CommandExitOracle implements Oracle {
 
   async judge(ac: AcceptanceCriterion, evidence: Evidence[]): Promise<Verdict> {
     const commandEvidences = evidence.filter((entry) => entry.evidenceType === 'command_output');
-    const expected = extractExactText(ac.desc);
+    const expected = extractCommandExactText(ac.desc);
     const firstBadEvidence = commandEvidences.find((entry) => {
       const payload = (entry.payload ?? {}) as CommandOutputPayload;
       return typeof payload.exitCode !== 'number' || payload.exitCode !== 0 || exactStdoutFailure(payload, expected);
@@ -117,7 +146,7 @@ export class FileDiffOracle implements Oracle {
 
   async judge(ac: AcceptanceCriterion, evidence: Evidence[]): Promise<Verdict> {
     const fileDiffEvidences = evidence.filter((entry) => entry.evidenceType === 'file_diff');
-    const expected = extractExactText(ac.desc);
+    const expected = extractFileExactText(ac.desc);
     const firstBadEvidence = fileDiffEvidences.find((entry) => {
       const payload = (entry.payload ?? {}) as FileDiffPayload;
 

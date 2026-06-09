@@ -8,7 +8,7 @@ const contractJson = JSON.stringify({
   goal: 'test goal',
   acceptanceCriteria: [{ id: 'AC1', desc: 'must run', oracleHint: 'test' }],
   constraints: [],
-  inputs: [],
+  inputs: ['workspace'],
   outOfScope: []
 });
 
@@ -35,6 +35,14 @@ it('KernelHost: tracks task trace for startTask and returns immutable views', as
   let taskId = '';
 
   host.subscribe((event) => {
+    if (event.type === 'plan_ready') {
+      void host.send({
+        type: 'planDecision',
+        taskId: event.taskId,
+        decision: 'approve'
+      });
+    }
+
     if (event.type === 'final_result') {
       taskId = event.taskId;
     }

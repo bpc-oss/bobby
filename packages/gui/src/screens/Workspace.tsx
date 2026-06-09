@@ -2,7 +2,7 @@ import React from 'react';
 
 import { initial, reduce } from '../store/app-store';
 import type { AppState as StoreState } from '../store/app-store';
-import type { Evidence, KernelEvent, PlanStep } from '@bobby/shared';
+import type { Evidence, GateDecision, KernelEvent, PlanStep } from '@bobby/shared';
 import { ChatStream } from '../components/ChatStream';
 import { CostBar } from '../components/CostBar';
 import { EvidencePanel } from '../components/EvidencePanel';
@@ -13,7 +13,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 
 type KernelClient = {
   startTask: (input: string) => Promise<unknown>;
-  approveGate: (gateId: string, decision: 'allow' | 'deny') => Promise<unknown>;
+  approveGate: (gateId: string, decision: GateDecision) => Promise<unknown>;
   onEvent: (callback: (event: KernelEvent) => void) => () => void;
 };
 
@@ -84,8 +84,8 @@ function buildDecisionHandler(
   state: StoreState,
   setState: React.Dispatch<React.SetStateAction<StoreState>>,
   setError: React.Dispatch<React.SetStateAction<string>>
-): (decision: 'allow' | 'deny') => Promise<void> {
-  return async (decision: 'allow' | 'deny'): Promise<void> => {
+): (decision: GateDecision) => Promise<void> {
+  return async (decision: GateDecision): Promise<void> => {
     if (!state.pendingGate) {
       return;
     }
@@ -122,7 +122,7 @@ function WorkspaceBody({
   activeTheme: WorkspaceTheme;
   onToggleTheme: (nextTheme: WorkspaceTheme) => void;
   onSubmit: (input: string) => Promise<void>;
-  onDecision: (decision: 'allow' | 'deny') => Promise<void>;
+  onDecision: (decision: GateDecision) => Promise<void>;
   cost: { tokens: number; usd: number };
   error: string;
 }): JSX.Element {

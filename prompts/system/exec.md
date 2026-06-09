@@ -15,6 +15,8 @@ exec 调用必须用严格结构：
 }
 不要用 mkdir -p 等 shell 形式创建目录；优先用 write_file 写文件，系统会自动创建父目录。
 For file writes, use write_file; do not use shell redirection, sh, bash, cmd, powershell, or printf to create file content.
+On Windows, avoid shell builtins: test, rm, cat, ls, touch.
+Prefer node/python for execution and use write_file/file_exists for file operations and assertions when possible.
 示例调用（推荐）：
 {
   "calls": [

@@ -4,6 +4,7 @@ import TextInput from 'ink-text-input';
 import {
   type ParsedInputLine,
   type SlashCommandInput,
+  type UnknownSlashCommandInput,
   parseInputLine,
   makeInitialCtrlCState,
   updateCtrlCState
@@ -12,7 +13,8 @@ import {
 type InputBoxProps = {
   onSubmit: (value: string) => void;
   onAbort?: () => void;
-  onCommand?: (command: SlashCommandInput) => void;
+  onExit?: () => void;
+  onCommand?: (command: SlashCommandInput | UnknownSlashCommandInput) => void;
 };
 
 type InputKeyEvent = Parameters<typeof useInput>[0];
@@ -22,9 +24,23 @@ type InputKey = Parameters<InputKeyEvent>[1];
 type InputSubmitHandlerDeps = {
   onSubmit: InputBoxProps['onSubmit'];
   onCommand?: InputBoxProps['onCommand'];
+  setHistoryDraft: React.Dispatch<React.SetStateAction<string>>;
   setHistory: React.Dispatch<React.SetStateAction<string[]>>;
   setHistoryIndex: React.Dispatch<React.SetStateAction<number | null>>;
   setValue: React.Dispatch<React.SetStateAction<string>>;
+};
+
+type InputKeypressDeps = {
+  history: string[];
+  historyIndex: number | null;
+  value: string;
+  historyDraft: string;
+  setHistoryDraft: React.Dispatch<React.SetStateAction<string>>;
+  onAbort?: InputBoxProps['onAbort'];
+  onExit?: InputBoxProps['onExit'];
+  setHistoryIndex: React.Dispatch<React.SetStateAction<number | null>>;
+  setValue: React.Dispatch<React.SetStateAction<string>>;
+  ctrlCState: { current: { lastPressedAt: number | null } };
 };
 
 function addToHistory(setHistory: React.Dispatch<React.SetStateAction<string[]>>, line: string): void {
@@ -37,51 +53,71 @@ function addToHistory(setHistory: React.Dispatch<React.SetStateAction<string[]>>
 function handleInputSubmit(input: string, deps: InputSubmitHandlerDeps): void {
   const parsedInput: ParsedInputLine = parseInputLine(input);
   const trimmedValue = input.trim();
+  const shouldClearDraft = parsedInput.kind === 'slash' || trimmedValue.length > 0;
 
   if (parsedInput.kind === 'slash') {
+    deps.onCommand?.(parsedInput);
+  } else if (parsedInput.kind === 'unknown_slash') {
     deps.onCommand?.(parsedInput);
   } else if (trimmedValue) {
     deps.onSubmit(trimmedValue);
     addToHistory(deps.setHistory, trimmedValue);
   }
 
+  if (shouldClearDraft) {
+    deps.setHistoryDraft('');
+  }
+
   deps.setValue('');
   deps.setHistoryIndex(null);
 }
 
-function handleInputKeypress(
-  input: string,
-  key: InputKey,
-  deps: {
-    history: string[];
-    historyIndex: number | null;
-    onAbort?: InputBoxProps['onAbort'];
-    setHistoryIndex: React.Dispatch<React.SetStateAction<number | null>>;
-    setValue: React.Dispatch<React.SetStateAction<string>>;
-    ctrlCState: { current: { lastPressedAt: number | null } };
+function resetInputNavigation(deps: InputKeypressDeps): void {
+  deps.setValue('');
+  deps.setHistoryDraft('');
+  deps.setHistoryIndex(null);
+}
+
+function handleCtrlC(input: string, key: InputKey, deps: InputKeypressDeps): boolean {
+  if (!isCtrlC(input, key)) {
+    return false;
   }
-): void {
+
+  const { shouldAbort, shouldExit, nextState } = updateCtrlCState(deps.ctrlCState.current, Date.now());
+  deps.ctrlCState.current = nextState;
+  if (shouldAbort) {
+    deps.onAbort?.();
+    resetInputNavigation(deps);
+    return true;
+  }
+
+  if (shouldExit) {
+    deps.onExit?.();
+    resetInputNavigation(deps);
+  }
+
+  return true;
+}
+
+function handleInputKeypress(input: string, key: InputKey, deps: InputKeypressDeps): void {
   if (key.escape) {
     deps.onAbort?.();
-    deps.setValue('');
-    deps.setHistoryIndex(null);
+    resetInputNavigation(deps);
     return;
   }
 
-  if (isCtrlC(input, key)) {
-    const { aborted, nextState } = updateCtrlCState(deps.ctrlCState.current, Date.now());
-    deps.ctrlCState.current = nextState;
-    if (aborted) {
-      deps.onAbort?.();
-      deps.setValue('');
-      deps.setHistoryIndex(null);
-    }
+  if (handleCtrlC(input, key, deps)) {
     return;
   }
 
   if (key.upArrow || key.downArrow) {
     const direction: 'up' | 'down' = key.upArrow ? 'up' : 'down';
-    const next = getNextHistoryValue(deps.history, deps.historyIndex, direction);
+    const historyDraft =
+      direction === 'up' && deps.historyIndex === null ? deps.value : deps.historyDraft;
+    const next = getNextHistoryValue(deps.history, deps.historyIndex, direction, historyDraft);
+    if (direction === 'up' && deps.historyIndex === null) {
+      deps.setHistoryDraft(historyDraft);
+    }
     deps.setHistoryIndex(next.nextIndex);
     deps.setValue(next.nextValue);
   }
@@ -94,10 +130,11 @@ function isCtrlC(input: string, key: Parameters<InputKeyEvent>[1]): boolean {
 function getNextHistoryValue(
   history: string[],
   currentIndex: number | null,
-  direction: 'up' | 'down'
+  direction: 'up' | 'down',
+  draft: string
 ): { nextIndex: number | null; nextValue: string } {
   if (history.length === 0) {
-    return { nextIndex: null, nextValue: '' };
+    return { nextIndex: null, nextValue: draft };
   }
 
   if (direction === 'up') {
@@ -115,23 +152,28 @@ function getNextHistoryValue(
 
   const nextIndex = currentIndex + 1;
   if (nextIndex >= history.length) {
-    return { nextIndex: null, nextValue: '' };
+    return { nextIndex: null, nextValue: draft };
   }
 
   return { nextIndex, nextValue: history[nextIndex] };
 }
 
-export function InputBox({ onSubmit, onAbort, onCommand }: InputBoxProps): JSX.Element {
+export function InputBox({ onSubmit, onAbort, onExit, onCommand }: InputBoxProps): JSX.Element {
   const [value, setValue] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const [historyDraft, setHistoryDraft] = useState('');
   const ctrlCState = useRef(makeInitialCtrlCState());
 
   useInput((input, key) => {
     handleInputKeypress(input, key, {
       history,
       historyIndex,
+      value,
+      historyDraft,
+      setHistoryDraft,
       onAbort,
+      onExit,
       setHistoryIndex,
       setValue,
       ctrlCState
@@ -149,6 +191,7 @@ export function InputBox({ onSubmit, onAbort, onCommand }: InputBoxProps): JSX.E
           handleInputSubmit(input, {
             onSubmit,
             onCommand,
+            setHistoryDraft,
             setHistory,
             setHistoryIndex,
             setValue

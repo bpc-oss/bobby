@@ -6,41 +6,28 @@ type StatusLineProps = {
   vm: VM;
 };
 
+const formatStatusLine = (vm: VM): string[] => {
+  const status = vm.status;
+
+  const pieces = [
+    `status: ${status}`,
+    `stream: ${vm.streamingMode}`,
+    vm.status === 'running' ? 'spinner: *' : undefined,
+    vm.currentActivity && `activity: ${vm.currentActivity}`,
+    vm.usageModel && `model=${vm.usageModel}`,
+    typeof vm.promptTokens === 'number' && `prompt=${vm.promptTokens}`,
+    typeof vm.completionTokens === 'number' && `completion=${vm.completionTokens}`,
+    typeof vm.cachedTokens === 'number' && `cached=${vm.cachedTokens}`,
+    typeof vm.spentUsd === 'number' && `spentUsd: $${vm.spentUsd.toFixed(2)}`,
+    typeof vm.costUsd === 'number' && `cost=$${vm.costUsd}`,
+    typeof vm.proCalls === 'number' && `proCalls: ${vm.proCalls}`,
+    typeof vm.flashCalls === 'number' && `flashCalls: ${vm.flashCalls}`,
+    typeof vm.contextPercent === 'number' && `contextPercent: ${vm.contextPercent.toFixed(2)}%`
+  ];
+
+  return pieces.filter((piece): piece is string => typeof piece === 'string');
+};
+
 export function StatusLine({ vm }: StatusLineProps): JSX.Element {
-  const status = (() => {
-    if (vm.status === 'running') {
-      return 'running';
-    }
-    if (vm.status === 'idle') {
-      return 'idle';
-    }
-    return 'final';
-  })();
-
-  const pieces: string[] = [`status: ${status}`];
-
-  pieces.push(`stream: ${vm.streamingMode}`);
-
-  if (status === 'running') {
-    pieces.push('spinner: *');
-  }
-
-  if (vm.currentActivity) {
-    pieces.push(`activity: ${vm.currentActivity}`);
-  }
-
-  if (typeof vm.spentUsd === 'number') {
-    pieces.push(`spentUsd: $${vm.spentUsd.toFixed(2)}`);
-  }
-  if (typeof vm.proCalls === 'number') {
-    pieces.push(`proCalls: ${vm.proCalls}`);
-  }
-  if (typeof vm.flashCalls === 'number') {
-    pieces.push(`flashCalls: ${vm.flashCalls}`);
-  }
-  if (typeof vm.contextPercent === 'number') {
-    pieces.push(`contextPercent: ${vm.contextPercent.toFixed(2)}%`);
-  }
-
-  return <Text>{pieces.join(' | ')}</Text>;
+  return <Text>{formatStatusLine(vm).join(' | ')}</Text>;
 }

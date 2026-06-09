@@ -17,7 +17,8 @@ import {
   NoForbiddenPathChecker,
   type ConscienceDeps,
   type PlannedCall,
-  type ModelClient
+  type ModelClient,
+  classifyIntent
 } from '@bobby/kernel';
 import { runHeadless } from './headless';
 import {
@@ -116,15 +117,25 @@ async function runCommand(io: CliIO, args: string[], options: RunCliOptions): Pr
     return;
   }
 
-  if (!preflightTaskSetup(io, options)) {
-    io.exit(1);
-    return;
-  }
-
   try {
+    const intent = await classifyIntent(task);
+    if (intent === 'UNCLEAR') {
+      const host = new KernelHost(() => {
+        throw new Error('No model should be used for UNCLEAR input.');
+      }, undefined, process.cwd(), false);
+      const result = await runHeadless(host, task, io.log);
+      io.exit(result.exitCode);
+      return;
+    }
+
+    if (!preflightTaskSetup(io, options)) {
+      io.exit(1);
+      return;
+    }
+
     const model = await (options.makeModel ?? makeDefaultModel)();
     const conscience = (options.makeConscience ?? defaultConscience)();
-    const host = new KernelHost(() => model, conscience);
+    const host = new KernelHost(() => model, conscience, process.cwd(), true);
     const result = await runHeadless(host, task, io.log);
     io.exit(result.exitCode);
   } catch (err) {
@@ -152,6 +163,11 @@ function printInteractiveHelp(io: CliIO): void {
   io.log('  <task>    Run a natural-language task in this directory');
   io.log('  /status   Show Bobby setup status');
   io.log('  /probe    Refresh the DeepSeek capability report');
+  io.log('  /clear    Clear the interactive transcript');
+  io.log('  /cost     Show usage cost estimate');
+  io.log('  /undo     Undo the last snapshot');
+  io.log('  /agents   List active agents');
+  io.log('  /resume   Resume an in-progress session');
   io.log('  /help     Show this help');
   io.log('  /exit     Quit');
 }
@@ -167,7 +183,7 @@ async function interactiveCommand(io: CliIO, options: RunCliOptions): Promise<vo
     createHost: async () => {
       const model = await (options.makeModel ?? makeDefaultModel)();
       const conscience = (options.makeConscience ?? defaultConscience)();
-      return new KernelHost(() => model, conscience);
+      return new KernelHost(() => model, conscience, process.cwd(), true);
     },
     printHelp: () => printInteractiveHelp(io),
     printStatus: () => printOnboarding(io, options),
@@ -235,8 +251,13 @@ async function loginCommand(io: CliIO, args: string[], options: RunCliOptions): 
 
 function unsupportedCommand(io: CliIO, cmd: string): void {
   io.log(`Unknown command: ${cmd}`);
-  io.log('Supported commands: login, run, interactive, probe, help');
+  io.log('Supported commands: login, run, interactive, status, probe, help');
   io.exit(1);
+}
+
+async function statusCommand(io: CliIO, options: RunCliOptions): Promise<void> {
+  printOnboarding(io, options);
+  io.exit(0);
 }
 
 export async function runCli(io: CliIO, options: RunCliOptions = {}): Promise<void> {
@@ -275,6 +296,11 @@ export async function runCli(io: CliIO, options: RunCliOptions = {}): Promise<vo
 
   if (cmd === 'probe') {
     await probeCommand(io, options);
+    return;
+  }
+
+  if (cmd === 'status') {
+    await statusCommand(io, options);
     return;
   }
 

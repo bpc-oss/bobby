@@ -4,7 +4,15 @@ import { PlanStepSchema } from '../contracts/plan';
 import { TaskContractSchema } from '../contracts/task-contract';
 import { VerdictSchema } from '../contracts/evidence';
 
-export const KernelCommandSchema = z.discriminatedUnion('type', [
+export type GateDecision = 'allow' | 'always' | 'deny';
+export type PermissionDecision = GateDecision;
+
+export type PlanDecision =
+  | { decision: 'approve' }
+  | { decision: 'reject' }
+  | { decision: 'edit'; instructions: string };
+
+export const KernelCommandSchema = z.union([
   z.object({
     type: z.literal('startTask'),
     input: z.string().min(1)
@@ -17,7 +25,23 @@ export const KernelCommandSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('approveGate'),
     gateId: z.string().min(1),
-    decision: z.enum(['allow', 'deny'])
+    decision: z.enum(['allow', 'always', 'deny'])
+  }),
+  z.object({
+    type: z.literal('planDecision'),
+    taskId: z.string().min(1),
+    decision: z.literal('approve')
+  }),
+  z.object({
+    type: z.literal('planDecision'),
+    taskId: z.string().min(1),
+    decision: z.literal('reject')
+  }),
+  z.object({
+    type: z.literal('planDecision'),
+    taskId: z.string().min(1),
+    decision: z.literal('edit'),
+    instructions: z.string().min(1)
   }),
   z.object({
     type: z.literal('abort'),
@@ -26,11 +50,54 @@ export const KernelCommandSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('getTrace'),
     taskId: z.string().min(1)
+  }),
+  z.object({
+    type: z.literal('listAgents')
+  }),
+  z.object({
+    type: z.literal('restoreSnapshot'),
+    snapshotId: z.string().min(1).optional()
+  }),
+  z.object({
+    type: z.literal('resumeSession')
   })
 ]);
 export type KernelCommand = z.infer<typeof KernelCommandSchema>;
 
 export const KernelEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('assistant_delta'),
+    taskId: z.string().min(1),
+    content: z.string(),
+    sequence: z.number().nonnegative().optional(),
+    final: z.boolean().optional()
+  }),
+  z.object({
+    type: z.literal('reasoning_delta'),
+    taskId: z.string().min(1),
+    content: z.string(),
+    sequence: z.number().nonnegative().optional(),
+    final: z.boolean().optional()
+  }),
+  z.object({
+    type: z.literal('tool_delta'),
+    taskId: z.string().min(1),
+    status: z.enum(['start', 'chunk', 'end']),
+    stepId: z.string().min(1).optional(),
+    tool: z.string().optional(),
+    content: z.string().optional(),
+    sequence: z.number().nonnegative().optional()
+  }),
+  z.object({
+    type: z.literal('usage_delta'),
+    taskId: z.string().min(1),
+    model: z.string().optional(),
+    promptTokens: z.number().nonnegative().optional(),
+    completionTokens: z.number().nonnegative().optional(),
+    cachedTokens: z.number().nonnegative().optional(),
+    costUsd: z.number().nonnegative().optional(),
+    sequence: z.number().nonnegative().optional()
+  }),
   z.object({
     type: z.literal('intent_proposed'),
     taskId: z.string().min(1),

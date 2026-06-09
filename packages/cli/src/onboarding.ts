@@ -162,6 +162,7 @@ export function renderOnboarding(status: OnboardingStatus): string[] {
     '  bobby                 Start interactive mode',
     '  bobby login           Configure your DeepSeek key locally',
     status.hasEnvKey ? '  bobby login --from-env Import DEEPSEEK_API_KEY from environment' : undefined,
+    '  bobby status          Show Bobby setup status',
     '  bobby probe           Refresh the DeepSeek capability report',
     '  bobby run "<task>"    Execute a task with evidence checks',
     '  bobby help            Show this screen'

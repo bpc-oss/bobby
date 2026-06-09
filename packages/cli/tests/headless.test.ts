@@ -13,10 +13,10 @@ import {
 import { runHeadless } from '../src/headless';
 
 const contractJson = JSON.stringify({
-  goal: 'g',
+  goal: 'Run the requested command and validate completion',
   acceptanceCriteria: [{ id: 'AC1', desc: 'run command', oracleHint: 'run' }],
   constraints: [],
-  inputs: [],
+  inputs: ['workspace'],
   outOfScope: []
 });
 
@@ -87,6 +87,125 @@ it('logs plan/step/evidence/final status lines from kernel events', async () => 
   expect(output).toContain('[step] started S1');
   expect(output).toContain('[evidence] type=command_output');
   expect(output).toContain('[status] done');
+});
+
+it('auto sends planDecision approve in headless mode', async () => {
+  const logs: string[] = [];
+  let eventListener: (event: unknown) => void = () => {};
+  const send = vi.fn(async (cmd) => {
+    if (cmd.type === 'startTask') {
+      eventListener({
+        type: 'intent_proposed',
+        taskId: 'task-1',
+        contract: {
+          goal: 'do work',
+          acceptanceCriteria: [],
+          constraints: [],
+          inputs: [],
+          outOfScope: []
+        }
+      });
+      eventListener({
+        type: 'plan_ready',
+        taskId: 'task-1',
+        steps: [{ id: 'S1', desc: 'Do work', satisfiesAcIds: [], dependsOn: [] }]
+      });
+      eventListener({
+        type: 'final_result',
+        taskId: 'task-1',
+        status: 'done'
+      });
+    }
+  });
+  const host = {
+    subscribe: vi.fn().mockImplementation((fn: (event: unknown) => void) => {
+      eventListener = fn;
+      return () => undefined;
+    }),
+    send
+  } as unknown as KernelHost;
+
+  const result = await runHeadless(host, 'do work', (msg) => {
+    logs.push(msg);
+  });
+
+  expect(result.status).toBe('done');
+  expect(send).toHaveBeenCalledWith({ type: 'startTask', input: 'do work' });
+  expect(send).toHaveBeenCalledWith({
+    type: 'planDecision',
+    taskId: 'task-1',
+    decision: 'approve'
+  });
+  expect(logs.join('\n')).toContain('[status] done');
+});
+
+const emitStreamingHeadlessEvents = (listener: (event: unknown) => void): void => {
+  listener({
+    type: 'assistant_delta',
+    taskId: 'task-1',
+    content: 'draft',
+    sequence: 1
+  });
+  listener({
+    type: 'assistant_delta',
+    taskId: 'task-1',
+    content: 'ing',
+    sequence: 2
+  });
+  listener({
+    type: 'reasoning_delta',
+    taskId: 'task-1',
+    content: 'thinking',
+    sequence: 3
+  });
+  listener({
+    type: 'tool_delta',
+    taskId: 'task-1',
+    status: 'start',
+    tool: 'exec',
+    content: 'node --version'
+  });
+  listener({
+    type: 'usage_delta',
+    taskId: 'task-1',
+    model: 'deepseek-v3',
+    promptTokens: 10,
+    completionTokens: 4,
+    cachedTokens: 2,
+    costUsd: 0.12
+  });
+  listener({ type: 'final_result', taskId: 'task-1', status: 'done' });
+};
+
+it('prints streaming events using stable text-only formats', async () => {
+  const logs: string[] = [];
+  let eventListener: (event: unknown) => void = () => {};
+
+  const send = vi.fn(async (cmd) => {
+    if (cmd.type === 'startTask') {
+      emitStreamingHeadlessEvents(eventListener);
+    }
+  });
+
+  const host = {
+    subscribe: vi.fn().mockImplementation((fn: (event: unknown) => void) => {
+      eventListener = fn;
+      return () => undefined;
+    }),
+    send
+  } as unknown as KernelHost;
+
+  const result = await runHeadless(host, 'streaming input', (msg) => {
+    logs.push(msg);
+  });
+
+  const output = logs.join('\n');
+  expect(result.status).toBe('done');
+  expect(output).toContain('draft');
+  expect(output).toContain('ing');
+  expect(output).toContain('[reasoning] thinking');
+  expect(output).toContain('[tool] start exec node --version');
+  expect(output).toContain('[usage] model=deepseek-v3 prompt=10 completion=4 cached=2 cost=$0.1200');
 });
 
 it('returns done when direct_answer is emitted without final_result', async () => {

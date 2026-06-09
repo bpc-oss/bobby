@@ -73,6 +73,72 @@ it('renders tool_called and error lines with ASCII labels', () => {
   expect(withError.lines.some((line) => line.includes('error: boom'))).toBe(true);
 });
 
+it('clears pendingGate after step_started', () => {
+  const withGate = reduceEvent(
+    {
+      ...initialVM(),
+      pendingGate: {
+        gateId: 'g1',
+        reason: 'requires external permission'
+      }
+    },
+    {
+      type: 'gate_request',
+      taskId: 'task-1',
+      gateId: 'g1',
+      reason: 'requires external permission'
+    }
+  );
+
+  const vm = reduceEvent(withGate, {
+    type: 'step_started',
+    taskId: 'task-1',
+    stepId: 'S1'
+  });
+
+  expect(vm.pendingGate).toBeUndefined();
+});
+
+it('clears pendingGate after final_result', () => {
+  const vm = reduceEvent(
+    {
+      ...initialVM(),
+      pendingGate: {
+        gateId: 'g2',
+        reason: 'requires external permission'
+      }
+    },
+    {
+      type: 'final_result',
+      taskId: 'task-1',
+      status: 'done'
+    }
+  );
+
+  expect(vm.pendingGate).toBeUndefined();
+  expect(vm.lines.some((line) => line.includes('status: done'))).toBe(true);
+});
+
+it('clears pendingGate after error', () => {
+  const vm = reduceEvent(
+    {
+      ...initialVM(),
+      pendingGate: {
+        gateId: 'g3',
+        reason: 'requires external permission'
+      }
+    },
+    {
+      type: 'error',
+      taskId: 'task-1',
+      message: 'boom'
+    }
+  );
+
+  expect(vm.pendingGate).toBeUndefined();
+  expect(vm.lines.some((line) => line.includes('error: boom'))).toBe(true);
+});
+
 it('tracks evidence and verdict lines', () => {
   const withEvidence = reduceEvent(initialVM(), {
     type: 'evidence_produced',
@@ -100,4 +166,112 @@ it('tracks evidence and verdict lines', () => {
 
   expect(withEvidence.lines.some((line) => line.includes('evidence: AC-1/file_diff'))).toBe(true);
   expect(withVerdict.lines.some((line) => line.includes('verdict: AC-1/pass'))).toBe(true);
+});
+
+it('accumulates assistant deltas by sequence order within a task', () => {
+  const vm = reduceEvent(
+    reduceEvent(initialVM(), {
+      type: 'assistant_delta',
+      taskId: 'task-1',
+      content: 'world',
+      sequence: 2
+    }),
+    {
+      type: 'assistant_delta',
+      taskId: 'task-1',
+      content: 'hello ',
+      sequence: 1
+    }
+  );
+
+  expect(vm.lines.at(-1)).toBe('hello world');
+  expect(vm.lines.some((line) => line.includes('hello world'))).toBe(true);
+  expect(vm.streamingMode).toBe('sse');
+});
+
+it('switches streamingMode to sse when usage_delta arrives', () => {
+  const vm = reduceEvent(initialVM(), {
+    type: 'usage_delta',
+    taskId: 'task-1',
+    model: 'deepseek-v3',
+    promptTokens: 12,
+    completionTokens: 4,
+    cachedTokens: 2,
+    costUsd: 0.0034
+  });
+
+  expect(vm.streamingMode).toBe('sse');
+});
+
+it('switches streamingMode to sse for all delta event kinds', () => {
+  const bySequence = [
+    reduceEvent(initialVM(), {
+      type: 'assistant_delta',
+      taskId: 'task-1',
+      content: 'hello',
+      sequence: 0
+    }),
+    reduceEvent(initialVM(), {
+      type: 'reasoning_delta',
+      taskId: 'task-1',
+      content: 'thinking',
+      sequence: 0
+    }),
+    reduceEvent(initialVM(), {
+      type: 'tool_delta',
+      taskId: 'task-1',
+      status: 'start',
+      sequence: 0
+    }),
+    reduceEvent(initialVM(), {
+      type: 'usage_delta',
+      taskId: 'task-1',
+      promptTokens: 1
+    })
+  ];
+
+  bySequence.forEach((vm) => {
+    expect(vm.streamingMode).toBe('sse');
+  });
+});
+
+it('accumulates tool deltas and retains stream ordering by sequence', () => {
+  const vm = reduceEvent(
+    initialVM(),
+    {
+      type: 'tool_delta',
+      taskId: 'task-1',
+      status: 'start',
+      tool: 'bash',
+      sequence: 1,
+      content: 'init'
+    }
+  );
+  const withChunk = reduceEvent(vm, {
+    type: 'tool_delta',
+    taskId: 'task-1',
+    status: 'chunk',
+    sequence: 0,
+    content: 'stderr'
+  });
+
+  expect(withChunk.lines.some((line) => line.includes('[tool] chunk stderr start bash init'))).toBe(true);
+});
+
+it('updates usage fields from usage_delta', () => {
+  const vm = reduceEvent(initialVM(), {
+    type: 'usage_delta',
+    taskId: 'task-1',
+    model: 'deepseek-v3',
+    promptTokens: 12,
+    completionTokens: 4,
+    cachedTokens: 2,
+    costUsd: 0.0034
+  });
+
+  expect(vm.usageModel).toBe('deepseek-v3');
+  expect(vm.promptTokens).toBe(12);
+  expect(vm.completionTokens).toBe(4);
+  expect(vm.cachedTokens).toBe(2);
+  expect(vm.costUsd).toBe(0.0034);
 });
