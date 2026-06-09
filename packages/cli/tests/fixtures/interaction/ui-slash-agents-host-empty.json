@@ -1,0 +1,14 @@
+{
+  "id": "ui-slash-agents-host-empty",
+  "description": "slash agents empty state via host path should avoid unavailable fallback",
+  "kind": "slash",
+  "handler": "host-empty",
+  "command": {
+    "name": "agents",
+    "args": []
+  },
+  "assertions": {
+    "contains": ["agents: no agents"],
+    "notContains": ["not wired yet", "command handler unavailable in this UI session"]
+  }
+}

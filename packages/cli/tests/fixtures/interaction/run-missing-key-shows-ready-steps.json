@@ -1,0 +1,25 @@
+{
+  "id": "run-missing-key-shows-setup-steps",
+  "description": "missing key/capability should show explicit setup next steps",
+  "kind": "run",
+  "argv": ["run", "create hello.txt with exactly hi"],
+  "environment": {
+    "homeMode": "missing"
+  },
+  "assertions": {
+    "exitCode": 1,
+    "contains": [
+      "DeepSeek key: missing",
+      "Capability probe: missing",
+      "1. bobby login",
+      "2. bobby"
+    ],
+    "notContains": [
+      "[plan]",
+      "[step]",
+      "[evidence]",
+      "[status] done",
+      "你想让我具体做什么？请给我一个明确任务或要修改的文件。"
+    ]
+  }
+}

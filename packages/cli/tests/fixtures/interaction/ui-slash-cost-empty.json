@@ -1,0 +1,13 @@
+{
+  "id": "ui-slash-cost-empty",
+  "description": "slash cost empty state should avoid not wired output",
+  "kind": "slash",
+  "command": {
+    "name": "cost",
+    "args": []
+  },
+  "assertions": {
+    "contains": ["cost: no usage data yet"],
+    "notContains": ["not wired yet"]
+  }
+}

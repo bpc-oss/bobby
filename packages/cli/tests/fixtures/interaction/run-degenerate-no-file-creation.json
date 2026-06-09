@@ -1,0 +1,18 @@
+{
+  "id": "run-degenerate-input-no-file-creation",
+  "description": "degenerate run input should clarify and not write files",
+  "kind": "run",
+  "argv": ["run", "a"],
+  "environment": {
+    "homeMode": "missing"
+  },
+  "assertions": {
+    "exitCode": 0,
+    "contains": [
+      "你想让我具体做什么？请给我一个明确任务或要修改的文件。",
+      "[status] done"
+    ],
+    "notContains": ["[plan]", "[step]", "[evidence]", "DeepSeek key: missing", "Capability probe: missing"],
+    "notExist": ["demo/hello.py"]
+  }
+}

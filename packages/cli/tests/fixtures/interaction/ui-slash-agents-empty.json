@@ -1,0 +1,13 @@
+{
+  "id": "ui-slash-agents-empty",
+  "description": "slash agents empty state should avoid not wired output",
+  "kind": "slash",
+  "command": {
+    "name": "agents",
+    "args": []
+  },
+  "assertions": {
+    "contains": ["agents: no agents"],
+    "notContains": ["not wired yet", "command handler unavailable in this UI session"]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "headless-clarify-degenerate-input",
+  "description": "degenerate input through headless fixture stream",
+  "kind": "headless",
+  "input": "a",
+  "events": [
+    {
+      "type": "direct_answer",
+      "taskId": "task-clarify",
+      "text": "你想让我具体做什么？请给我一个明确任务或要修改的文件。"
+    }
+  ],
+  "assertions": {
+    "contains": [
+      "你想让我具体做什么？请给我一个明确任务或要修改的文件。",
+      "[status] done"
+    ],
+    "notContains": ["[plan]", "[step]", "[evidence]"],
+    "orderedLines": [
+      "你想让我具体做什么？请给我一个明确任务或要修改的文件。",
+      "[status] done"
+    ]
+  }
+}

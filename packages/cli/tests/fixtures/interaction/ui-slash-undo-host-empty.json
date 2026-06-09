@@ -1,0 +1,14 @@
+{
+  "id": "ui-slash-undo-host-empty",
+  "description": "slash undo empty state via host path should avoid unavailable fallback",
+  "kind": "slash",
+  "handler": "host-empty",
+  "command": {
+    "name": "undo",
+    "args": []
+  },
+  "assertions": {
+    "contains": ["undo: no snapshots available"],
+    "notContains": ["not wired yet", "command handler unavailable in this UI session"]
+  }
+}

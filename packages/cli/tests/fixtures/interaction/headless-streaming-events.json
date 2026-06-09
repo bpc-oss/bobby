@@ -1,0 +1,99 @@
+{
+  "id": "headless-streaming-events",
+  "description": "streaming event fixture with assistant/reasoning/tool/usage deltas",
+  "kind": "headless",
+  "input": "streaming work",
+  "events": [
+    {
+      "type": "assistant_delta",
+      "taskId": "task-stream",
+      "content": "hello ",
+      "sequence": 0
+    },
+    {
+      "type": "assistant_delta",
+      "taskId": "task-stream",
+      "content": "world",
+      "sequence": 1
+    },
+    {
+      "type": "assistant_delta",
+      "taskId": "task-stream",
+      "content": "!",
+      "sequence": 2
+    },
+    {
+      "type": "reasoning_delta",
+      "taskId": "task-stream",
+      "content": "computing",
+      "sequence": 0
+    },
+    {
+      "type": "reasoning_delta",
+      "taskId": "task-stream",
+      "content": "strategy",
+      "sequence": 1
+    },
+    {
+      "type": "tool_delta",
+      "taskId": "task-stream",
+      "status": "start",
+      "tool": "bash",
+      "content": "node -v",
+      "sequence": 2
+    },
+    {
+      "type": "tool_delta",
+      "taskId": "task-stream",
+      "status": "chunk",
+      "content": "stdout",
+      "sequence": 0
+    },
+    {
+      "type": "tool_delta",
+      "taskId": "task-stream",
+      "status": "end",
+      "sequence": 1
+    },
+    {
+      "type": "usage_delta",
+      "taskId": "task-stream",
+      "model": "deepseek-v3",
+      "promptTokens": 11,
+      "completionTokens": 3,
+      "cachedTokens": 1,
+      "costUsd": 0.1234
+    },
+    {
+      "type": "final_result",
+      "taskId": "task-stream",
+      "status": "done"
+    }
+  ],
+  "assertions": {
+    "exitCode": 0,
+    "contains": [
+      "hello ",
+      "world",
+      "[reasoning] computing",
+      "[reasoning] strategy",
+      "[tool] chunk stdout",
+      "[tool] end",
+      "[usage] model=deepseek-v3 prompt=11 completion=3 cached=1 cost=$0.1234",
+      "[status] done"
+    ],
+    "orderedLines": [
+      "hello ",
+      "world",
+      "!",
+      "[reasoning] computing",
+      "[reasoning] strategy",
+      "[tool] start bash node -v",
+      "[tool] chunk stdout",
+      "[tool] end",
+      "[usage] model=deepseek-v3 prompt=11 completion=3 cached=1 cost=$0.1234",
+      "[status] done"
+    ],
+    "notContains": ["undefined"]
+  }
+}

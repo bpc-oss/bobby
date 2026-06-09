@@ -1,0 +1,14 @@
+{
+  "id": "ui-slash-unknown-no-task",
+  "description": "slash unknown command should render local response and not call submit",
+  "kind": "slash",
+  "command": {
+    "name": "cost",
+    "args": [],
+    "raw": "/not-real args"
+  },
+  "assertions": {
+    "contains": ["unknown command: /not-real args", "commands: /help /clear /status /probe /cost /undo /agents /resume /exit"],
+    "notContains": ["not wired yet", "goal:", "plan:", "step:"]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "ui-slash-resume-host-empty",
+  "description": "slash resume empty state via host path should avoid unavailable fallback",
+  "kind": "slash",
+  "handler": "host-empty",
+  "command": {
+    "name": "resume",
+    "args": []
+  },
+  "assertions": {
+    "contains": ["resume: no resumable trace in current process"],
+    "notContains": ["not wired yet", "command handler unavailable in this UI session"]
+  }
+}
