@@ -56,6 +56,7 @@ function Sidebar({
   const status = useChatStore((s) => s.status);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const newSession = useChatStore((s) => s.newSession);
+  const resumeSession = useChatStore((s) => s.switchSession);
   const switchSession = useChatStore((s) => s.switchSession);
   const tasks = React.useMemo(() => Object.values(threads).sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()), [threads]);
   const activeThread = activeSessionId ? threads[activeSessionId] : null;
@@ -293,7 +294,10 @@ export function App() {
 
   let content: React.ReactNode = null;
   if (page === 'settings') content = <Settings />;
-  else if (page === 'history') content = <History />;
+  else if (page === 'history') content = <History onResumeTask={(sessionId) => {
+    resumeSession(sessionId);
+    setPage('chat');
+  }} />;
   else if (page === 'plugins') content = <PluginMarketplace />;
   else if (page === 'schedule') content = <ScheduleTasks />;
   else if (page === 'claw') content = <ClawMode onClose={() => setPage('chat')} />;

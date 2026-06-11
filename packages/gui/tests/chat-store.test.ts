@@ -147,6 +147,20 @@ describe('chat session store', () => {
     expect(state.sessions[0].title).toBe('Same task');
   });
 
+  it('hydrates thread maps from persisted sessions so resume works after restart', async () => {
+    const restored = session('restored', 'Restored task', [userBlock('u-restored', 'Restored task')]);
+    restored.taskId = 'task-restored';
+    (window as unknown as { bobby: { listSessions: ReturnType<typeof vi.fn> } }).bobby.listSessions = vi.fn().mockResolvedValue([restored]);
+
+    await useChatStore.getState().loadSessions();
+    useChatStore.getState().switchSession('restored');
+
+    const state = useChatStore.getState();
+    expect(state.threads.restored?.taskId).toBe('task-restored');
+    expect(state.taskThreadIds['task-restored']).toBe('restored');
+    expect(state.blocks).toEqual(restored.blocks);
+  });
+
   it('routes background task events into their own session without polluting the visible session', () => {
     const first = session('first', 'First task', [userBlock('u-first', 'First task')]);
     first.taskId = 'task-first';

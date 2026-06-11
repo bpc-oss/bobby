@@ -74,7 +74,7 @@ function ReplayRows({ trace }: { trace: unknown[] }) {
   );
 }
 
-export function History(): JSX.Element {
+export function History({ onResumeTask }: { onResumeTask?: (sessionId: string) => void } = {}): JSX.Element {
   const [tasks, setTasks] = React.useState<TaskSummary[]>([]);
   const [detail, setDetail] = React.useState<TaskDetail | null>(null);
   const [selected, setSelected] = React.useState<string | null>(null);
@@ -144,7 +144,24 @@ export function History(): JSX.Element {
                 <FileText className="mt-0.5 h-4 w-4 shrink-0 text-bobby-muted" />
                 <div className="min-w-0">
                   <h1 className="break-words text-[15px] font-semibold text-bobby-ink">{detail.summary.userGoal}</h1>
-                  <p className="mt-1 text-[12px] text-bobby-muted">{detail.summary.taskId} / {detail.summary.state}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-bobby-muted">
+                    <span>{detail.summary.taskId}</span>
+                    <span>/</span>
+                    <span>{detail.summary.state}</span>
+                    {detail.sessionIds[0] && onResumeTask && (
+                      <>
+                        <span>/</span>
+                        <button
+                          type="button"
+                          onClick={() => onResumeTask(detail.sessionIds[0])}
+                          className="rounded-md px-2 py-0.5 text-[11px] font-medium text-bobby-ink hover:bg-bobby-hover"
+                          style={{ background: 'var(--bobby-accent-soft)' }}
+                        >
+                          Continue
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </section>

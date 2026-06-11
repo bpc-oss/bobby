@@ -63,4 +63,15 @@ describe('History replay', () => {
     expect(screen.getByText(/path: hello.txt/)).toBeTruthy();
     expect(screen.getByText('Final status: done')).toBeTruthy();
   });
+
+  it('offers a continue action for the selected task session', async () => {
+    const onResumeTask = vi.fn();
+    render(<History onResumeTask={onResumeTask} />);
+
+    await screen.findAllByText('Create hello.txt');
+    await waitFor(() => expect(screen.getByText('Continue')).toBeTruthy());
+    screen.getByText('Continue').click();
+
+    expect(onResumeTask).toHaveBeenCalledWith('session-1');
+  });
 });
