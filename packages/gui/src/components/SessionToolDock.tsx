@@ -546,9 +546,152 @@ function findFirstFile(nodes: WorkspaceTreeNode[]): WorkspaceTreeNode | null {
   return null;
 }
 
+type PreviewSuggestion = {
+  packageManager: 'pnpm' | 'npm' | 'yarn' | 'bun';
+  command: string | null;
+  url: string;
+  note: string;
+};
+
+function parsePackageJson(text: string | null): Record<string, unknown> | null {
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function detectPackageManager(packageJson: Record<string, unknown> | null): PreviewSuggestion['packageManager'] {
+  const raw = typeof packageJson?.packageManager === 'string' ? packageJson.packageManager.toLowerCase() : '';
+  if (raw.startsWith('npm')) return 'npm';
+  if (raw.startsWith('yarn')) return 'yarn';
+  if (raw.startsWith('bun')) return 'bun';
+  return 'pnpm';
+}
+
+function detectPreviewUrl(scriptText: string | null): string {
+  const text = (scriptText ?? '').toLowerCase();
+  if (/storybook/.test(text)) return 'http://localhost:6006';
+  if (/next/.test(text) || /remix/.test(text) || /nuxt/.test(text)) return 'http://localhost:3000';
+  if (/astro/.test(text)) return 'http://localhost:4321';
+  if (/vite/.test(text) || /sveltekit/.test(text) || /parcel/.test(text) || /webpack/.test(text)) return 'http://localhost:5173';
+  return 'http://localhost:3000';
+}
+
+function buildLaunchCommand(packageManager: PreviewSuggestion['packageManager'], scriptName: 'dev' | 'start'): string {
+  if (packageManager === 'npm') {
+    return `npm run ${scriptName}`;
+  }
+  if (packageManager === 'bun') {
+    return `bun run ${scriptName}`;
+  }
+  return `${packageManager} ${scriptName}`;
+}
+
+function buildBackgroundLaunchCommand(command: string): string {
+  if (typeof process !== 'undefined' && process.platform === 'win32') {
+    return `cmd /c start "" ${command}`;
+  }
+  return `sh -lc "${command.replace(/"/g, '\\"')} >/tmp/bobby-preview.log 2>&1 &"`;
+}
+
+function buildPreviewSuggestion(packageJsonText: string | null): PreviewSuggestion {
+  const packageJson = parsePackageJson(packageJsonText);
+  const scripts = packageJson && typeof packageJson.scripts === 'object' && packageJson.scripts !== null
+    ? (packageJson.scripts as Record<string, unknown>)
+    : {};
+  const scriptName = typeof scripts.dev === 'string' ? 'dev' : typeof scripts.start === 'string' ? 'start' : null;
+  const scriptText = scriptName ? String(scripts[scriptName]) : null;
+  const packageManager = detectPackageManager(packageJson);
+  const command = scriptName ? buildLaunchCommand(packageManager, scriptName) : null;
+  const url = detectPreviewUrl(scriptText);
+
+  return {
+    packageManager,
+    command,
+    url,
+    note: scriptName ? `Detected ${scriptName} script from package.json.` : 'No dev or start script detected in package.json.'
+  };
+}
+
 function PreviewPanel() {
+  const currentProject = useChatStore((s) => s.currentProject);
+  const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
   const [url, setUrl] = React.useState('http://localhost:5174');
   const [activeUrl, setActiveUrl] = React.useState('http://localhost:5174');
+  const [suggestion, setSuggestion] = React.useState<PreviewSuggestion>({
+    packageManager: 'pnpm',
+    command: 'pnpm dev',
+    url: 'http://localhost:5173',
+    note: 'Waiting for project detection.'
+  });
+  const [launching, setLaunching] = React.useState(false);
+  const [status, setStatus] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    if (!client?.readWorkspaceFile || !currentProject) {
+      setSuggestion({
+        packageManager: 'pnpm',
+        command: null,
+        url: 'http://localhost:5173',
+        note: currentProject ? 'No package.json available for preview detection.' : 'Open a project to detect a dev server.'
+      });
+      return () => {
+        active = false;
+      };
+    }
+
+    void client.readWorkspaceFile('package.json')
+      .then((file) => {
+        if (!active) return;
+        const nextSuggestion = buildPreviewSuggestion(file?.content ?? null);
+        setSuggestion(nextSuggestion);
+        setUrl(nextSuggestion.url);
+        setActiveUrl(nextSuggestion.url);
+      })
+      .catch(() => {
+        if (!active) return;
+        setSuggestion({
+          packageManager: 'pnpm',
+          command: null,
+          url: 'http://localhost:5173',
+          note: 'Failed to inspect package.json for preview detection.'
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [client, currentProject]);
+
+  async function startPreviewServer() {
+    if (!client?.runTerminalCommand || !suggestion.command) return;
+
+    const launchCommand = buildBackgroundLaunchCommand(suggestion.command);
+    if (!window.confirm(`Start the local preview server?\n\n${suggestion.command}\n\nOpen ${suggestion.url} after launch?`)) {
+      return;
+    }
+
+    setLaunching(true);
+    setStatus(null);
+    try {
+      const result = await client.runTerminalCommand({ command: launchCommand });
+      if (result.result.exitCode === 0) {
+        setActiveUrl(suggestion.url);
+        setUrl(suggestion.url);
+        setStatus(`Started ${suggestion.command} and opened ${suggestion.url}.`);
+      } else {
+        setStatus(`Preview launch exited with code ${result.result.exitCode}.`);
+      }
+    } catch (nextError) {
+      setStatus(nextError instanceof Error ? nextError.message : String(nextError));
+    } finally {
+      setLaunching(false);
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -575,6 +718,22 @@ function PreviewPanel() {
             Open
           </button>
         </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void startPreviewServer()}
+            disabled={launching || !suggestion.command}
+            className="rounded-md border px-2.5 py-1.5 text-[12px] font-medium text-bobby-ink disabled:opacity-40"
+            style={{ borderColor: 'var(--bobby-border)' }}
+          >
+            {launching ? 'Starting...' : 'Start dev server'}
+          </button>
+          <span className="text-[11px] text-bobby-faint">{suggestion.note}</span>
+        </div>
+        <div className="mt-1 text-[11px] text-bobby-faint">
+          Command: {suggestion.command ?? 'No launch command detected'} · Port hint: {suggestion.url}
+        </div>
+        {status && <div className="mt-2 rounded-md px-3 py-2 text-[11px] text-bobby-muted" style={{ background: 'var(--bobby-surface-subtle)' }}>{status}</div>}
       </div>
       <iframe
         title="Preview"
@@ -582,6 +741,7 @@ function PreviewPanel() {
         className="min-h-[520px] w-full rounded-lg border"
         style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}
       />
+      <div className="text-[11px] text-bobby-faint">Active preview: {activeUrl || 'none'}</div>
     </div>
   );
 }

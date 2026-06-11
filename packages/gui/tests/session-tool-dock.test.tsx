@@ -38,7 +38,14 @@ function installBobby() {
     }]),
     readWorkspaceFile: vi.fn().mockImplementation(async (path: string) => ({
       path,
-      content: path === 'src/utils.ts' ? 'export const answer = 42;\n' : 'export const entry = true;\n'
+      content: path === 'package.json'
+        ? JSON.stringify({
+            packageManager: 'pnpm@9.0.0',
+            scripts: { dev: 'vite' }
+          })
+        : path === 'src/utils.ts'
+          ? 'export const answer = 42;\n'
+          : 'export const entry = true;\n'
     })),
     runTerminalCommand: vi.fn().mockResolvedValue({
       evidence: [
@@ -155,5 +162,19 @@ describe('SessionToolDock', () => {
     expect(runTerminalCommand).toHaveBeenCalledWith({ command: 'pnpm test' });
     expect(await screen.findByText('exit 0')).toBeTruthy();
     expect(screen.getByText('ok')).toBeTruthy();
+  });
+
+  it('detects a web project and can start a preview server from package.json', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Preview/));
+    expect(await screen.findByText(/Detected dev script from package\.json\./)).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Start dev server'));
+
+    const runTerminalCommand = (window as any).bobby.runTerminalCommand as ReturnType<typeof vi.fn>;
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('pnpm dev'));
+    expect(runTerminalCommand).toHaveBeenCalledWith({ command: 'cmd /c start "" pnpm dev' });
+    expect(await screen.findByText(/Active preview: http:\/\/localhost:5173/)).toBeTruthy();
   });
 });
