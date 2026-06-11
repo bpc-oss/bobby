@@ -153,13 +153,14 @@ describe('workspace UI smoke', () => {
   it('inserts a fuzzy file reference from the @ menu into the composer', async () => {
     const client = makeKernelClientMock();
     client.searchFiles.mockResolvedValueOnce([
-      { path: 'src/screens/Workspace.tsx', preview: 'Composer' }
+      { path: 'src/screens/Workspace.tsx', preview: 'Composer preview' }
     ]);
     render(<Workspace kernelClient={client} />);
 
     const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '@wor' } });
     expect(await screen.findByText('Workspace.tsx')).toBeTruthy();
+    expect(screen.getByText(/Composer preview/)).toBeTruthy();
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter' });
 

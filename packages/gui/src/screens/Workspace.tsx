@@ -420,7 +420,7 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
         setMenuItems(results.map((result) => ({
           key: result.path,
           title: result.path.split(/[\\/]/).pop() ?? result.path,
-          detail: result.path,
+          detail: [result.path, result.preview?.trim()].filter(Boolean).join(' · '),
           mode: 'file',
           onPick: () => replaceToken(`@${result.path}`)
         })));
