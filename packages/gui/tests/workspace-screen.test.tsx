@@ -12,6 +12,8 @@ import { Workspace } from '../src/screens/Workspace';
 type KernelClientMock = {
   startTask: ReturnType<typeof vi.fn>;
   approveGate: ReturnType<typeof vi.fn>;
+  restoreSnapshot: ReturnType<typeof vi.fn>;
+  searchFiles: ReturnType<typeof vi.fn>;
   onEvent: (callback: (event: KernelEvent) => void) => () => void;
 };
 
@@ -23,6 +25,8 @@ function makeKernelClientMock(): KernelClientMock {
   return {
     startTask: vi.fn().mockResolvedValue(undefined),
     approveGate: vi.fn().mockResolvedValue(undefined),
+    restoreSnapshot: vi.fn().mockResolvedValue(undefined),
+    searchFiles: vi.fn().mockResolvedValue([]),
     onEvent: noopOnEvent
   };
 }
@@ -108,6 +112,35 @@ describe('workspace UI smoke', () => {
     await vi.waitFor(() => {
       expect(client.startTask).toHaveBeenCalledWith('run another task');
     });
+  });
+
+  it('inserts a fuzzy file reference from the @ menu into the composer', async () => {
+    const client = makeKernelClientMock();
+    client.searchFiles.mockResolvedValueOnce([
+      { path: 'src/screens/Workspace.tsx', preview: 'Composer' }
+    ]);
+    render(<Workspace kernelClient={client} />);
+
+    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '@wor' } });
+    expect(await screen.findByText('Workspace.tsx')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(input.value).toContain('@src/screens/Workspace.tsx');
+  });
+
+  it('executes the slash menu undo action without sending a task', async () => {
+    const client = makeKernelClientMock();
+    render(<Workspace kernelClient={client} />);
+
+    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '/undo' } });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(client.restoreSnapshot).toHaveBeenCalledWith(undefined);
+    expect(client.startTask).not.toHaveBeenCalled();
   });
 
   it('renders the chat workbench as a horizontal workspace with a session dock', () => {

@@ -17,6 +17,7 @@ import type {
   ProposalDiscardInput,
   ProposalSummary,
   SnapshotListEntry,
+  WorkspaceFileSearchEntry,
   SessionRecordDto,
   TaskDetail,
   TaskSummary
@@ -46,6 +47,7 @@ declare global {
       applyProposal?: (input: ProposalApplyInput) => Promise<ProposalSummary | null>;
       discardProposal?: (input: ProposalDiscardInput) => Promise<boolean>;
       listSnapshots?: () => Promise<SnapshotListEntry[]>;
+      searchFiles?: (query: string) => Promise<WorkspaceFileSearchEntry[]>;
       listAutomations: () => Promise<AutomationRecord[]>;
       createAutomation: (input: AutomationCreateInput) => Promise<AutomationRecord>;
       updateAutomation: (input: AutomationUpdateInput) => Promise<AutomationRecord>;

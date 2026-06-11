@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, shell, Tray } from 'electron';
 import { applySubAgentProposal, KernelHost, listSnapshots, loadDeepSeekConfig, makeDeepSeekClient } from '@bobby/kernel';
@@ -18,6 +18,7 @@ import {
   ProposalSummarySchema,
   SessionRecordSchema,
   SnapshotListEntrySchema,
+  WorkspaceFileSearchEntrySchema,
   TaskDetailSchema,
   TaskSummarySchema,
   type AppSettings,
@@ -28,7 +29,8 @@ import {
   type ProposalSummary,
   type SessionRecordDto,
   type TaskDetail,
-  type TaskSummary
+  type TaskSummary,
+  type WorkspaceFileSearchEntry
 } from '../src/ipc/contract';
 import { initAutoUpdate } from './updater';
 const __filename = fileURLToPath(import.meta.url);
@@ -119,6 +121,77 @@ function writeWindowState(window: BrowserWindow): void {
 
 function projectName(projectDir: string): string {
   return projectDir.split(/[\\/]/).filter(Boolean).at(-1) ?? projectDir;
+}
+
+function fileSearchScore(path: string, query: string): number {
+  const lowerPath = path.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  if (!lowerQuery) return 0;
+  if (lowerPath === lowerQuery) return 0;
+  if (lowerPath.includes(lowerQuery)) return lowerPath.indexOf(lowerQuery);
+
+  let score = 0;
+  let cursor = 0;
+  for (const char of lowerQuery) {
+    const index = lowerPath.indexOf(char, cursor);
+    if (index === -1) {
+      return Number.POSITIVE_INFINITY;
+    }
+    score += index - cursor;
+    cursor = index + 1;
+  }
+
+  return score + lowerPath.length;
+}
+
+function searchWorkspaceFiles(workspaceRoot: string, query: string, limit = 20): WorkspaceFileSearchEntry[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return [];
+
+  const matches: Array<WorkspaceFileSearchEntry & { score: number }> = [];
+  const queue: string[] = [workspaceRoot];
+  const excluded = new Set(['node_modules', '.git', '.bobby']);
+
+  while (queue.length > 0 && matches.length < 200) {
+    const current = queue.shift();
+    if (!current) continue;
+
+    try {
+      const entries = readdirSync(current, { withFileTypes: true });
+      for (const entry of entries) {
+        if (excluded.has(entry.name) && entry.isDirectory()) {
+          continue;
+        }
+
+        const absolute = join(current, entry.name);
+        const rel = relative(workspaceRoot, absolute).split('\\').join('/');
+        if (entry.isDirectory()) {
+          if (!excluded.has(entry.name)) {
+            queue.push(absolute);
+          }
+          continue;
+        }
+
+        const score = fileSearchScore(rel, normalizedQuery);
+        if (!Number.isFinite(score)) {
+          continue;
+        }
+
+        matches.push({
+          path: rel,
+          preview: basename(entry.name),
+          score
+        });
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return matches
+    .sort((left, right) => left.score - right.score || left.path.localeCompare(right.path))
+    .slice(0, limit)
+    .map(({ score, ...entry }) => entry);
 }
 
 function readRecentProjects(): ProjectMeta[] {
@@ -738,6 +811,12 @@ ipcMain.handle('proposals:discard', async (_event, input) => {
 
 ipcMain.handle('snapshots:list', async () => {
   const parsed = SnapshotListEntrySchema.array().safeParse(await listSnapshots(currentWorkspaceRoot()));
+  return parsed.success ? parsed.data : [];
+});
+
+ipcMain.handle('workspace:searchFiles', async (_event, input) => {
+  const query = typeof input === 'object' && input !== null && 'query' in input ? String((input as { query?: unknown }).query ?? '') : '';
+  const parsed = WorkspaceFileSearchEntrySchema.array().safeParse(searchWorkspaceFiles(currentWorkspaceRoot(), query));
   return parsed.success ? parsed.data : [];
 });
 

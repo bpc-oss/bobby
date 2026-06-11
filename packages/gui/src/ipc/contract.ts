@@ -172,6 +172,12 @@ export const SnapshotListEntrySchema = z.object({
 });
 export type SnapshotListEntry = z.infer<typeof SnapshotListEntrySchema>;
 
+export const WorkspaceFileSearchEntrySchema = z.object({
+  path: z.string().min(1),
+  preview: z.string().nullable().optional()
+});
+export type WorkspaceFileSearchEntry = z.infer<typeof WorkspaceFileSearchEntrySchema>;
+
 export function makeKernelClient() {
   return {
     startTask: (input: string) => window.bobby.send({ type: 'startTask', input }),
@@ -194,6 +200,7 @@ export function makeKernelClient() {
     listProposals: () => window.bobby.listProposals!(),
     readProposal: (proposalId: string) => window.bobby.readProposal!(proposalId),
     listSnapshots: () => window.bobby.listSnapshots!(),
+    searchFiles: (query: string) => window.bobby.searchFiles!(query),
     restoreSnapshot: (snapshotId?: string) => window.bobby.send({ type: 'restoreSnapshot', snapshotId }),
     applyProposal: (input: ProposalApplyInput) => window.bobby.applyProposal!(input),
     discardProposal: (input: ProposalDiscardInput) => window.bobby.discardProposal!(input),

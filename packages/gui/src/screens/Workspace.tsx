@@ -8,6 +8,8 @@ type WorkspaceProps = {
   kernelClient?: {
     startTask: (input: string) => Promise<unknown>;
     approveGate?: (gateId: string, decision: string) => Promise<unknown>;
+    restoreSnapshot?: (snapshotId?: string) => Promise<unknown>;
+    searchFiles?: (query: string) => Promise<Array<{ path: string; preview?: string | null }>>;
     onEvent: (callback: (event: KernelEvent) => void) => () => void;
   };
   theme?: 'light' | 'dark';
@@ -184,28 +186,168 @@ function ChatRow({ block }: { block: ChatBlock }) {
   }
 }
 
-function Composer({ onSend, busy, onAbort }: { onSend: (text: string) => void; busy: boolean; onAbort: () => void }) {
+type ComposerMode = 'file' | 'command';
+
+type ComposerItem = {
+  key: string;
+  title: string;
+  detail?: string;
+  mode: ComposerMode;
+  onPick: () => void;
+};
+
+function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: string) => void; busy: boolean; onAbort: () => void; kernelClient?: WorkspaceProps['kernelClient'] }) {
   const [input, setInput] = useState('');
+  const [menuItems, setMenuItems] = useState<ComposerItem[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuMode, setMenuMode] = useState<ComposerMode | null>(null);
+  const [menuStart, setMenuStart] = useState(0);
+  const [menuEnd, setMenuEnd] = useState(0);
+  const [menuIndex, setMenuIndex] = useState(0);
+  const [notice, setNotice] = useState('');
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const pendingSelection = useRef<{ start: number; end: number } | null>(null);
+  const requestToken = useRef(0);
+
+  const commands = [
+    {
+      key: 'plan',
+      title: 'plan',
+      detail: 'Draft a step-by-step plan',
+      run: () => onSend('Create a detailed plan for this project with concrete steps and validation points.')
+    },
+    {
+      key: 'undo',
+      title: 'undo',
+      detail: 'Restore the latest snapshot',
+      run: () => void kernelClient?.restoreSnapshot?.(undefined)
+    },
+    {
+      key: 'status',
+      title: 'status',
+      detail: 'Summarize blockers and progress',
+      run: () => onSend('Summarize the current task status, blockers, and next step.')
+    },
+    {
+      key: 'cost',
+      title: 'cost',
+      detail: 'Report current usage',
+      run: () => onSend('Report the current task cost, token usage, and any notable spend.')
+    }
+  ] as const;
+
+  const applySelection = useCallback((nextValue: string, cursor: number) => {
+    setInput(nextValue);
+    pendingSelection.current = { start: cursor, end: cursor };
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    setMenuOpen(false);
+    setMenuMode(null);
+    setMenuItems([]);
+    setMenuIndex(0);
+  }, []);
+
+  const replaceToken = useCallback((replacement: string) => {
+    const selection = pendingSelection.current ?? { start: menuEnd, end: menuEnd };
+    const nextValue = `${input.slice(0, menuStart)}${replacement}${input.slice(selection.end)}`;
+    applySelection(nextValue, menuStart + replacement.length);
+    closeMenu();
+  }, [applySelection, closeMenu, input, menuEnd, menuStart]);
+
+  const pickItem = useCallback((item: ComposerItem) => {
+    item.onPick();
+    closeMenu();
+  }, [closeMenu]);
+
+  const executeCurrent = useCallback(() => {
+    const item = menuItems[menuIndex];
+    if (!item) return;
+    pickItem(item);
+  }, [menuIndex, menuItems, pickItem]);
+
+  const openSuggestions = useCallback((value: string, cursor: number) => {
+    const before = value.slice(0, cursor);
+    const lineStart = Math.max(before.lastIndexOf('\n'), before.lastIndexOf('\r'));
+    const tokenStart = Math.max(before.lastIndexOf(' '), before.lastIndexOf('\t'), lineStart) + 1;
+    const token = before.slice(tokenStart);
+    pendingSelection.current = { start: tokenStart, end: cursor };
+
+    if (token.startsWith('@')) {
+      const query = token.slice(1).trim();
+      setMenuMode('file');
+      setMenuStart(tokenStart);
+      setMenuEnd(cursor);
+      setMenuOpen(true);
+      setMenuIndex(0);
+      const tokenId = ++requestToken.current;
+      void (async () => {
+        const results = await kernelClient?.searchFiles?.(query) ?? [];
+        if (requestToken.current !== tokenId) return;
+        setMenuItems(results.map((result) => ({
+          key: result.path,
+          title: result.path.split(/[\\/]/).pop() ?? result.path,
+          detail: result.path,
+          mode: 'file',
+          onPick: () => replaceToken(`@${result.path}`)
+        })));
+      })();
+      return;
+    }
+
+    if (token.startsWith('/')) {
+      const query = token.slice(1).trim().toLowerCase();
+      const filtered = commands.filter((command) =>
+        !query || command.title.includes(query) || command.detail.toLowerCase().includes(query)
+      );
+      setMenuMode('command');
+      setMenuStart(tokenStart);
+      setMenuEnd(cursor);
+      setMenuOpen(true);
+      setMenuIndex(0);
+      setMenuItems(filtered.map((command) => ({
+        key: command.key,
+        title: command.title,
+        detail: command.detail,
+        mode: 'command',
+        onPick: command.run
+      })));
+      return;
+    }
+
+    closeMenu();
+  }, [closeMenu, commands, kernelClient?.searchFiles, replaceToken]);
 
   const processCommand = useCallback((text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+
     if (trimmed.startsWith('/')) {
-      const command = trimmed.split(' ')[0].toLowerCase();
+      const command = trimmed.split(/\s+/, 1)[0].slice(1).toLowerCase();
       const store = useChatStore.getState();
       switch (command) {
-        case '/clear':
+        case 'clear':
           store.clearBlocks();
           break;
-        case '/help':
+        case 'help':
           onSend('help');
           break;
-        case '/plan':
-          onSend('Create a detailed plan for this project');
+        case 'plan':
+          onSend('Create a detailed plan for this project with concrete steps and validation points.');
           break;
-        case '/review':
-          onSend('Review the code changes and identify bugs');
+        case 'review':
+          onSend('Review the code changes and identify bugs.');
+          break;
+        case 'status':
+          onSend('Summarize the current task status, blockers, and next step.');
+          break;
+        case 'cost':
+          onSend('Report the current task cost, token usage, and any notable spend.');
+          break;
+        case 'undo':
+          void kernelClient?.restoreSnapshot?.(undefined);
           break;
         default:
           onSend(trimmed);
@@ -214,19 +356,141 @@ function Composer({ onSend, busy, onAbort }: { onSend: (text: string) => void; b
     } else {
       onSend(trimmed);
     }
+
     setInput('');
+    setHistory((current) => [trimmed, ...current.filter((item) => item !== trimmed)].slice(0, 20));
+    setHistoryIndex(-1);
+    closeMenu();
     ref.current?.focus();
-  }, [onSend]);
+  }, [closeMenu, kernelClient?.restoreSnapshot, onSend]);
 
   const send = useCallback(() => processCommand(input), [input, processCommand]);
-  const key = useCallback((event: React.KeyboardEvent) => {
+
+  const key = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (menuOpen) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setMenuIndex((current) => (menuItems.length === 0 ? 0 : (current + 1) % menuItems.length));
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setMenuIndex((current) => (menuItems.length === 0 ? 0 : (current - 1 + menuItems.length) % menuItems.length));
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        executeCurrent();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMenu();
+        return;
+      }
+    }
+
+    if (event.key === 'ArrowUp' && history.length > 0 && historyIndex < history.length - 1) {
+      event.preventDefault();
+      const nextIndex = historyIndex + 1;
+      const nextValue = history[nextIndex];
+      if (nextValue !== undefined) {
+        setHistoryIndex(nextIndex);
+        setInput(nextValue);
+      }
+      return;
+    }
+    if (event.key === 'ArrowDown' && historyIndex >= 0) {
+      event.preventDefault();
+      const nextIndex = historyIndex - 1;
+      if (nextIndex < 0) {
+        setHistoryIndex(-1);
+        setInput('');
+      } else {
+        const nextValue = history[nextIndex];
+        if (nextValue !== undefined) {
+          setHistoryIndex(nextIndex);
+          setInput(nextValue);
+        }
+      }
+      return;
+    }
+
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       processCommand(input);
     }
-  }, [input, processCommand]);
+  }, [closeMenu, executeCurrent, history, historyIndex, input, menuItems.length, menuOpen, processCommand]);
 
-  useEffect(() => { ref.current?.focus(); }, []);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const selection = pendingSelection.current;
+    if (!selection) return;
+    const el = ref.current;
+    if (!el) return;
+    try {
+      el.setSelectionRange(selection.start, selection.end);
+    } catch {}
+    pendingSelection.current = null;
+  }, [input]);
+
+  useEffect(() => {
+    if (!menuOpen || menuMode !== 'command') return;
+    setMenuIndex((current) => Math.min(current, Math.max(menuItems.length - 1, 0)));
+  }, [menuItems.length, menuMode, menuOpen]);
+
+  const onChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const nextValue = event.target.value;
+    setInput(nextValue);
+    openSuggestions(nextValue, event.target.selectionStart ?? nextValue.length);
+  }, [openSuggestions]);
+
+  const onClick = useCallback((event: React.MouseEvent<HTMLTextAreaElement>) => {
+    openSuggestions(input, event.currentTarget.selectionStart ?? input.length);
+  }, [input, openSuggestions]);
+
+  const onPaste = useCallback((event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files ?? []);
+    const image = files.find((file) => file.type.startsWith('image/')) ?? null;
+    if (!image) return;
+
+    const path = (image as File & { path?: string }).path;
+    if (!path) {
+      setNotice('Clipboard image requires a local file path; save it to the workspace first.');
+      return;
+    }
+
+    event.preventDefault();
+    setNotice('Vision is not enabled in this build, so Bobby inserted a local file path reference instead.');
+    const insertion = `![${image.name}](${path})`;
+    const cursor = ref.current?.selectionStart ?? input.length;
+    const nextValue = `${input.slice(0, cursor)}${insertion}${input.slice(ref.current?.selectionEnd ?? cursor)}`;
+    setInput(nextValue);
+    pendingSelection.current = { start: cursor + insertion.length, end: cursor + insertion.length };
+  }, [input]);
+
+  const onDrop = useCallback((event: React.DragEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.dataTransfer.files ?? []);
+    const image = files.find((file) => file.type.startsWith('image/')) ?? null;
+    if (!image) return;
+
+    const path = (image as File & { path?: string }).path;
+    if (!path) {
+      setNotice('Dropped image needs a local file path; save it to the workspace first.');
+      return;
+    }
+
+    event.preventDefault();
+    setNotice('Vision is not enabled in this build, so Bobby inserted a local file path reference instead.');
+    const insertion = `![${image.name}](${path})`;
+    const cursor = ref.current?.selectionStart ?? input.length;
+    const nextValue = `${input.slice(0, cursor)}${insertion}${input.slice(ref.current?.selectionEnd ?? cursor)}`;
+    setInput(nextValue);
+    pendingSelection.current = { start: cursor + insertion.length, end: cursor + insertion.length };
+  }, [input]);
 
   return (
     <div style={{ background: 'var(--bobby-bg-canvas)' }}>
@@ -238,12 +502,32 @@ function Composer({ onSend, busy, onAbort }: { onSend: (text: string) => void; b
           <textarea
             ref={ref}
             value={input}
-            onChange={(event) => setInput(event.target.value)}
+            onChange={onChange}
             onKeyDown={key}
+            onClick={onClick}
+            onPaste={onPaste}
+            onDrop={onDrop}
             placeholder="Describe a task, or try /help /plan /review..."
             rows={1}
             className="min-h-[46px] flex-1 resize-none border-0 bg-transparent px-4 py-3 text-[15px] leading-[1.5] text-bobby-ink outline-none placeholder:text-bobby-faint"
           />
+          {menuOpen && menuItems.length > 0 && (
+            <div className="absolute left-0 top-full z-20 mt-2 w-full rounded-2xl border p-2 shadow-xl" style={{ background: 'var(--bobby-surface-elevated)', borderColor: 'var(--bobby-border)' }}>
+              {menuItems.map((item, index) => (
+                <button
+                  key={item.key}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    pickItem(item);
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-[13px] transition ${index === menuIndex ? 'bg-bobby-hover text-bobby-ink' : 'text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink'}`}
+                >
+                  <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
+                  {item.detail && <span className="truncate text-[11px] text-bobby-faint">{item.detail}</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {busy && (
           <button onClick={onAbort} aria-label="Stop current task" className="inline-flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl text-white hover:opacity-90" style={{ background: 'var(--bobby-danger)' }}>
@@ -255,9 +539,10 @@ function Composer({ onSend, busy, onAbort }: { onSend: (text: string) => void; b
         </button>
       </div>
       <div className="mx-auto flex max-w-[740px] justify-between px-4 pb-2">
-        <span className="text-[11px] text-bobby-faint">Ctrl+N new / Ctrl+K clear / /help /plan /review</span>
+        <span className="text-[11px] text-bobby-faint">Ctrl+N new / Ctrl+K clear / /help /plan /review /status /cost /undo</span>
         <span className="text-[11px] text-bobby-faint">Enter to send, Shift+Enter for new line</span>
       </div>
+      {notice && <div className="mx-auto max-w-[740px] px-4 pb-2 text-[11px] text-bobby-muted">{notice}</div>}
     </div>
   );
 }
@@ -402,7 +687,7 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange }: Work
           <div ref={bottomRef} />
         </div>
       </div>
-      <Composer onSend={sendMessage} busy={busy} onAbort={abort} />
+      <Composer kernelClient={kernelClient} onSend={sendMessage} busy={busy} onAbort={abort} />
     </div>
   );
 }

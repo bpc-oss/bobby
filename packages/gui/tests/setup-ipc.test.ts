@@ -335,6 +335,22 @@ describe('project IPC handlers', () => {
     expect(snapshots[0]?.id).toBe('snap-1');
     expect(snapshots[0]?.copied[0]?.path).toBe('src/index.ts');
   });
+
+  it('searches workspace files from the current project root', async () => {
+    await loadMain();
+    const selectProject = handlers.get('project:select');
+    const searchFilesHandler = handlers.get('workspace:searchFiles');
+    if (!selectProject || !searchFilesHandler) throw new Error('workspace search handler not registered');
+
+    const projectRoot = mkdtempSync(join(tempHome, 'workspace-'));
+    mkdirSync(join(projectRoot, 'src'), { recursive: true });
+    writeFileSync(join(projectRoot, 'src', 'app.ts'), 'export const app = true;', 'utf8');
+    await selectProject(undefined, { projectDir: projectRoot });
+    const matches = await searchFilesHandler(undefined, { query: 'app' }) as Array<{ path: string }>;
+
+    expect(matches.every((match) => match.path.startsWith('src'))).toBe(true);
+    expect(matches.length).toBeGreaterThan(0);
+  });
 });
 
 describe('desktop integration', () => {
