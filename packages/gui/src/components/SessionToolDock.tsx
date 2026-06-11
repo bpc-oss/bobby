@@ -205,10 +205,10 @@ function DiffPanel() {
 
   return (
     <div className="space-y-3">
-      <button type="button" onClick={() => void restoreSnapshot()} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] text-bobby-ink" style={{ borderColor: 'var(--bobby-border)' }}>
+      <button data-testid="checkpoint-restore-latest" type="button" onClick={() => void restoreSnapshot()} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] text-bobby-ink" style={{ borderColor: 'var(--bobby-border)' }}>
         <Undo2 className="h-3.5 w-3.5" /> Undo
       </button>
-      <section className="rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
+      <section data-testid="checkpoint-timeline" className="rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-[12px] font-semibold text-bobby-ink">Checkpoint timeline</h3>
           <button type="button" onClick={() => void refreshSnapshots()} className="rounded-md px-2 py-1 text-[11px] text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink">Refresh</button>
@@ -231,7 +231,7 @@ function DiffPanel() {
                       </div>
                     )}
                   </div>
-                  <button type="button" onClick={() => void restoreSnapshot(snapshot.id)} className="rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-white">Restore</button>
+                  <button type="button" data-testid={`checkpoint-restore-${snapshot.id}`} onClick={() => void restoreSnapshot(snapshot.id)} className="rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-white">Restore</button>
                 </div>
                 <div className="mt-2 text-[11px] text-bobby-faint">{snapshot.copied.length} copied / {snapshot.skipped.length} skipped</div>
               </div>

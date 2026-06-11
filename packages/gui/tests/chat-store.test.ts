@@ -347,4 +347,26 @@ describe('chat session store', () => {
     expect(state.blocks).toEqual(original.blocks);
     expect(state.currentTaskId).toBeNull();
   });
+
+  it('persists resumed and new blank sessions immediately', async () => {
+    const original = session('original', 'Original task', [userBlock('u-original', 'Original task')]);
+    useChatStore.setState({
+      sessions: [original],
+      threads: { original },
+      activeSessionId: 'original',
+      blocks: original.blocks as ChatBlock[],
+      currentTaskId: 'task-original',
+      status: 'done',
+      sessionMode: 'standard'
+    });
+
+    useChatStore.getState().resumeSession('original');
+    useChatStore.getState().newSession();
+
+    await Promise.resolve();
+    const saveSession = (window as unknown as { bobby: { saveSession: ReturnType<typeof vi.fn> } }).bobby.saveSession;
+    expect(saveSession).toHaveBeenCalled();
+    expect(saveSession.mock.calls.some(([saved]) => saved.id !== 'original' && saved.taskId === null && saved.blocks.length === original.blocks.length)).toBe(true);
+    expect(saveSession.mock.calls.some(([saved]) => saved.status === 'idle')).toBe(true);
+  });
 });

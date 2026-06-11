@@ -750,6 +750,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       sessions: nextSessions,
       pendingThreadIds: state.pendingThreadIds.filter((pendingId) => pendingId !== threadId)
     });
+    void persistSession(blank);
   },
 
   switchSession: (id: string) => {
@@ -797,6 +798,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       threads: replaceThread(state.threads, resume),
       pendingThreadIds: state.pendingThreadIds.filter((pendingId) => pendingId !== resume.id)
     });
+    void persistSession(resume);
   },
 
   setSessionMode: (mode: SessionMode) => {
