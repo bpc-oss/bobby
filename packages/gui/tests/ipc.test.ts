@@ -148,6 +148,8 @@ async function expectSetupMethodsToBeExposed(): Promise<void> {
     onEvent: vi.fn(),
     getSetupStatus,
     openQuickstart,
+    gitIsRepo: vi.fn().mockResolvedValue(false),
+    gitCommit: vi.fn().mockResolvedValue({ committed: false, hash: null, output: 'No changes to commit' }),
     listMcpServers: vi.fn().mockResolvedValue([]),
     upsertMcpServer: vi.fn().mockResolvedValue(undefined),
     toggleMcpServer: vi.fn().mockResolvedValue(undefined),

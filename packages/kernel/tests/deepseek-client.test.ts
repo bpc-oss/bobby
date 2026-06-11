@@ -13,6 +13,7 @@ const createReport = (overrides: Partial<CapabilityReport> = {}): CapabilityRepo
   useFim: false,
   useCaching: false,
   useReasoning: false,
+  useVision: false,
   useStreaming: false,
   contextWindow: 1024,
   ...overrides
