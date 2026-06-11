@@ -3,10 +3,11 @@ import type { KernelEvent } from '@bobby/shared';
 import { ChevronDown, ChevronUp, GitBranch, Lightbulb, Route, Search, Send, ShieldCheck, Square } from 'lucide-react';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { useChatStore, type ChatBlock } from '../store/chat-store';
+import type { SessionMode } from '../ipc/contract';
 
 type WorkspaceProps = {
   kernelClient?: {
-    startTask: (input: string) => Promise<unknown>;
+    startTask: (input: string, mode?: SessionMode) => Promise<unknown>;
     approveGate?: (gateId: string, decision: string) => Promise<unknown>;
     restoreSnapshot?: (snapshotId?: string) => Promise<unknown>;
     searchFiles?: (query: string) => Promise<Array<{ path: string; preview?: string | null }>>;
@@ -588,6 +589,52 @@ function SuggestionCards({ onPick }: { onPick: (text: string) => void }) {
   );
 }
 
+const MODE_CONFIG: Record<SessionMode, { label: string; hint: string; rank: number; ariaLabel: string }> = {
+  'plan-only': { label: '观察', hint: 'plan-only', rank: 0, ariaLabel: '观察' },
+  standard: { label: '标准', hint: 'L1', rank: 1, ariaLabel: '标准' },
+  enhanced: { label: '增强', hint: 'L2', rank: 2, ariaLabel: '增强' },
+  full: { label: '完全', hint: 'L3', rank: 3, ariaLabel: '完全' }
+};
+
+function SessionModeSwitcher({
+  mode,
+  onChange
+}: {
+  mode: SessionMode;
+  onChange: (mode: SessionMode) => void;
+}) {
+  const options: SessionMode[] = ['plan-only', 'standard', 'enhanced', 'full'];
+  return (
+    <div className="mx-auto flex max-w-[740px] items-center gap-2 px-4 pb-2">
+      <span className="text-[11px] text-bobby-faint">Mode</span>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const active = mode === option;
+          const config = MODE_CONFIG[option];
+          return (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChange(option)}
+              className={`rounded-full border px-3 py-1 text-[12px] font-medium transition ${active ? 'text-bobby-ink' : 'text-bobby-muted hover:text-bobby-ink'}`}
+              style={{
+                background: active ? 'var(--bobby-accent-soft)' : 'var(--bobby-surface-card)',
+                borderColor: active ? 'var(--bobby-accent)' : 'var(--bobby-border)'
+              }}
+              aria-label={config.ariaLabel}
+              title={`${config.label} (${config.hint})`}
+            >
+              {config.label}
+            </button>
+          );
+        })}
+      </div>
+      <span className="ml-auto text-[11px] text-bobby-faint">{MODE_CONFIG[mode].label} / {MODE_CONFIG[mode].hint}</span>
+    </div>
+  );
+}
+
 export function Workspace({ kernelClient, theme = 'light', onThemeChange }: WorkspaceProps) {
   const blocks = useChatStore((s) => s.blocks);
   const liveReasoning = useChatStore((s) => s.liveReasoning);
@@ -596,12 +643,14 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange }: Work
   const status = useChatStore((s) => s.status);
   const costUsd = useChatStore((s) => s.costUsd);
   const model = useChatStore((s) => s.model);
+  const sessionMode = useChatStore((s) => s.sessionMode);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const setClient = useChatStore((s) => s.setClient);
   const handleEvent = useChatStore((s) => s.handleEvent);
   const abort = useChatStore((s) => s.abort);
   const clearBlocks = useChatStore((s) => s.clearBlocks);
   const newSession = useChatStore((s) => s.newSession);
+  const setSessionMode = useChatStore((s) => s.setSessionMode);
   const [selectedModel, setSelectedModel] = useState('deepseek-chat');
   const [showModelPicker, setShowModelPicker] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -687,6 +736,16 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange }: Work
           <div ref={bottomRef} />
         </div>
       </div>
+      <SessionModeSwitcher
+        mode={sessionMode}
+        onChange={(nextMode) => {
+          if (MODE_CONFIG[nextMode].rank > MODE_CONFIG[sessionMode].rank) {
+            const ok = window.confirm('Switching to a higher permission mode will allow more execution. Continue?');
+            if (!ok) return;
+          }
+          setSessionMode(nextMode);
+        }}
+      />
       <Composer kernelClient={kernelClient} onSend={sendMessage} busy={busy} onAbort={abort} />
     </div>
   );

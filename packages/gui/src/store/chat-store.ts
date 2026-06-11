@@ -102,6 +102,7 @@ export type ChatState = {
   costUsd: number;
   spendUsd: number;
   model: string | null;
+  sessionMode: SessionMode;
   threads: Record<string, ThreadRecord>;
   taskThreadIds: Record<string, string>;
   pendingThreadIds: string[];
@@ -123,6 +124,7 @@ export type ChatState = {
   clearBlocks: () => void;
   newSession: () => void;
   switchSession: (id: string) => void;
+  setSessionMode: (mode: SessionMode) => void;
   loadProjectState: () => Promise<void>;
   openProject: () => Promise<void>;
   selectProject: (projectDir: string) => Promise<void>;
@@ -161,7 +163,8 @@ function makeBlankSession(id: string, projectDir: string | null, createdAt = now
     error: null,
     costUsd: 0,
     spendUsd: 0,
-    model: null
+    model: null,
+    mode: 'standard'
   });
 }
 
@@ -184,7 +187,8 @@ function snapshotSession(state: ChatState, id = state.activeSessionId ?? uid()):
     error: state.error,
     costUsd: state.costUsd,
     spendUsd: state.spendUsd,
-    model: state.model
+    model: state.model,
+    mode: state.sessionMode
   });
 }
 
@@ -226,6 +230,7 @@ function resetThreadState(session?: SessionRecordDto) {
     costUsd: session?.costUsd ?? 0,
     spendUsd: session?.spendUsd ?? 0,
     model: session?.model ?? null,
+    sessionMode: session?.mode ?? 'standard',
     activeSessionId: session?.id ?? null
   };
 }
@@ -249,7 +254,8 @@ function currentThreadSnapshot(state: ChatState, id = state.activeSessionId ?? u
     error: state.error,
     costUsd: state.costUsd,
     spendUsd: state.spendUsd,
-    model: state.model
+    model: state.model,
+    mode: state.sessionMode
   });
 }
 
@@ -267,6 +273,7 @@ function updateCurrentThreadState(state: ChatState, thread: SessionRecordDto): P
     costUsd: thread.costUsd,
     spendUsd: thread.spendUsd,
     model: thread.model,
+    sessionMode: thread.mode ?? 'standard',
     activeSessionId: thread.id,
     threads: replaceThread(state.threads, thread)
   };
@@ -294,6 +301,7 @@ function resetLiveState(session?: SessionRecordDto) {
     costUsd: session?.costUsd ?? 0,
     spendUsd: session?.spendUsd ?? 0,
     model: session?.model ?? null,
+    sessionMode: session?.mode ?? 'standard',
     activeSessionId: session?.id ?? null
   };
 }
@@ -533,6 +541,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   costUsd: 0,
   spendUsd: 0,
   model: null,
+  sessionMode: 'standard',
   threads: {},
   taskThreadIds: {},
   pendingThreadIds: [],
@@ -541,7 +550,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   currentProject: null,
   recentProjects: [],
 
-  _client: null as { startTask: (input: string) => Promise<unknown>; approveGate?: (gateId: string, decision: 'allow' | 'always' | 'deny') => Promise<unknown>; onEvent?: (cb: (e: unknown) => void) => () => void } | null,
+  _client: null as { startTask: (input: string, mode?: SessionMode) => Promise<unknown>; approveGate?: (gateId: string, decision: 'allow' | 'always' | 'deny') => Promise<unknown>; onEvent?: (cb: (e: unknown) => void) => () => void } | null,
   setClient: (client) => set({ _client: client as typeof client | null }),
 
   sendMessage: async (text: string) => {
@@ -568,7 +577,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       error: null,
       costUsd: 0,
       spendUsd: 0,
-      model: null
+      model: null,
+      mode: state.sessionMode
     });
 
     set({
@@ -584,6 +594,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       costUsd: 0,
       spendUsd: 0,
       model: null,
+      sessionMode: state.sessionMode,
       activeSessionId: threadId,
       pendingThreadIds: reuseActive ? state.pendingThreadIds : [...state.pendingThreadIds, threadId],
       threads: reuseActive
@@ -594,13 +605,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
     const { _client } = get();
     if (_client) {
-      await _client.startTask(text);
+      await _client.startTask(text, state.sessionMode);
       return;
     }
     if (typeof window !== 'undefined') {
       const bobby = (window as unknown as { bobby?: { send: (cmd: unknown) => Promise<unknown> } }).bobby;
       if (bobby && typeof bobby.send === 'function') {
-        await bobby.send({ type: 'startTask', input: text });
+        await bobby.send({ type: 'startTask', input: text, mode: state.sessionMode });
         return;
       }
     }
@@ -644,7 +655,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       error: partial.error ?? threadState.error,
       costUsd: partial.costUsd ?? threadState.costUsd,
       spendUsd: partial.spendUsd ?? threadState.spendUsd,
-      model: partial.model ?? threadState.model
+      model: partial.model ?? threadState.model,
+      mode: threadState.sessionMode
     });
 
     const nextThreads = replaceThread(state.threads, nextThread);
@@ -736,6 +748,34 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       taskThreadIds: target.taskId ? { ...state.taskThreadIds, [target.taskId]: target.id } : state.taskThreadIds,
       pendingThreadIds: state.pendingThreadIds.filter((pendingId) => pendingId !== target.id)
     });
+  },
+
+  setSessionMode: (mode: SessionMode) => {
+    const state = get();
+    const activeId = state.activeSessionId;
+    if (!activeId) {
+      set({ sessionMode: mode });
+      return;
+    }
+
+    const active = state.threads[activeId] ?? state.sessions.find((session) => session.id === activeId);
+    if (!active) {
+      set({ sessionMode: mode });
+      return;
+    }
+
+    const nextThread = SessionRecordSchema.parse({
+      ...active,
+      mode,
+      updatedAt: nowIso()
+    });
+
+    set({
+      sessionMode: mode,
+      threads: replaceThread(state.threads, nextThread),
+      sessions: replaceSession(state.sessions, nextThread)
+    });
+    void persistSession(nextThread);
   },
 
   clearBlocks: () => set({ blocks: [], liveReasoning: '', liveAssistant: '', liveToolContent: '' }),

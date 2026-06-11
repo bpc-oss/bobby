@@ -104,6 +104,7 @@ export const SessionRecordSchema = z.object({
   updatedAt: z.string().min(1),
   projectDir: z.string().nullable(),
   taskId: z.string().nullable(),
+  mode: z.enum(['plan-only', 'standard', 'enhanced', 'full']).optional(),
   status: z.enum(['idle', 'running', 'done', 'failed', 'blocked']),
   liveReasoning: z.string(),
   liveAssistant: z.string(),
@@ -172,6 +173,9 @@ export const SnapshotListEntrySchema = z.object({
 });
 export type SnapshotListEntry = z.infer<typeof SnapshotListEntrySchema>;
 
+export const SessionModeSchema = z.enum(['plan-only', 'standard', 'enhanced', 'full']);
+export type SessionMode = z.infer<typeof SessionModeSchema>;
+
 export const WorkspaceFileSearchEntrySchema = z.object({
   path: z.string().min(1),
   preview: z.string().nullable().optional()
@@ -180,7 +184,7 @@ export type WorkspaceFileSearchEntry = z.infer<typeof WorkspaceFileSearchEntrySc
 
 export function makeKernelClient() {
   return {
-    startTask: (input: string) => window.bobby.send({ type: 'startTask', input }),
+    startTask: (input: string, mode?: SessionMode) => window.bobby.send({ type: 'startTask', input, mode }),
     approveGate: (gateId: string, decision: GateDecision) =>
       window.bobby.send({ type: 'approveGate', gateId, decision }),
   onEvent: (cb: (event: KernelEvent) => void) => window.bobby.onEvent(cb),

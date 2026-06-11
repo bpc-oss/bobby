@@ -8,5 +8,6 @@ export {
   KernelEventSchema,
   type GateDecision,
   type PermissionDecision,
+  type SessionMode,
   type PlanDecision
 } from './api/kernel-api';

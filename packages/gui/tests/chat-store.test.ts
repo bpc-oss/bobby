@@ -251,7 +251,7 @@ describe('chat session store', () => {
     await useChatStore.getState().sendMessage('Second task');
 
     const state = useChatStore.getState();
-    expect(startTask).toHaveBeenCalledWith('Second task');
+    expect(startTask).toHaveBeenCalledWith('Second task', 'standard');
     expect(state.blocks).toEqual([expect.objectContaining({ kind: 'user', text: 'Second task' })]);
     expect(state.sessions).toEqual(expect.arrayContaining([
       expect.objectContaining({ taskId: 'task-current', status: 'running' })

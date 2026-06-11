@@ -27,6 +27,10 @@ type PlanDecision =
   | { decision: 'reject' }
   | { decision: 'edit'; instructions: string };
 type PlanDecisionResolver = (taskId: string) => Promise<PlanDecision>;
+
+export interface OrchestratorOptions {
+  planOnly?: boolean;
+}
 const createTaskId = (): string => {
   taskCounter += 1;
   return `task-${Date.now()}-${taskCounter}`;
@@ -119,7 +123,8 @@ export class Orchestrator {
   constructor(
     private readonly model: ModelClient,
     private readonly conscience?: ConscienceDeps,
-    private readonly requestPlanDecision: PlanDecisionResolver = async () => ({ decision: 'approve' })
+    private readonly requestPlanDecision: PlanDecisionResolver = async () => ({ decision: 'approve' }),
+    private readonly options: OrchestratorOptions = {}
   ) {}
 
   on(fn: Listener): () => void {
@@ -164,10 +169,15 @@ export class Orchestrator {
 
     while (true) {
       const steps = await planTask(this.model, contract, revisionInstructions);
-      const decisionPromise = this.requestPlanDecision(taskId);
+      const decisionPromise = this.options.planOnly ? null : this.requestPlanDecision(taskId);
       this.emit(taskId, { type: 'plan_ready', taskId, steps });
 
-      const decision = await decisionPromise;
+      if (this.options.planOnly) {
+        this.emit(taskId, { type: 'final_result', taskId, status: 'done' });
+        return;
+      }
+
+      const decision = await decisionPromise!;
       if (decision.decision === 'approve') {
         await this.executeSteps(taskId, steps, contract, verdicts, budget);
         await this.emitFinalResult(taskId, contract, verdicts);

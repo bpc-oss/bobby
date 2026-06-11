@@ -94,7 +94,7 @@ describe('workspace UI smoke', () => {
     useChatStore.getState().setClient(client);
     useChatStore.getState().sendMessage('hello world');
     await vi.waitFor(() => {
-      expect(client.startTask).toHaveBeenCalledWith('hello world');
+      expect(client.startTask).toHaveBeenCalledWith('hello world', 'standard');
     });
   });
 
@@ -110,7 +110,21 @@ describe('workspace UI smoke', () => {
     fireEvent.click(screen.getByText('Send'));
 
     await vi.waitFor(() => {
-      expect(client.startTask).toHaveBeenCalledWith('run another task');
+      expect(client.startTask).toHaveBeenCalledWith('run another task', 'standard');
+    });
+  });
+
+  it('switches the composer into plan-only mode and forwards that mode to startTask', async () => {
+    const client = makeKernelClientMock();
+    render(<Workspace kernelClient={client} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /观察/i }));
+    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'plan this task' } });
+    fireEvent.click(screen.getByText('Send'));
+
+    await vi.waitFor(() => {
+      expect(client.startTask).toHaveBeenCalledWith('plan this task', 'plan-only');
     });
   });
 

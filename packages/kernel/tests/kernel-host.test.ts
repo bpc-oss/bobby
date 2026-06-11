@@ -773,6 +773,23 @@ it('KernelHost: resumes latest persisted trace when resume is requested from a f
   });
 });
 
+it('KernelHost: plan-only mode emits a plan without executing steps', async () => {
+  await withTempWorkspace(async (workspaceRoot) => {
+    const { host } = createHostWithWorkspace(workspaceRoot);
+    const events: string[] = [];
+
+    host.subscribe((event) => {
+      events.push(event.type);
+    });
+
+    await host.send({ type: 'startTask', input: 'run this task', mode: 'plan-only' } as Parameters<KernelHost['send']>[0]);
+
+    expect(events).toEqual(['intent_proposed', 'plan_ready', 'final_result']);
+    expect(events).not.toContain('step_started');
+    expect(events).not.toContain('tool_called');
+  });
+});
+
 it('KernelHost: persists traces when persistence is explicitly enabled for the current workspace', async () => {
   await withTempWorkspace(async (workspaceRoot) => {
     const previousCwd = process.cwd();

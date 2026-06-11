@@ -12,10 +12,13 @@ export type PlanDecision =
   | { decision: 'reject' }
   | { decision: 'edit'; instructions: string };
 
+export type SessionMode = 'plan-only' | 'standard' | 'enhanced' | 'full';
+
 export const KernelCommandSchema = z.union([
   z.object({
     type: z.literal('startTask'),
-    input: z.string().min(1)
+    input: z.string().min(1),
+    mode: z.enum(['plan-only', 'standard', 'enhanced', 'full']).optional()
   }),
   z.object({
     type: z.literal('answer'),

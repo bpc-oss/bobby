@@ -4,6 +4,7 @@ import {
   type GateDecision,
   type KernelCommand,
   type KernelEvent,
+  type SessionMode,
   type PlanDecision
 } from '@bobby/shared';
 import type { ConscienceDeps } from '../brain/orchestrator';
@@ -162,7 +163,7 @@ export class KernelHost {
     });
   }
 
-  private async handleStartTask(cmd: { type: 'startTask'; input: string }): Promise<void> {
+  private async handleStartTask(cmd: { type: 'startTask'; input: string; mode?: SessionMode }): Promise<void> {
     const intent = await classifyIntent(cmd.input);
     const taskId = this.makeTaskId();
 
@@ -193,18 +194,19 @@ export class KernelHost {
       }
       case 'TASK':
       default: {
-        await this.handleTaskIntent(taskId, cmd.input);
+        await this.handleTaskIntent(taskId, cmd.input, cmd.mode);
         return;
       }
     }
   }
 
-  private async handleTaskIntent(taskId: string, input: string): Promise<void> {
+  private async handleTaskIntent(taskId: string, input: string, mode?: SessionMode): Promise<void> {
     try {
       const orchestrator = new Orchestrator(
         this.makeModel(),
         this.conscienceDeps,
-        this.requestPlanDecision.bind(this)
+        this.requestPlanDecision.bind(this),
+        { planOnly: mode === 'plan-only' }
       );
       orchestrator.on((event) => this.emit(event));
       await orchestrator.startTask(input, taskId);
