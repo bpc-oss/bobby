@@ -242,6 +242,51 @@ describe('SessionToolDock', () => {
     expect(screen.getByText('ok')).toBeTruthy();
   });
 
+  it('keeps proposal apply disabled while the current session still has a gate', async () => {
+    (window as any).bobby.listProposals = vi.fn().mockResolvedValue([
+      {
+        proposalId: 'proposal-1',
+        proposalPath: 'E:\\ai-files\\Bobby\\.bobby\\proposals\\proposal-1.patch',
+        createdAt: '2026-06-11T00:00:00.000Z',
+        bytes: 42,
+        lineCount: 3,
+        patch: '@@ -0,0 +1 @@\n+hello'
+      }
+    ]);
+    useChatStore.setState({
+      blocks: [
+        { kind: 'user', id: 'u-1', text: 'Run this through Mission Control' },
+        {
+          kind: 'gate',
+          id: 'g-1',
+          gateId: 'gate-1',
+          reason: 'Need human approval'
+        }
+      ],
+      currentPlan: [{ id: 'step-1', desc: 'Inspect', satisfiesAcIds: ['AC1'], dependsOn: [] }],
+      currentTaskId: 'task-1',
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-11T00:00:00.000Z'
+      },
+      status: 'running',
+      busy: true,
+      liveReasoning: '',
+      liveAssistant: '',
+      liveToolContent: '',
+      threads: {},
+      taskThreadIds: {},
+      pendingThreadIds: []
+    });
+
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Review/));
+    expect(await screen.findByText('proposal-1')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('detects a web project and can start a preview server from package.json', async () => {
     render(<SessionToolDock />);
 

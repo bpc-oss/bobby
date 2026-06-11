@@ -294,6 +294,52 @@ describe('chat session store', () => {
     expect(new Set(savedIds)).toEqual(new Set([activeSessionId]));
   });
 
+  it('persists the active session after each streamed event so resume can replay the full thread', async () => {
+    const startTask = vi.fn().mockResolvedValue(undefined);
+    useChatStore.setState({ _client: { startTask } });
+
+    await useChatStore.getState().sendMessage('Persist this task');
+    const activeSessionId = useChatStore.getState().activeSessionId;
+    if (!activeSessionId) throw new Error('active session missing');
+
+    useChatStore.getState().handleEvent({
+      type: 'intent_proposed',
+      taskId: 'task-persist',
+      contract: { goal: 'Persist this task', acceptanceCriteria: [], constraints: [], inputs: [], outOfScope: [] }
+    });
+    useChatStore.getState().handleEvent({
+      type: 'plan_ready',
+      taskId: 'task-persist',
+      steps: [{ id: 'S1', desc: 'Plan work', satisfiesAcIds: ['AC1'], dependsOn: [] }]
+    });
+    useChatStore.getState().handleEvent({
+      type: 'evidence_produced',
+      taskId: 'task-persist',
+      evidence: {
+        claimId: 'claim-1',
+        acId: 'AC1',
+        evidenceType: 'file_diff',
+        payload: { path: 'notes.txt', patch: '@@ -0,0 +1 @@\n+hello' },
+        producedBy: 'tool'
+      }
+    });
+    useChatStore.getState().handleEvent({ type: 'final_result', taskId: 'task-persist', status: 'done' });
+
+    await Promise.resolve();
+
+    const saveSession = (window as unknown as { bobby: { saveSession: ReturnType<typeof vi.fn> } }).bobby.saveSession;
+    expect(saveSession.mock.calls.length).toBeGreaterThanOrEqual(4);
+    const persisted = saveSession.mock.calls.at(-1)?.[0] as { id?: string; blocks?: ChatBlock[]; taskId?: string | null; status?: string } | undefined;
+    expect(persisted?.id).toBe(activeSessionId);
+    expect(persisted?.taskId).toBe('task-persist');
+    expect(persisted?.status).toBe('done');
+    expect(persisted?.blocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'plan' }),
+      expect.objectContaining({ kind: 'evidence' }),
+      expect.objectContaining({ kind: 'status', status: 'done' })
+    ]));
+  });
+
   it('restores the session-specific mode when switching between sessions', () => {
     const standard = session('standard', 'Standard task', [userBlock('u-standard', 'Standard task')]);
     const locked = session('locked', 'Locked task', [userBlock('u-locked', 'Locked task')]);
