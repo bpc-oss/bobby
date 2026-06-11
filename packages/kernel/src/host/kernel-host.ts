@@ -12,6 +12,7 @@ import { Orchestrator } from '../brain/orchestrator';
 import { TraceStore } from '../trace/trace-store';
 import { classifyIntent } from '../brain/triage';
 import { listSnapshots, type SnapshotListEntry, restoreSnapshot as restoreSnapshotFromDisk } from '../hands/snapshot';
+import type { Tier } from '../hands/permission';
 import { loadSubAgents, type SubAgentLoadResult } from '../subagent/agent-loader';
 
 type Listener = (event: KernelEvent) => void;
@@ -21,6 +22,13 @@ type ResumeSummary = {
   taskId: string;
   events: number;
   status: FinalStatus | 'running';
+};
+
+const MODE_PERMISSION_CEILING: Record<SessionMode, Tier | undefined> = {
+  'plan-only': undefined,
+  standard: 'L2',
+  enhanced: 'L3',
+  full: 'L4'
 };
 
 export class KernelHost {
@@ -206,7 +214,10 @@ export class KernelHost {
         this.makeModel(),
         this.conscienceDeps,
         this.requestPlanDecision.bind(this),
-        { planOnly: mode === 'plan-only' }
+        {
+          planOnly: mode === 'plan-only',
+          toolPermissionCeiling: MODE_PERMISSION_CEILING[mode ?? 'standard']
+        }
       );
       orchestrator.on((event) => this.emit(event));
       await orchestrator.startTask(input, taskId);

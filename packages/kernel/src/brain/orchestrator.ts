@@ -11,6 +11,8 @@ import type { VerificationEngine } from '../conscience/engine';
 import type { ToolRegistry } from '../hands/tool';
 import { buildEscalationPlan, type EscalationPlan } from '../model/deepseek/escalation';
 import { allocateBudget, estimateDifficulty, scoreToTier, type DifficultyBudget } from '../model/deepseek/difficulty';
+import { type Tier } from '../hands/permission';
+import type { RunnerToolDescriptor } from './system-prompts';
 import {
   type ConstraintChecker,
   type ExecContext,
@@ -31,6 +33,7 @@ type PlanDecisionResolver = (taskId: string) => Promise<PlanDecision>;
 
 export interface OrchestratorOptions {
   planOnly?: boolean;
+  toolPermissionCeiling?: Tier;
 }
 const createTaskId = (): string => {
   taskCounter += 1;
@@ -277,6 +280,17 @@ export class Orchestrator {
     let retryContext: string | undefined;
     const shouldStopRunnerLoop = (needsPro: boolean, failureCount: number): boolean =>
       needsPro || failureCount >= budget.maxRetries;
+    const toolCatalog = conscience.toolRegistry?.list().map((tool) => ({
+      name: tool.name,
+      permissionTier: tool.permissionTier,
+      description: tool.description
+    }));
+    const ceiling = this.options.toolPermissionCeiling;
+    const shouldEnforceToolPermission = ceiling !== undefined && toolCatalog !== undefined;
+    const allowedTools = shouldEnforceToolPermission
+      ? this.filterToolsByPermission(toolCatalog, ceiling)
+      : toolCatalog ?? [];
+    const allowedToolNames = shouldEnforceToolPermission ? new Set(allowedTools.map((tool) => tool.name)) : null;
 
     while (runnerFailures < budget.maxRetries) {
       const plan = buildEscalationPlan('runner', runnerFailures, budget);
@@ -286,12 +300,11 @@ export class Orchestrator {
           model: plan.model,
           reasoningEffort: plan.reasoning_effort,
           retryContext,
-          tools: conscience.toolRegistry?.list().map((tool) => ({
-            name: tool.name,
-            permissionTier: tool.permissionTier,
-            description: tool.description
-          }))
+          tools: shouldEnforceToolPermission ? allowedTools : toolCatalog
         });
+        if (allowedToolNames) {
+          this.assertClaimToolsAllowed(claim.calls, allowedToolNames);
+        }
 
         const claimResult = await this.processClaim(taskId, conscience, claim, step, criteria, verdicts);
         if (claimResult.result === 'pass') {
@@ -318,6 +331,41 @@ export class Orchestrator {
       runnerFailures,
       blockedOnNeedHuman: false
     };
+  }
+
+  private filterToolsByPermission(
+    tools: readonly RunnerToolDescriptor[],
+    ceiling?: Tier
+  ): RunnerToolDescriptor[] {
+    if (!ceiling) {
+      return [...tools];
+    }
+
+    const ceilingRank = this.tierRank(ceiling);
+    return tools.filter((tool) => this.tierRank(tool.permissionTier) <= ceilingRank);
+  }
+
+  private assertClaimToolsAllowed(calls: readonly PlannedCall[], allowedToolNames: Set<string>): void {
+    for (const call of calls) {
+      if (!allowedToolNames.has(call.tool)) {
+        throw new Error(`executeStep: tool ${call.tool} is not allowed in the current permission mode`);
+      }
+    }
+  }
+
+  private tierRank(tier: Tier): number {
+    switch (tier) {
+      case 'L0':
+        return 0;
+      case 'L1':
+        return 1;
+      case 'L2':
+        return 2;
+      case 'L3':
+        return 3;
+      case 'L4':
+        return 4;
+    }
   }
 
   private async runGraderAttempt(

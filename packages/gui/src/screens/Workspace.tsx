@@ -688,9 +688,9 @@ function SuggestionCards({ onPick }: { onPick: (text: string) => void }) {
 
 const MODE_CONFIG: Record<SessionMode, { label: string; hint: string; rank: number; ariaLabel: string }> = {
   'plan-only': { label: '观察', hint: 'plan-only', rank: 0, ariaLabel: '观察' },
-  standard: { label: '标准', hint: 'L1', rank: 1, ariaLabel: '标准' },
-  enhanced: { label: '增强', hint: 'L2', rank: 2, ariaLabel: '增强' },
-  full: { label: '完全', hint: 'L3', rank: 3, ariaLabel: '完全' }
+  standard: { label: '标准', hint: 'L2', rank: 1, ariaLabel: '标准' },
+  enhanced: { label: '增强', hint: 'L3', rank: 2, ariaLabel: '增强' },
+  full: { label: '完全', hint: 'L4', rank: 3, ariaLabel: '完全' }
 };
 
 function SessionModeSwitcher({

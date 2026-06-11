@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Orchestrator } from '../src/brain/orchestrator';
+import { ToolRegistry } from '../src/hands/tool';
 import { MockModelClient } from '../src/model/mock-model-client';
 
 const contractJson = JSON.stringify({
@@ -40,6 +41,33 @@ const createOrchestratorWithModel = (graderPayloads: string[], runnerPayloads: s
   });
 
   return new Orchestrator(model);
+};
+
+const createPermissionConscience = () => {
+  const toolRegistry = new ToolRegistry();
+  toolRegistry.register({
+    name: 'write_file',
+    permissionTier: 'L1',
+    description: 'Write file',
+    run: async () => ({ evidence: [], result: {} })
+  });
+  toolRegistry.register({
+    name: 'exec',
+    permissionTier: 'L2',
+    description: 'Execute command',
+    run: async () => ({ evidence: [], result: {} })
+  });
+
+  return {
+    engine: {
+      verify: async () => ({ result: 'pass' })
+    },
+    gate: {
+      evaluate: () => ({ status: 'failed' })
+    },
+    evidenceFor: vi.fn(),
+    toolRegistry
+  } as any;
 };
 
 const createDeferred = <T>(): {
@@ -207,4 +235,20 @@ describe('Orchestrator', () => {
   it('always emits failed final_result before M2 validation exists', expectFinalResultFailedByDefault);
   it('returns clarification when captureIntent result needs clarification and skips planner', expectClarificationSkipsPlanner);
   it('returns clarification when captureIntent result needs clarification even with hard oracle', expectHardOracleClarificationSkipsPlanner);
+  it('rejects runner calls above the permission ceiling in standard mode', async () => {
+    const model = new MockModelClient({
+      grader: [contractJson, stepsJson],
+      runner: [JSON.stringify({ calls: [{ tool: 'exec', input: { command: 'echo hi' } }] })]
+    });
+    const conscience = createPermissionConscience();
+    const orchestrator = new Orchestrator(
+      model,
+      conscience,
+      async () => ({ decision: 'approve' }),
+      { toolPermissionCeiling: 'L1' }
+    );
+
+    await expect(orchestrator.startTask('help me do work')).rejects.toThrow('not allowed in the current permission mode');
+    expect(conscience.evidenceFor).not.toHaveBeenCalled();
+  });
 });
