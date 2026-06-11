@@ -21,8 +21,14 @@ const menuBuildFromTemplate = vi.fn((template: unknown) => template);
 const traySetToolTip = vi.fn();
 const traySetContextMenu = vi.fn();
 const notificationShow = vi.fn();
+let notificationClick: (() => void) | null = null;
 const NotificationMock = Object.assign(vi.fn(() => ({
-  show: notificationShow
+  show: notificationShow,
+  on: vi.fn((event: string, handler: () => void) => {
+    if (event === 'click') {
+      notificationClick = handler;
+    }
+  })
 })), {
   isSupported: vi.fn(() => true)
 });
@@ -32,7 +38,16 @@ const safeStorageDecryptString = vi.fn((value: Buffer) => value.toString('utf8')
 
 const BrowserWindowMock = vi.fn(() => ({
   isDestroyed: vi.fn(() => false),
-  webContents: { send: vi.fn() },
+  show: vi.fn(),
+  focus: vi.fn(),
+  webContents: {
+    send: vi.fn(),
+    once: vi.fn((event: string, handler: () => void) => {
+      if (event === 'did-finish-load') {
+        handler();
+      }
+    })
+  },
   loadURL: vi.fn(),
   loadFile: vi.fn()
 })) as unknown as typeof BrowserWindow;
@@ -708,6 +723,7 @@ describe('desktop integration', () => {
     traySetToolTip.mockClear();
     traySetContextMenu.mockClear();
     notificationShow.mockClear();
+    notificationClick = null;
   });
 
   it('installs a desktop menu and tray and routes new task commands back to the window', async () => {
@@ -734,6 +750,38 @@ describe('desktop integration', () => {
       mock: { results: Array<{ value: { webContents: { send: ReturnType<typeof vi.fn> } } }> };
     }).mock.results[0]?.value;
     expect(windowInstance.webContents.send).toHaveBeenCalledWith('app:command', { type: 'new-task' });
+  });
+
+  it('clicking automation notifications jumps back into the schedule page', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'automation-notify-'));
+    mkdirSync(join(projectRoot, '.bobby'), { recursive: true });
+    await loadMain([
+      {
+        id: 'auto-1',
+        title: 'Daily check-in',
+        kind: 'schedule',
+        prompt: 'Summarize the current Bobby session.',
+        intervalMinutes: 30,
+        enabled: true,
+        createdAt: '2026-06-11T00:00:00.000Z',
+        updatedAt: '2026-06-11T00:00:00.000Z',
+        lastRunAt: null,
+        nextRunAt: '2026-06-11T00:30:00.000Z'
+      }
+    ], projectRoot);
+
+    const runNow = handlers.get('automations:runNow');
+    if (!runNow) throw new Error('automations:runNow handler not registered');
+
+    await runNow(undefined, { id: 'auto-1' });
+    expect(notificationShow).toHaveBeenCalled();
+
+    notificationClick?.();
+
+    const windowInstance = (BrowserWindowMock as unknown as {
+      mock: { results: Array<{ value: { webContents: { send: ReturnType<typeof vi.fn> } } }> };
+    }).mock.results[0]?.value;
+    expect(windowInstance.webContents.send).toHaveBeenCalledWith('app:command', { type: 'open-page', page: 'schedule' });
   });
 });
 

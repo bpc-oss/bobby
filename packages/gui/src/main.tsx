@@ -19,6 +19,7 @@ import type { OnboardingStatus } from './ipc/contract';
 import './styles/tokens.css';
 
 type AppPage = 'chat' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'claw' | 'settings';
+type AppCommand = { type: 'new-task' } | { type: 'open-page'; page: AppPage; sessionId?: string };
 
 const ONBOARDING_COMPLETE_KEY = 'bobby-onboarding-complete';
 const LAST_ACTIVE_SESSION_KEY = 'bobby-last-active-session';
@@ -105,12 +106,20 @@ export function App() {
 
   React.useEffect(() => {
     if (typeof window === 'undefined' || !window.bobby?.onAppCommand) return;
-    return window.bobby.onAppCommand((command) => {
+    const handleAppCommand = (command: AppCommand) => {
       if (command.type === 'new-task') {
         setPage('chat');
         newSession();
+        return;
       }
-    });
+      if (command.type === 'open-page') {
+        if (command.sessionId) {
+          resumeSession(command.sessionId);
+        }
+        setPage(command.page);
+      }
+    };
+    return window.bobby.onAppCommand(handleAppCommand as unknown as (command: { type: string }) => void);
   }, [newSession]);
 
   React.useEffect(() => {

@@ -124,6 +124,7 @@ let currentProjectDir: string | null = null;
 let currentProject: ProjectMeta | null = null;
 let currentHost: KernelHost | null = null;
 let tray: Tray | null = null;
+let pendingAppCommand: { type: 'new-task' } | { type: 'open-page'; page: 'chat' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'claw' | 'settings'; sessionId?: string } | null = null;
 const toolRegistry = new ToolRegistry();
 const toolEvidenceProvider = new ToolEvidenceProvider(toolRegistry);
 
@@ -790,9 +791,35 @@ function writeAutomationTaskArtifacts(
   );
 }
 
-function notifyAutomation(message: string): void {
+function dispatchAppCommand(command: NonNullable<typeof pendingAppCommand>): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    pendingAppCommand = command;
+    createWindow();
+    return;
+  }
+
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send('app:command', command);
+}
+
+function flushPendingAppCommand(): void {
+  if (!pendingAppCommand || !mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  const command = pendingAppCommand;
+  pendingAppCommand = null;
+  mainWindow.webContents.send('app:command', command);
+}
+
+function notifyAutomation(message: string, command?: NonNullable<typeof pendingAppCommand>): void {
   if (Notification.isSupported()) {
-    new Notification({ title: 'Bobby', body: message }).show();
+    const notification = new Notification({ title: 'Bobby', body: message });
+    if (command) {
+      notification.on('click', () => dispatchAppCommand(command));
+    }
+    notification.show();
   }
 }
 
@@ -876,7 +903,7 @@ async function runAutomation(automation: AutomationRecord): Promise<AutomationRe
 
   const host = await (pendingHost ?? (pendingHost = createHost()));
   if (!host) {
-    notifySystem(`Automation "${automation.title}" is ready, but Bobby is not configured yet.`);
+    notifySystem(`Automation "${automation.title}" is ready, but Bobby is not configured yet.`, { type: 'open-page', page: 'schedule' });
     return updated;
   }
 
@@ -902,7 +929,7 @@ async function runAutomation(automation: AutomationRecord): Promise<AutomationRe
   } catch (error: unknown) {
     failedToRun = true;
     const message = error instanceof Error ? error.message : String(error);
-    notifySystem(`Automation "${automation.title}" failed: ${message}`);
+    notifySystem(`Automation "${automation.title}" failed: ${message}`, { type: 'open-page', page: 'schedule' });
   } finally {
     unsubscribe();
   }
@@ -914,9 +941,9 @@ async function runAutomation(automation: AutomationRecord): Promise<AutomationRe
 
   const message = `Automation "${automation.title}" completed with ${status} status.`;
   if (status === 'failed' && !failedToRun) {
-    notifySystem(`Automation "${automation.title}" failed.`);
+    notifySystem(`Automation "${automation.title}" failed.`, { type: 'open-page', page: 'schedule' });
   } else {
-    notifyAutomation(message);
+    notifyAutomation(message, { type: 'open-page', page: 'schedule' });
   }
 
   return updated;
@@ -1041,9 +1068,13 @@ function getCapabilityReport(): CapabilityReport | null {
   }
 }
 
-const notifySystem = (message: string) => {
+const notifySystem = (message: string, command?: NonNullable<typeof pendingAppCommand>) => {
   if (Notification.isSupported()) {
-    new Notification({ title: 'Bobby', body: message }).show();
+    const notification = new Notification({ title: 'Bobby', body: message });
+    if (command) {
+      notification.on('click', () => dispatchAppCommand(command));
+    }
+    notification.show();
   }
 
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -1082,6 +1113,10 @@ const createWindow = () => {
   } else {
     void mainWindow.loadFile(join(__dirname, '../dist/index.html'));
   }
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    flushPendingAppCommand();
+  });
 };
 
 function setupDesktopIntegration(): void {
@@ -1102,7 +1137,7 @@ function setupDesktopIntegration(): void {
     {
       label: 'Bobby',
       submenu: [
-        { label: 'New Task', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('app:command', { type: 'new-task' }) },
+        { label: 'New Task', accelerator: 'CmdOrCtrl+N', click: () => dispatchAppCommand({ type: 'new-task' }) },
         { label: 'Focus Task', accelerator: 'CmdOrCtrl+L', click: openMainWindow },
         { type: 'separator' },
         { label: 'Quit', role: 'quit' }
@@ -1122,7 +1157,7 @@ function setupDesktopIntegration(): void {
     tray.setToolTip('Bobby');
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: 'Open Bobby', click: openMainWindow },
-      { label: 'New Task', click: () => mainWindow?.webContents.send('app:command', { type: 'new-task' }) },
+      { label: 'New Task', click: () => dispatchAppCommand({ type: 'new-task' }) },
       { type: 'separator' },
       { label: 'Quit', role: 'quit' }
     ]));
@@ -1459,7 +1494,7 @@ ipcMain.handle('kernel:command', async (_event, cmd) => {
   if (!currentHost) {
     throw hostInitError ?? new Error('Kernel 主机未就绪，请先完成配置');
   }
-  await currentHost.send(cmd);
+  return currentHost.send(cmd);
 });
 
 app.whenReady().then(() => {
