@@ -134,6 +134,7 @@ export function ScheduleTasks() {
             <label className="block">
               <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">Title</span>
               <input
+                data-testid="automation-title-input"
                 value={draft.title}
                 onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
                 className="w-full rounded-lg border px-3 py-2 text-[13px] outline-none"
@@ -145,6 +146,7 @@ export function ScheduleTasks() {
             <label className="block">
               <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">Kind</span>
               <select
+                data-testid="automation-kind-select"
                 value={draft.kind}
                 onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value as AutomationRecord['kind'] }))}
                 className="w-full rounded-lg border px-3 py-2 text-[13px] outline-none"
@@ -161,6 +163,7 @@ export function ScheduleTasks() {
             <label className="block">
               <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">Prompt</span>
               <textarea
+                data-testid="automation-prompt-input"
                 value={draft.prompt}
                 onChange={(event) => setDraft((current) => ({ ...current, prompt: event.target.value }))}
                 className="min-h-[120px] w-full resize-none rounded-lg border px-3 py-2 text-[13px] leading-5 outline-none"
@@ -172,6 +175,7 @@ export function ScheduleTasks() {
             <label className="block">
               <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">Every (minutes)</span>
               <input
+                data-testid="automation-interval-input"
                 type="number"
                 min={1}
                 step={1}
@@ -183,6 +187,7 @@ export function ScheduleTasks() {
             </label>
 
             <button
+              data-testid="automation-create-button"
               type="button"
               onClick={() => void createAutomation()}
               disabled={saving}

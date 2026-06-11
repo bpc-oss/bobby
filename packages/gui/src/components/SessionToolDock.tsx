@@ -372,6 +372,7 @@ function TerminalPanel() {
         </label>
         <div className="flex gap-2">
           <input
+            data-testid="terminal-command-input"
             value={command}
             onChange={(event) => setCommand(event.target.value)}
             onKeyDown={(event) => {
@@ -512,6 +513,7 @@ function FilesPanel() {
         </label>
         <div className="flex gap-2">
           <input
+            data-testid="files-search-input"
             value={pathInput}
             onChange={(event) => setPathInput(event.target.value)}
             onKeyDown={(event) => {
@@ -531,7 +533,7 @@ function FilesPanel() {
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <div className="max-h-[520px] overflow-y-auto rounded-lg border p-2" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+        <div data-testid="files-tree" className="max-h-[520px] overflow-y-auto rounded-lg border p-2" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
           {tree.length === 0 ? <Empty title="No files found." /> : tree.map((node) => <FileTreeNode key={node.path} node={node} selectedPath={selectedPath} onSelect={(path) => void selectPath(path)} />)}
         </div>
         <div className="min-w-0 rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
@@ -714,6 +716,7 @@ function PreviewPanel() {
         </label>
         <div className="flex gap-2">
           <input
+            data-testid="preview-url-input"
             value={url}
             onChange={(event) => setUrl(event.target.value)}
             onKeyDown={(event) => {
@@ -726,12 +729,13 @@ function PreviewPanel() {
             className="min-w-0 flex-1 rounded-md border bg-transparent px-2.5 py-1.5 text-[12px] text-bobby-ink outline-none placeholder:text-bobby-faint"
             style={{ borderColor: 'var(--bobby-border)' }}
           />
-          <button type="button" onClick={() => setActiveUrl(url.trim())} className="rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white">
+          <button data-testid="preview-open-button" type="button" onClick={() => setActiveUrl(url.trim())} className="rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white">
             Open
           </button>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
+            data-testid="preview-start-button"
             type="button"
             onClick={() => void startPreviewServer()}
             disabled={launching || !suggestion.command}
@@ -868,7 +872,7 @@ export function SessionToolDock() {
           <header className="flex items-center gap-2 border-b px-3 py-2.5" style={{ borderColor: 'var(--bobby-border-muted)' }}>
             <ActiveIcon className="h-4 w-4 text-bobby-muted" />
             <div className="min-w-0 flex-1">
-              <h2 className="truncate text-[13px] font-semibold text-bobby-ink">{active.label}</h2>
+              <h2 data-testid="dock-active-tab" className="truncate text-[13px] font-semibold text-bobby-ink">{active.label}</h2>
               <p className="truncate text-[11px] text-bobby-faint">{active.shortcut ?? 'Current session panel'}</p>
             </div>
             <button type="button" onClick={() => setOpen(false)} className="rounded-md p-1 text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink"><ChevronLeft className="h-4 w-4" /></button>

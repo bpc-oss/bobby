@@ -221,6 +221,7 @@ export function Commands() {
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">Name</span>
                 <input
+                  data-testid="command-name-input"
                   value={draft.name}
                   onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
                   className="w-full rounded-lg border px-3 py-2 text-[13px] outline-none"
@@ -231,6 +232,7 @@ export function Commands() {
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">Description</span>
                 <input
+                  data-testid="command-description-input"
                   value={draft.description}
                   onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
                   className="w-full rounded-lg border px-3 py-2 text-[13px] outline-none"
@@ -241,6 +243,7 @@ export function Commands() {
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">Template</span>
                 <textarea
+                  data-testid="command-template-input"
                   value={draft.promptTemplate}
                   onChange={(event) => setDraft((current) => ({ ...current, promptTemplate: event.target.value }))}
                   className="min-h-[320px] w-full resize-y rounded-lg border px-3 py-2 text-[13px] leading-6 outline-none"
