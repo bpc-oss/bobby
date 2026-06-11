@@ -12,13 +12,12 @@ import { PluginMarketplace } from './screens/PluginMarketplace';
 import { Agents } from './screens/Agents';
 import { Commands } from './screens/Commands';
 import { ScheduleTasks } from './screens/ScheduleTasks';
-import { ClawMode } from './screens/ClawMode';
 import { ProjectHome } from './screens/ProjectHome';
 import { History } from './screens/History';
 import type { OnboardingStatus } from './ipc/contract';
 import './styles/tokens.css';
 
-type AppPage = 'chat' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'claw' | 'settings';
+type AppPage = 'chat' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'settings';
 type AppCommand = { type: 'new-task' } | { type: 'open-page'; page: AppPage; sessionId?: string };
 
 const ONBOARDING_COMPLETE_KEY = 'bobby-onboarding-complete';
@@ -219,7 +218,6 @@ export function App() {
   else if (page === 'agents') content = <Agents />;
   else if (page === 'commands') content = <Commands />;
   else if (page === 'schedule') content = <ScheduleTasks />;
-  else if (page === 'claw') content = <ClawMode onClose={() => setPage('chat')} />;
   else {
     content = (
       <div data-testid="chat-workbench" className="flex h-full min-w-0 overflow-hidden">

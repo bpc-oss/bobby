@@ -5,7 +5,7 @@ import { useChatStore } from '../store/chat-store';
 type SidebarProps = {
   theme: 'light' | 'dark';
   onThemeChange: (theme: 'light' | 'dark') => void;
-  onPage: (page: 'chat' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'claw' | 'settings') => void;
+  onPage: (page: 'chat' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'settings') => void;
   onNewSession: () => void;
 };
 
