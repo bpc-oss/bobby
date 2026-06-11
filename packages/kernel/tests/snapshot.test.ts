@@ -101,6 +101,20 @@ it('listSnapshots reads manifests from .bobby/snapshots', async () => {
   }
 });
 
+it('snapshot metadata includes task and step ids when provided', async () => {
+  const workspaceRoot = createWorkspace();
+  writeFileSync(join(workspaceRoot, 'meta.txt'), 'meta', 'utf8');
+
+  const snapshot = await createSnapshot(workspaceRoot, { id: 'snapshot-meta', taskId: 'task-1', stepId: 'step-1' });
+  const listed = await listSnapshots(workspaceRoot);
+  const entry = listed.find((item) => item.id === snapshot.id);
+
+  expect(snapshot.taskId).toBe('task-1');
+  expect(snapshot.stepId).toBe('step-1');
+  expect(entry?.taskId).toBe('task-1');
+  expect(entry?.stepId).toBe('step-1');
+});
+
 it('restore throws on workspace path traversal snapshot id and fs-tool workspace snapshot entries', async () => {
   const workspaceRoot = createWorkspace();
   writeFileSync(join(workspaceRoot, 'safe.txt'), 'safe', 'utf8');

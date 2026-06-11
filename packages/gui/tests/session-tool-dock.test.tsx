@@ -25,7 +25,9 @@ function installBobby() {
       createdAt: '2026-06-11T00:00:00.000Z',
       copied: [{ path: 'src/index.ts', bytes: 42 }],
       skipped: [],
-      snapshotDir: 'E:\\ai-files\\Bobby\\.bobby\\snapshots\\snap-1'
+      snapshotDir: 'E:\\ai-files\\Bobby\\.bobby\\snapshots\\snap-1',
+      taskId: 'task-1',
+      stepId: 'step-1'
     }]),
     listWorkspaceTree: vi.fn().mockResolvedValue([{
       name: 'src',
@@ -129,6 +131,7 @@ describe('SessionToolDock', () => {
 
     fireEvent.click(screen.getByTitle(/Diff/));
     expect(await screen.findByText('#1 snap-1')).toBeTruthy();
+    expect(screen.getByText('task task-1 / step step-1')).toBeTruthy();
     fireEvent.click(screen.getByText('Restore'));
 
     const send = (window as any).bobby.send as ReturnType<typeof vi.fn>;

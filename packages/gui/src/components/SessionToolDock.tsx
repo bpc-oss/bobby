@@ -205,7 +205,7 @@ function DiffPanel() {
       </button>
       <section className="rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-[12px] font-semibold text-bobby-ink">Checkpoints</h3>
+          <h3 className="text-[12px] font-semibold text-bobby-ink">Checkpoint timeline</h3>
           <button type="button" onClick={() => void refreshSnapshots()} className="rounded-md px-2 py-1 text-[11px] text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink">Refresh</button>
         </div>
         {snapshots.length === 0 ? (
@@ -218,6 +218,13 @@ function DiffPanel() {
                   <div className="min-w-0">
                     <div className="truncate text-[12px] font-medium text-bobby-ink">#{index + 1} {snapshot.id}</div>
                     <div className="mt-0.5 text-[11px] text-bobby-faint">{new Date(snapshot.createdAt).toLocaleString()}</div>
+                    {(snapshot.taskId || snapshot.stepId) && (
+                      <div className="mt-1 text-[11px] text-bobby-muted">
+                        {snapshot.taskId ? `task ${snapshot.taskId}` : ''}
+                        {snapshot.taskId && snapshot.stepId ? ' / ' : ''}
+                        {snapshot.stepId ? `step ${snapshot.stepId}` : ''}
+                      </div>
+                    )}
                   </div>
                   <button type="button" onClick={() => void restoreSnapshot(snapshot.id)} className="rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-white">Restore</button>
                 </div>

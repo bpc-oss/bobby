@@ -11,12 +11,18 @@ import type { ConscienceDeps } from '../brain/orchestrator';
 import { Orchestrator } from '../brain/orchestrator';
 import { TraceStore } from '../trace/trace-store';
 import { classifyIntent } from '../brain/triage';
-import { listSnapshots, type SnapshotListEntry, restoreSnapshot as restoreSnapshotFromDisk } from '../hands/snapshot';
+import {
+  createSnapshot,
+  listSnapshots,
+  type SnapshotListEntry,
+  restoreSnapshot as restoreSnapshotFromDisk
+} from '../hands/snapshot';
 import type { Tier } from '../hands/permission';
 import { loadSubAgents, type SubAgentLoadResult } from '../subagent/agent-loader';
 
 type Listener = (event: KernelEvent) => void;
 type FinalStatus = Extract<KernelEvent, { type: 'final_result' }>['status'];
+type SnapshotCreator = typeof createSnapshot;
 
 type ResumeSummary = {
   taskId: string;
@@ -38,6 +44,7 @@ export class KernelHost {
   private readonly pendingPlanDecisionResolvers = new Map<string, (decision: PlanDecision) => void>();
   private readonly alwaysApprovedGateReasons = new Set<string>();
   private readonly trace: TraceStore;
+  private readonly createSnapshotFn: SnapshotCreator;
   private readonly sessionAnswers = new Map<string, string[]>();
   private readonly abortedTasks = new Set<string>();
   private taskCounter = 0;
@@ -48,12 +55,14 @@ export class KernelHost {
     private readonly makeModel: () => ModelClient,
     private readonly conscienceDeps?: ConscienceDeps,
     private readonly workspaceRoot: string = process.cwd(),
-    enableTracePersistence = workspaceRoot !== process.cwd()
+    enableTracePersistence = workspaceRoot !== process.cwd(),
+    createSnapshotFn: SnapshotCreator = createSnapshot
   ) {
     this.trace = new TraceStore({
       workspaceRoot,
       persistence: enableTracePersistence
     });
+    this.createSnapshotFn = createSnapshotFn;
   }
 
   subscribe(fn: Listener): () => void {
@@ -66,6 +75,10 @@ export class KernelHost {
   private emit(event: KernelEvent): void {
     if ('taskId' in event && typeof event.taskId === 'string' && event.taskId.length > 0) {
       this.trace.append(event.taskId, event);
+    }
+
+    if (event.type === 'step_started') {
+      void this.captureStepSnapshot(event.taskId, event.stepId);
     }
 
     for (const listener of this.listeners) {
@@ -205,6 +218,15 @@ export class KernelHost {
         await this.handleTaskIntent(taskId, cmd.input, cmd.mode);
         return;
       }
+    }
+  }
+
+  private async captureStepSnapshot(taskId: string, stepId: string): Promise<void> {
+    const snapshotId = `${taskId}-${stepId}-${Date.now()}`;
+    try {
+      await this.createSnapshotFn(this.workspaceRoot, { id: snapshotId, taskId, stepId });
+    } catch {
+      // Checkpoints are best-effort. The task trace remains the source of truth.
     }
   }
 

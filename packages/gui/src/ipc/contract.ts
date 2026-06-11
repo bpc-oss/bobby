@@ -187,7 +187,9 @@ export const SnapshotListEntrySchema = z.object({
   createdAt: z.string().min(1),
   copied: z.array(z.object({ path: z.string(), bytes: z.number().nonnegative() })),
   skipped: z.array(z.object({ path: z.string(), reason: z.enum(['binary-or-non-text', 'excluded']) })),
-  snapshotDir: z.string().min(1)
+  snapshotDir: z.string().min(1),
+  taskId: z.string().min(1).optional(),
+  stepId: z.string().min(1).optional()
 });
 export type SnapshotListEntry = z.infer<typeof SnapshotListEntrySchema>;
 

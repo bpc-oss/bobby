@@ -26,17 +26,24 @@ const stepsJson = JSON.stringify([
   }
 ]);
 
-const createHost = (): { host: KernelHost; makeModel: ReturnType<typeof vi.fn> } => {
+const createHost = (): { host: KernelHost; makeModel: ReturnType<typeof vi.fn>; createSnapshot: ReturnType<typeof vi.fn> } => {
   const makeModel = vi.fn(() =>
     new MockModelClient({
       grader: [contractJson, stepsJson],
       runner: [JSON.stringify({ calls: [{ tool: 'write_file', input: { path: 'a.txt', content: 'x' } }] })]
     })
   );
+  const createSnapshot = vi.fn().mockResolvedValue({
+    id: 'snap-task-step',
+    createdAt: '2026-06-11T00:00:00.000Z',
+    copied: [],
+    skipped: []
+  });
 
   return {
-    host: new KernelHost(makeModel),
-    makeModel
+    host: new KernelHost(makeModel, undefined, process.cwd(), false, createSnapshot),
+    makeModel,
+    createSnapshot
   };
 };
 
@@ -309,6 +316,31 @@ it('KernelHost: routes clear task intent to orchestrator flow', async () => {
   expect(events).toContain('final_result');
   expect(events[events.length - 1]).toBe('final_result');
   expect(events).not.toContain('direct_answer');
+});
+
+it('KernelHost: creates a checkpoint snapshot for each started step', async () => {
+  const { host, createSnapshot } = createHost();
+
+  host.subscribe((event) => {
+    if (event.type === 'plan_ready') {
+      void host.send({
+        type: 'planDecision',
+        taskId: event.taskId,
+        decision: 'approve'
+      });
+    }
+  });
+
+  await host.send({ type: 'startTask', input: 'run this task' });
+
+  expect(createSnapshot).toHaveBeenCalledTimes(1);
+  expect(createSnapshot).toHaveBeenCalledWith(
+    process.cwd(),
+    expect.objectContaining({
+      taskId: expect.any(String),
+      stepId: 'S1'
+    })
+  );
 });
 
 it('KernelHost: routes Chinese file create question intent to orchestrator flow', async () => {

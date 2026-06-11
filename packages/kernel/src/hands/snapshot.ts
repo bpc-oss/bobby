@@ -22,10 +22,14 @@ export interface SnapshotManifest {
   createdAt: string;
   copied: SnapshotEntry[];
   skipped: SkippedSnapshotEntry[];
+  taskId?: string;
+  stepId?: string;
 }
 
 export interface SnapshotOptions {
   id?: string;
+  taskId?: string;
+  stepId?: string;
 }
 
 export interface SnapshotListEntry extends SnapshotManifest {
@@ -185,7 +189,9 @@ export async function createSnapshot(workspaceRoot: string, options: SnapshotOpt
     id,
     createdAt,
     copied: [],
-    skipped: []
+    skipped: [],
+    ...(options.taskId ? { taskId: options.taskId } : {}),
+    ...(options.stepId ? { stepId: options.stepId } : {})
   };
 
   await rm(snapshotDir, { recursive: true, force: true });
