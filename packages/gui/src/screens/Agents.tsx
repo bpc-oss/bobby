@@ -312,6 +312,7 @@ export function Agents() {
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">Name</span>
                 <input
+                  data-testid="agent-name-input"
                   value={draft.name}
                   onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
                   className="w-full rounded-lg border px-3 py-2 text-[13px] outline-none"
@@ -322,6 +323,7 @@ export function Agents() {
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">Description</span>
                 <input
+                  data-testid="agent-description-input"
                   value={draft.description}
                   onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
                   className="w-full rounded-lg border px-3 py-2 text-[13px] outline-none"
@@ -332,6 +334,7 @@ export function Agents() {
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">Model</span>
                 <input
+                  data-testid="agent-model-input"
                   value={draft.model}
                   onChange={(event) => setDraft((current) => ({ ...current, model: event.target.value }))}
                   className="w-full rounded-lg border px-3 py-2 text-[13px] outline-none"
@@ -343,6 +346,7 @@ export function Agents() {
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">Tools</span>
                 <input
+                  data-testid="agent-tools-input"
                   value={draft.tools}
                   onChange={(event) => setDraft((current) => ({ ...current, tools: event.target.value }))}
                   className="w-full rounded-lg border px-3 py-2 text-[13px] outline-none"
@@ -354,6 +358,7 @@ export function Agents() {
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">Triggers</span>
                 <input
+                  data-testid="agent-triggers-input"
                   value={draft.triggers}
                   onChange={(event) => setDraft((current) => ({ ...current, triggers: event.target.value }))}
                   className="w-full rounded-lg border px-3 py-2 text-[13px] outline-none"
@@ -365,6 +370,7 @@ export function Agents() {
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-bobby-faint">System prompt</span>
                 <textarea
+                  data-testid="agent-system-prompt-input"
                   value={draft.systemPrompt}
                   onChange={(event) => setDraft((current) => ({ ...current, systemPrompt: event.target.value }))}
                   className="min-h-[260px] w-full resize-y rounded-lg border px-3 py-2 text-[13px] leading-6 outline-none"
@@ -386,6 +392,7 @@ export function Agents() {
                   <h4 className="text-[13px] font-semibold text-bobby-ink">Dispatch task</h4>
                 </div>
                 <textarea
+                  data-testid="agent-task-input"
                   value={task}
                   onChange={(event) => setTask(event.target.value)}
                   className="min-h-[120px] w-full resize-y rounded-lg border px-3 py-2 text-[13px] leading-6 outline-none"

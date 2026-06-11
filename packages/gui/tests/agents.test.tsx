@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Agents } from '../src/screens/Agents';
 
 beforeEach(() => {
@@ -74,5 +74,32 @@ describe('Agents screen', () => {
     expect(screen.getByText('worktree: C:\\temp\\worktree')).toBeTruthy();
     expect(screen.getByText('proposal: E:\\ai-files\\Bobby\\.bobby\\proposals\\proposal-1.patch')).toBeTruthy();
     expect(screen.getByText('Ready to apply')).toBeTruthy();
+  });
+
+  it('saves a new agent and dispatches it as a worktree-backed task', async () => {
+    render(<Agents />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'New agent' })[0]);
+    fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Inspector' } });
+    fireEvent.change(screen.getByTestId('agent-description-input'), { target: { value: 'Inspects files' } });
+    fireEvent.change(screen.getByTestId('agent-system-prompt-input'), { target: { value: 'Inspect:\n{{input}}' } });
+    fireEvent.change(screen.getByTestId('agent-task-input'), { target: { value: 'Review hello.txt' } });
+    fireEvent.click(screen.getByText('Dispatch'));
+
+    await vi.waitFor(() => {
+      expect((window as any).bobby.upsertSubAgent).toHaveBeenCalledWith({
+        sourcePath: undefined,
+        name: 'Inspector',
+        description: 'Inspects files',
+        model: undefined,
+        tools: [],
+        triggers: [],
+        systemPrompt: 'Inspect:\n{{input}}'
+      });
+      expect((window as any).bobby.dispatchSubAgent).toHaveBeenCalledWith({
+        sourcePath: 'E:\\ai-files\\Bobby\\.bobby\\agents\\writer.md',
+        task: 'Review hello.txt'
+      });
+    });
   });
 });
