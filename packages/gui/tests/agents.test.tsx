@@ -71,5 +71,8 @@ describe('Agents screen', () => {
     expect(await screen.findByText('Writes patch proposals')).toBeTruthy();
     expect(screen.getByText('Dispatch task')).toBeTruthy();
     expect(screen.getByText('Recent dispatches')).toBeTruthy();
+    expect(screen.getByText('worktree: C:\\temp\\worktree')).toBeTruthy();
+    expect(screen.getByText('proposal: E:\\ai-files\\Bobby\\.bobby\\proposals\\proposal-1.patch')).toBeTruthy();
+    expect(screen.getByText('Ready to apply')).toBeTruthy();
   });
 });

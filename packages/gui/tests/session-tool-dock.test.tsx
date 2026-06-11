@@ -20,6 +20,22 @@ function installBobby() {
     }),
     openQuickstart: vi.fn().mockResolvedValue(undefined),
     listProposals: vi.fn().mockResolvedValue([]),
+    listSubAgentDispatches: vi.fn().mockResolvedValue([
+      {
+        id: 'dispatch-1',
+        agentSourcePath: 'E:\\ai-files\\Bobby\\.bobby\\agents\\writer.md',
+        agentName: 'Writer',
+        task: 'Update the notes file',
+        status: 'completed',
+        mergeState: 'ready',
+        createdAt: '2026-06-11T00:02:00.000Z',
+        updatedAt: '2026-06-11T00:03:00.000Z',
+        worktreePath: 'C:\\temp\\worktree',
+        proposalId: 'proposal-1',
+        proposalPath: 'E:\\ai-files\\Bobby\\.bobby\\proposals\\proposal-1.patch',
+        error: null
+      }
+    ]),
     listSnapshots: vi.fn().mockResolvedValue([
       {
         id: 'snap-1',
@@ -156,6 +172,16 @@ describe('SessionToolDock', () => {
     fireEvent.click(screen.getByTitle(/Diff/));
     expect(await screen.findByText('#1 snap-1')).toBeTruthy();
     expect(screen.queryByText('snap-2')).toBeNull();
+  });
+
+  it('shows recent background dispatches in the tasks panel', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Background Tasks/));
+    expect(await screen.findByText('Writer')).toBeTruthy();
+    expect(screen.getByText('worktree: C:\\temp\\worktree')).toBeTruthy();
+    expect(screen.getByText('proposal: E:\\ai-files\\Bobby\\.bobby\\proposals\\proposal-1.patch')).toBeTruthy();
+    expect(screen.getByText('Ready')).toBeTruthy();
   });
 
   it('loads workspace files from disk and previews the selected file', async () => {

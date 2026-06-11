@@ -82,4 +82,26 @@ describe('PluginMarketplace', () => {
       expect((window as any).bobby.removeMcpServer).toHaveBeenCalled();
     });
   });
+
+  it('renders MCP health and tool permissions from backend records', async () => {
+    (window as any).bobby.listMcpServers = vi.fn().mockResolvedValue([
+      makeServer({ health: 'disabled', enabled: false, lastError: null }),
+      makeServer({
+        id: 'remote',
+        name: 'Remote MCP',
+        transport: { kind: 'url', url: 'http://localhost:3010/mcp' },
+        tools: [
+          { name: 'read_remote', permissionTier: 'L2', description: 'Read remote file', evidenceType: 'command_output' }
+        ],
+        health: 'healthy'
+      })
+    ]);
+
+    render(<PluginMarketplace />);
+
+    expect(await screen.findByText('Disabled')).toBeTruthy();
+    expect(await screen.findByText('Healthy')).toBeTruthy();
+    expect(screen.getByText(/read_remote/)).toBeTruthy();
+    expect(screen.getAllByText(/L2/).some((element) => element.textContent?.includes('read_remote'))).toBe(true);
+  });
 });
