@@ -717,6 +717,72 @@ describe('session IPC handlers', () => {
     expect(existsSync(join(tempHome, 'sessions', 'old-copy.json'))).toBe(false);
     expect(existsSync(join(tempHome, 'sessions', 'new-copy.json'))).toBe(true);
   });
+
+  it('links saved sessions back to task detail sessionIds after restart', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'bobby-session-task-'));
+    mkdirSync(join(projectRoot, '.bobby', 'traces'), { recursive: true });
+    writeFileSync(
+      join(projectRoot, '.bobby', 'traces', 'session-task-1.jsonl'),
+      [
+        JSON.stringify({
+          taskId: 'session-task-1',
+          type: 'intent_proposed',
+          contract: {
+            goal: 'Session-backed task',
+            acceptanceCriteria: [{ id: 'AC1', desc: 'Keep the session attached', oracleHint: 'file' }],
+            constraints: [],
+            inputs: [],
+            outOfScope: []
+          }
+        }),
+        JSON.stringify({
+          taskId: 'session-task-1',
+          type: 'plan_ready',
+          steps: [{ id: 'S1', desc: 'Keep the session attached', satisfiesAcIds: ['AC1'], dependsOn: [] }]
+        }),
+        JSON.stringify({
+          taskId: 'session-task-1',
+          type: 'final_result',
+          status: 'done'
+        })
+      ].join('\n'),
+      'utf8'
+    );
+
+    await loadMain([], projectRoot);
+    const selectProject = handlers.get('project:select');
+    const save = handlers.get('sessions:save');
+    const readTask = handlers.get('tasks:read');
+    if (!selectProject || !save || !readTask) throw new Error('session/task handlers not registered');
+
+    await selectProject(undefined, { projectDir: projectRoot });
+    await save(undefined, {
+      id: 'session-1',
+      title: 'Session-backed task',
+      blocks: [{ kind: 'user', id: 'user-1', text: 'Keep the session attached' }],
+      createdAt: '2026-06-11T00:00:00.000Z',
+      updatedAt: '2026-06-11T01:00:00.000Z',
+      projectDir: projectRoot,
+      taskId: 'session-task-1',
+      status: 'done',
+      liveReasoning: '',
+      liveAssistant: '',
+      liveToolContent: '',
+      currentPlan: [],
+      error: null,
+      costUsd: 0,
+      spendUsd: 0,
+      model: null
+    } satisfies SessionRecordDto);
+
+    const detail = await readTask(undefined, { taskId: 'session-task-1' }) as {
+      sessionIds: string[];
+      summary: { taskId: string };
+    };
+
+    expect(detail.summary.taskId).toBe('session-task-1');
+    expect(detail.sessionIds).toEqual(['session-1']);
+  });
 });
 
 describe('project IPC handlers', () => {
