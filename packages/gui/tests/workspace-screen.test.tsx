@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import type { Evidence, KernelEvent } from '@bobby/shared';
 import { useChatStore } from '../src/store/chat-store';
@@ -326,6 +326,41 @@ describe('workspace UI smoke', () => {
 
     expect(input.value).toContain('![drop.png](C:\\temp\\drop.png)');
     expect(screen.getByText(/Vision is not enabled in this build/)).toBeTruthy();
+  });
+
+  it('shows the vision-capable notice when the capability report says vision is available', async () => {
+    const client = makeKernelClientMock() as KernelClientMock & { getCapabilityReport: ReturnType<typeof vi.fn> };
+    let resolveCapabilityReport!: (value: Parameters<NonNullable<typeof client.getCapabilityReport>>[0]) => void;
+    client.getCapabilityReport = vi.fn().mockImplementation(() => new Promise((resolve) => {
+      resolveCapabilityReport = resolve;
+    }));
+
+    render(<Workspace kernelClient={client} />);
+
+    await act(async () => {
+      resolveCapabilityReport({
+        runnerModel: 'deepseek-v4-flash',
+        graderModel: 'deepseek-v4-pro',
+        useToolCalling: true,
+        useJsonMode: true,
+        useFim: true,
+        useCaching: true,
+        useReasoning: true,
+        useVision: true,
+        useStreaming: true,
+        contextWindow: 1_000_000
+      });
+      await Promise.resolve();
+    });
+
+    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const image = new File(['image-bytes'], 'vision.png', { type: 'image/png' }) as File & { path?: string };
+    Object.defineProperty(image, 'path', { value: 'C:\\temp\\vision.png' });
+
+    fireEvent.paste(input, { clipboardData: { files: [image] } });
+
+    expect(input.value).toContain('![vision.png](C:\\temp\\vision.png)');
+    expect(await screen.findByText(/Vision capability is available/)).toBeTruthy();
   });
 
   it('refreshes custom slash commands after the command registry changes', async () => {
