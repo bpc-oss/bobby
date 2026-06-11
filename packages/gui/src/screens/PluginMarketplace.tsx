@@ -104,7 +104,10 @@ export function PluginMarketplace(): JSX.Element {
   const [toolLines, setToolLines] = React.useState(defaultToolLines);
 
   const reload = React.useCallback(async () => {
-    if (!kernelClient?.listMcpServers) return;
+    if (!kernelClient?.listMcpServers) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
