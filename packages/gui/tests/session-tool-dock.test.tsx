@@ -174,6 +174,36 @@ describe('SessionToolDock', () => {
     expect(screen.queryByText('snap-2')).toBeNull();
   });
 
+  it('orders checkpoint timeline from oldest to newest', async () => {
+    (window as any).bobby.listSnapshots = vi.fn().mockResolvedValue([
+      {
+        id: 'snap-2',
+        createdAt: '2026-06-11T00:01:00.000Z',
+        copied: [{ path: 'src/utils.ts', bytes: 24 }],
+        skipped: [],
+        snapshotDir: 'E:\\ai-files\\Bobby\\.bobby\\snapshots\\snap-2',
+        taskId: 'task-1',
+        stepId: 'step-9'
+      },
+      {
+        id: 'snap-1',
+        createdAt: '2026-06-11T00:00:00.000Z',
+        copied: [{ path: 'src/index.ts', bytes: 42 }],
+        skipped: [],
+        snapshotDir: 'E:\\ai-files\\Bobby\\.bobby\\snapshots\\snap-1',
+        taskId: 'task-1',
+        stepId: 'step-1'
+      }
+    ]);
+    useChatStore.setState((state) => ({ ...state, currentTaskId: null }));
+
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Diff/));
+    expect(await screen.findByText('#1 snap-1')).toBeTruthy();
+    expect(screen.getByText('#2 snap-2')).toBeTruthy();
+  });
+
   it('shows recent background dispatches in the tasks panel', async () => {
     render(<SessionToolDock />);
 
