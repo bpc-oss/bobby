@@ -26,7 +26,40 @@ function installBobby() {
       copied: [{ path: 'src/index.ts', bytes: 42 }],
       skipped: [],
       snapshotDir: 'E:\\ai-files\\Bobby\\.bobby\\snapshots\\snap-1'
-    }])
+    }]),
+    listWorkspaceTree: vi.fn().mockResolvedValue([{
+      name: 'src',
+      path: 'src',
+      kind: 'directory',
+      children: [
+        { name: 'index.ts', path: 'src/index.ts', kind: 'file', size: 12 },
+        { name: 'utils.ts', path: 'src/utils.ts', kind: 'file', size: 24 }
+      ]
+    }]),
+    readWorkspaceFile: vi.fn().mockImplementation(async (path: string) => ({
+      path,
+      content: path === 'src/utils.ts' ? 'export const answer = 42;\n' : 'export const entry = true;\n'
+    })),
+    runTerminalCommand: vi.fn().mockResolvedValue({
+      evidence: [
+        {
+          claimId: 'c-terminal',
+          acId: 'terminal',
+          evidenceType: 'command_output',
+          payload: {
+            cmd: 'pnpm test',
+            args: [],
+            exitCode: 0,
+            stdout: 'ok\n',
+            stderr: '',
+            signal: null,
+            timedOut: false
+          },
+          producedBy: 'tool'
+        }
+      ],
+      result: { exitCode: 0 }
+    })
   };
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 }
@@ -94,5 +127,33 @@ describe('SessionToolDock', () => {
     const send = (window as any).bobby.send as ReturnType<typeof vi.fn>;
     expect(window.confirm).toHaveBeenCalledWith('Restore checkpoint snap-1?');
     expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot', snapshotId: 'snap-1' });
+  });
+
+  it('loads workspace files from disk and previews the selected file', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Files/));
+    expect(await screen.findByText('export const entry = true;')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('utils.ts'));
+    expect(await screen.findByText('export const answer = 42;')).toBeTruthy();
+
+    const readWorkspaceFile = (window as any).bobby.readWorkspaceFile as ReturnType<typeof vi.fn>;
+    expect(readWorkspaceFile).toHaveBeenCalledWith('src/utils.ts');
+  });
+
+  it('runs real terminal commands through IPC and shows the output', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Terminal/));
+    const input = screen.getByPlaceholderText(/pnpm test/i);
+    fireEvent.change(input, { target: { value: 'pnpm test' } });
+    fireEvent.click(screen.getByText('Run'));
+
+    const runTerminalCommand = (window as any).bobby.runTerminalCommand as ReturnType<typeof vi.fn>;
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('pnpm test'));
+    expect(runTerminalCommand).toHaveBeenCalledWith({ command: 'pnpm test' });
+    expect(await screen.findByText('exit 0')).toBeTruthy();
+    expect(screen.getByText('ok')).toBeTruthy();
   });
 });
