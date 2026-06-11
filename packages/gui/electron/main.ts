@@ -21,6 +21,7 @@ import {
   ToolRegistry,
   VerificationEngine,
   Workspace,
+  type CapabilityReport,
   WriteFileTool
 } from '@bobby/kernel';
 import type { KernelEvent } from '@bobby/shared';
@@ -961,6 +962,31 @@ function getSetupStatus(): OnboardingStatus {
   };
 }
 
+function getCapabilityReport(): CapabilityReport | null {
+  const paths = resolveSetupPaths();
+  if (!existsSync(paths.capabilitiesPath)) {
+    return null;
+  }
+
+  try {
+    const raw = JSON.parse(readFileSync(paths.capabilitiesPath, 'utf8')) as Partial<CapabilityReport>;
+    return {
+      runnerModel: String(raw.runnerModel ?? '').trim(),
+      graderModel: String(raw.graderModel ?? '').trim(),
+      useToolCalling: Boolean(raw.useToolCalling),
+      useJsonMode: Boolean(raw.useJsonMode),
+      useFim: Boolean(raw.useFim),
+      useCaching: Boolean(raw.useCaching),
+      useReasoning: Boolean(raw.useReasoning),
+      useVision: Boolean(raw.useVision),
+      useStreaming: Boolean(raw.useStreaming),
+      contextWindow: Number(raw.contextWindow ?? 0)
+    };
+  } catch {
+    return null;
+  }
+}
+
 const notifySystem = (message: string) => {
   if (Notification.isSupported()) {
     new Notification({ title: 'Bobby', body: message }).show();
@@ -1130,6 +1156,8 @@ ipcMain.handle('project:select', async (_event, input) => {
 ipcMain.handle('settings:get', async () => readPublicSettings());
 
 ipcMain.handle('settings:set', async (_event, input) => writePublicSettings(input));
+
+ipcMain.handle('deepseek:capabilities', async () => getCapabilityReport());
 
 ipcMain.handle('sessions:list', async () => readSessions());
 

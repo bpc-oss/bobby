@@ -4,6 +4,7 @@ import type { KernelCommand, KernelEvent } from '@bobby/shared';
 import type {
   AppSettings,
   AppSettingsUpdate,
+  CapabilityReport,
   AutomationCreateInput,
   AutomationRemoveInput,
   AutomationRecord,
@@ -52,6 +53,7 @@ declare global {
       selectProject?: (projectDir: string) => Promise<ProjectSelectResult>;
       getCurrentProject?: () => Promise<ProjectMeta | null>;
       getSettings?: () => Promise<AppSettings>;
+      getCapabilityReport?: () => Promise<CapabilityReport | null>;
       setSettings?: (settings: AppSettingsUpdate) => Promise<AppSettings>;
       listSessions?: () => Promise<SessionRecordDto[]>;
       readSession?: (sessionId: string) => Promise<SessionRecordDto | null>;

@@ -5,6 +5,7 @@ import type { KernelCommand, KernelEvent } from '@bobby/shared';
 import type {
   AppSettings,
   AppSettingsUpdate,
+  CapabilityReport,
   AutomationCreateInput,
   AutomationRemoveInput,
   AutomationRecord,
@@ -69,6 +70,7 @@ contextBridge.exposeInMainWorld('bobby', {
   selectProject: (projectDir: string) => ipcRenderer.invoke('project:select', { projectDir }) as Promise<ProjectSelectResult>,
   getCurrentProject: () => ipcRenderer.invoke('project:getCurrent') as Promise<ProjectMeta | null>,
   getSettings: () => ipcRenderer.invoke('settings:get') as Promise<AppSettings>,
+  getCapabilityReport: () => ipcRenderer.invoke('deepseek:capabilities') as Promise<CapabilityReport | null>,
   setSettings: (settings: AppSettingsUpdate) => ipcRenderer.invoke('settings:set', settings) as Promise<AppSettings>,
   listSessions: () => ipcRenderer.invoke('sessions:list') as Promise<SessionRecordDto[]>,
   readSession: (sessionId: string) => ipcRenderer.invoke('sessions:read', { sessionId }) as Promise<SessionRecordDto | null>,

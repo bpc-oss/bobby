@@ -3,13 +3,14 @@ import type { KernelEvent } from '@bobby/shared';
 import { ChevronDown, ChevronUp, GitBranch, Lightbulb, Route, Search, Send, ShieldCheck, Square } from 'lucide-react';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { useChatStore, type ChatBlock } from '../store/chat-store';
-import type { CommandRecordDto, SessionMode } from '../ipc/contract';
+import type { CapabilityReport, CommandRecordDto, SessionMode } from '../ipc/contract';
 
 type WorkspaceProps = {
   kernelClient?: {
     startTask: (input: string, mode?: SessionMode) => Promise<unknown>;
     approveGate?: (gateId: string, decision: string) => Promise<unknown>;
     restoreSnapshot?: (snapshotId?: string) => Promise<unknown>;
+    getCapabilityReport?: () => Promise<CapabilityReport | null>;
     searchFiles?: (query: string) => Promise<Array<{ path: string; preview?: string | null }>>;
     listCommands?: () => Promise<CommandRecordDto[]>;
     onEvent: (callback: (event: KernelEvent) => void) => () => void;
@@ -263,6 +264,7 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
   const [menuEnd, setMenuEnd] = useState(0);
   const [menuIndex, setMenuIndex] = useState(0);
   const [notice, setNotice] = useState('');
+  const [visionSupported, setVisionSupported] = useState<boolean | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -297,6 +299,29 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
       active = false;
     };
   }, [kernelClient, refreshCustomCommands]);
+
+  useEffect(() => {
+    let active = true;
+    const getCapabilityReport = kernelClient?.getCapabilityReport;
+    if (!getCapabilityReport) return;
+
+    void (async () => {
+      try {
+        const report = await getCapabilityReport();
+        if (active) {
+          setVisionSupported(report?.useVision ?? false);
+        }
+      } catch {
+        if (active) {
+          setVisionSupported(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [kernelClient]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -586,13 +611,17 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     }
 
     event.preventDefault();
-    setNotice('Vision is not enabled in this build, so Bobby inserted a local file path reference instead.');
+    setNotice(
+      visionSupported
+        ? 'Vision capability is available, but Bobby still inserts a local file path reference in this build.'
+        : 'Vision is not enabled in this build, so Bobby inserted a local file path reference instead.'
+    );
     const insertion = `![${image.name}](${path})`;
     const cursor = ref.current?.selectionStart ?? input.length;
     const nextValue = `${input.slice(0, cursor)}${insertion}${input.slice(ref.current?.selectionEnd ?? cursor)}`;
     setInput(nextValue);
     pendingSelection.current = { start: cursor + insertion.length, end: cursor + insertion.length };
-  }, [input]);
+  }, [input, visionSupported]);
 
   const onDrop = useCallback((event: React.DragEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.dataTransfer.files ?? []);
@@ -606,13 +635,17 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     }
 
     event.preventDefault();
-    setNotice('Vision is not enabled in this build, so Bobby inserted a local file path reference instead.');
+    setNotice(
+      visionSupported
+        ? 'Vision capability is available, but Bobby still inserts a local file path reference in this build.'
+        : 'Vision is not enabled in this build, so Bobby inserted a local file path reference instead.'
+    );
     const insertion = `![${image.name}](${path})`;
     const cursor = ref.current?.selectionStart ?? input.length;
     const nextValue = `${input.slice(0, cursor)}${insertion}${input.slice(ref.current?.selectionEnd ?? cursor)}`;
     setInput(nextValue);
     pendingSelection.current = { start: cursor + insertion.length, end: cursor + insertion.length };
-  }, [input]);
+  }, [input, visionSupported]);
 
   return (
     <div style={{ background: 'var(--bobby-bg-canvas)' }}>

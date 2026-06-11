@@ -9,6 +9,7 @@ export interface ProbeRaw {
   fim: boolean;
   promptCaching: boolean;
   reasoningToggle: boolean;
+  visionToggle: boolean;
   streaming?: boolean;
   contextWindow: number;
 }
@@ -21,6 +22,7 @@ export interface CapabilityReport {
   useFim: boolean;
   useCaching: boolean;
   useReasoning: boolean;
+  useVision: boolean;
   useStreaming: boolean;
   contextWindow: number;
 }
@@ -42,6 +44,7 @@ export function defaultDeepSeekProbeRaw(): ProbeRaw {
     fim: false,
     promptCaching: true,
     reasoningToggle: true,
+    visionToggle: false,
     streaming: false,
     contextWindow: 1_000_000
   };
@@ -63,6 +66,7 @@ export function buildCapabilityReport(raw: ProbeRaw): CapabilityReport {
     useFim: raw.fim,
     useCaching: raw.promptCaching,
     useReasoning: raw.reasoningToggle,
+    useVision: raw.visionToggle,
     useStreaming: raw.streaming === true,
     contextWindow: raw.contextWindow
   };

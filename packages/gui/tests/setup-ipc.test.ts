@@ -369,6 +369,48 @@ describe('settings IPC handlers', () => {
   });
 });
 
+describe('deepseek capability IPC handlers', () => {
+  beforeEach(() => {
+    handlers.clear();
+  });
+
+  it('reads the probe report without exposing key material', async () => {
+    await loadMain();
+    mkdirSync(join(tempHome, '.bobby'), { recursive: true });
+    writeFileSync(
+      join(tempHome, '.bobby', 'capabilities.json'),
+      JSON.stringify({
+        runnerModel: 'deepseek-v4-flash',
+        graderModel: 'deepseek-v4-pro',
+        useToolCalling: true,
+        useJsonMode: true,
+        useFim: false,
+        useCaching: true,
+        useReasoning: true,
+        useVision: false,
+        useStreaming: true,
+        contextWindow: 128000
+      }, null, 2),
+      'utf8'
+    );
+    const getCapabilities = handlers.get('deepseek:capabilities');
+    if (!getCapabilities) throw new Error('deepseek capability handler not registered');
+
+    const report = await getCapabilities() as {
+      runnerModel: string;
+      graderModel: string;
+      useVision: boolean;
+    };
+
+    expect(report).toMatchObject({
+      runnerModel: 'deepseek-v4-flash',
+      graderModel: 'deepseek-v4-pro',
+      useVision: false
+    });
+    expect(JSON.stringify(report)).not.toContain('sk-real-secret');
+  });
+});
+
 describe('mcp IPC handlers', () => {
   beforeEach(() => {
     handlers.clear();

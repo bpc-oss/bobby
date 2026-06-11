@@ -88,6 +88,20 @@ export const AppSettingsUpdateSchema = AppSettingsSchema.omit({ hasApiKey: true 
 });
 export type AppSettingsUpdate = z.infer<typeof AppSettingsUpdateSchema>;
 
+export const CapabilityReportSchema = z.object({
+  runnerModel: z.string().min(1),
+  graderModel: z.string().min(1),
+  useToolCalling: z.boolean(),
+  useJsonMode: z.boolean(),
+  useFim: z.boolean(),
+  useCaching: z.boolean(),
+  useReasoning: z.boolean(),
+  useVision: z.boolean(),
+  useStreaming: z.boolean(),
+  contextWindow: z.number().int().positive()
+});
+export type CapabilityReport = z.infer<typeof CapabilityReportSchema>;
+
 export const PlanStepRecordSchema = z.object({
   id: z.string(),
   desc: z.string(),
@@ -355,6 +369,7 @@ export function makeKernelClient() {
     selectProject: (projectDir: string) => window.bobby.selectProject!(projectDir),
     getCurrentProject: () => window.bobby.getCurrentProject!(),
     getSettings: () => window.bobby.getSettings!(),
+    getCapabilityReport: () => window.bobby.getCapabilityReport?.() ?? Promise.resolve(null),
     setSettings: (settings: AppSettingsUpdate) => window.bobby.setSettings!(settings),
     listSessions: () => window.bobby.listSessions!(),
     readSession: (sessionId: string) => window.bobby.readSession!(sessionId),

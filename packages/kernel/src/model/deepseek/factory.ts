@@ -53,6 +53,7 @@ function parseCapabilities(raw: unknown): CapabilityReport {
     useFim: candidate.useFim!,
     useCaching: candidate.useCaching!,
     useReasoning: candidate.useReasoning!,
+    useVision: isBoolean(candidate.useVision) ? candidate.useVision : false,
     useStreaming: isBoolean(candidate.useStreaming) ? candidate.useStreaming : false,
     contextWindow: candidate.contextWindow!
   };

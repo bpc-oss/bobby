@@ -20,6 +20,7 @@ it('builds report from default DeepSeek V4 probe raw', () => {
     useFim: false,
     useCaching: true,
     useReasoning: true,
+    useVision: false,
     useStreaming: false,
     contextWindow: 1_000_000
   });
@@ -51,6 +52,7 @@ it('writes capability report to ~/.bobby/capabilities.json with pretty JSON and 
     useFim: false,
     useCaching: true,
     useReasoning: true,
+    useVision: false,
     useStreaming: false,
     contextWindow: 1_000_000
   });
@@ -67,6 +69,7 @@ it('buildCapabilityReport: uses flash and pro models when present and maps speci
     fim: false,
     promptCaching: true,
     reasoningToggle: true,
+    visionToggle: true,
     streaming: true,
     contextWindow: 1024
   };
@@ -81,6 +84,7 @@ it('buildCapabilityReport: uses flash and pro models when present and maps speci
     useFim: false,
     useCaching: true,
     useReasoning: true,
+    useVision: true,
     useStreaming: true,
     contextWindow: 1024
   });
@@ -94,6 +98,7 @@ it('buildCapabilityReport: falls back by index when flash/pro are not present', 
     fim: true,
     promptCaching: false,
     reasoningToggle: false,
+    visionToggle: false,
     streaming: false,
     contextWindow: 2048
   };
@@ -108,6 +113,7 @@ it('buildCapabilityReport: falls back by index when flash/pro are not present', 
     useFim: true,
     useCaching: false,
     useReasoning: false,
+    useVision: false,
     useStreaming: false,
     contextWindow: 2048
   });
@@ -121,6 +127,7 @@ it('buildCapabilityReport: uses single model for both runner and grader when onl
     fim: false,
     promptCaching: false,
     reasoningToggle: false,
+    visionToggle: false,
     contextWindow: 512
   };
 
@@ -138,6 +145,7 @@ it('buildCapabilityReport: propagates all boolean capability flags from raw', ()
     fim: true,
     promptCaching: true,
     reasoningToggle: false,
+    visionToggle: false,
     contextWindow: 32000
   };
 
@@ -148,6 +156,7 @@ it('buildCapabilityReport: propagates all boolean capability flags from raw', ()
   expect(report.useFim).toBe(true);
   expect(report.useCaching).toBe(true);
   expect(report.useReasoning).toBe(false);
+  expect(report.useVision).toBe(false);
   expect(report.useStreaming).toBe(false);
 });
 
@@ -159,6 +168,7 @@ it('buildCapabilityReport: throws clear error when no models are available', () 
     fim: true,
     promptCaching: false,
     reasoningToggle: true,
+    visionToggle: false,
     contextWindow: 8192
   };
 
@@ -173,6 +183,7 @@ it('buildCapabilityReport: passes through contextWindow directly', () => {
     fim: false,
     promptCaching: false,
     reasoningToggle: false,
+    visionToggle: false,
     contextWindow: 65536
   };
 
