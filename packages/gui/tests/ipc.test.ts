@@ -27,6 +27,9 @@ type WindowWithBobby = Window & typeof globalThis & {
     removeSubAgent: (input: unknown) => Promise<boolean>;
     dispatchSubAgent: (input: unknown) => Promise<unknown>;
     listSubAgentDispatches: () => Promise<unknown[]>;
+    listCommands: () => Promise<unknown[]>;
+    upsertCommand: (input: unknown) => Promise<unknown>;
+    removeCommand: (input: unknown) => Promise<boolean>;
     listAutomations: () => Promise<unknown[]>;
     createAutomation: (input: unknown) => Promise<unknown>;
     updateAutomation: (input: unknown) => Promise<unknown>;
@@ -60,6 +63,9 @@ function installBobby(send = vi.fn().mockResolvedValue(undefined), onEvent = vi.
     removeSubAgent: vi.fn().mockResolvedValue(true),
     dispatchSubAgent: vi.fn().mockResolvedValue(undefined),
     listSubAgentDispatches: vi.fn().mockResolvedValue([]),
+    listCommands: vi.fn().mockResolvedValue([]),
+    upsertCommand: vi.fn().mockResolvedValue(undefined),
+    removeCommand: vi.fn().mockResolvedValue(true),
     listAutomations: vi.fn().mockResolvedValue([]),
     createAutomation: vi.fn().mockResolvedValue(undefined),
     updateAutomation: vi.fn().mockResolvedValue(undefined),
@@ -147,6 +153,9 @@ async function expectSetupMethodsToBeExposed(): Promise<void> {
     removeSubAgent: vi.fn().mockResolvedValue(true),
     dispatchSubAgent: vi.fn().mockResolvedValue(undefined),
     listSubAgentDispatches: vi.fn().mockResolvedValue([]),
+    listCommands: vi.fn().mockResolvedValue([]),
+    upsertCommand: vi.fn().mockResolvedValue(undefined),
+    removeCommand: vi.fn().mockResolvedValue(true),
     listAutomations: vi.fn().mockResolvedValue([]),
     createAutomation: vi.fn().mockResolvedValue(undefined),
     updateAutomation: vi.fn().mockResolvedValue(undefined),
@@ -227,6 +236,30 @@ async function expectSubAgentMethodsToDispatchCommands(): Promise<void> {
   expect(host.bobby.listSubAgentDispatches).toHaveBeenCalledTimes(1);
 }
 
+async function expectCommandMethodsToDispatchCommands(): Promise<void> {
+  installBobby();
+
+  const client = makeKernelClient();
+  await client.listCommands();
+  await client.upsertCommand({
+    sourcePath: 'E:\\ai-files\\Bobby\\.bobby\\commands\\summarize.md',
+    name: 'summarize',
+    description: 'Summarize the current task',
+    promptTemplate: 'Summarize: {{input}}'
+  });
+  await client.removeCommand({ sourcePath: 'E:\\ai-files\\Bobby\\.bobby\\commands\\summarize.md' });
+
+  const host = window as WindowWithBobby;
+  expect(host.bobby.listCommands).toHaveBeenCalledTimes(1);
+  expect(host.bobby.upsertCommand).toHaveBeenCalledWith({
+    sourcePath: 'E:\\ai-files\\Bobby\\.bobby\\commands\\summarize.md',
+    name: 'summarize',
+    description: 'Summarize the current task',
+    promptTemplate: 'Summarize: {{input}}'
+  });
+  expect(host.bobby.removeCommand).toHaveBeenCalledWith({ sourcePath: 'E:\\ai-files\\Bobby\\.bobby\\commands\\summarize.md' });
+}
+
 describe('makeKernelClient IPC contract', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -237,6 +270,7 @@ describe('makeKernelClient IPC contract', () => {
   it('approveGate should dispatch always decision command', expectAlwaysDecisionToDispatchCommand);
   it('mcp methods should dispatch commands', expectMcpMethodsToDispatchCommands);
   it('agent methods should dispatch commands', expectSubAgentMethodsToDispatchCommands);
+  it('command methods should dispatch commands', expectCommandMethodsToDispatchCommands);
   it('onEvent should subscribe and return unsubscribe', expectOnEventToSubscribeAndReturnUnsubscribe);
   it('setup methods should delegate to window.bobby', expectSetupMethodsToBeExposed);
 });

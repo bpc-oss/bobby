@@ -34,7 +34,10 @@ import type {
   WorkspaceFileSearchEntry,
   SessionRecordDto,
   TaskDetail,
-  TaskSummary
+  TaskSummary,
+  CommandRecordDto,
+  CommandRemoveInput,
+  CommandUpsertInput
 } from '../src/ipc/contract';
 
 contextBridge.exposeInMainWorld('bobby', {
@@ -74,6 +77,9 @@ contextBridge.exposeInMainWorld('bobby', {
   readTask: (taskId: string) => ipcRenderer.invoke('tasks:read', { taskId }) as Promise<TaskDetail | null>,
   listProposals: () => ipcRenderer.invoke('proposals:list') as Promise<ProposalSummary[]>,
   readProposal: (proposalId: string) => ipcRenderer.invoke('proposals:read', { proposalId }) as Promise<ProposalSummary | null>,
+  listCommands: () => ipcRenderer.invoke('commands:list') as Promise<CommandRecordDto[]>,
+  upsertCommand: (input: CommandUpsertInput) => ipcRenderer.invoke('commands:upsert', input) as Promise<CommandRecordDto>,
+  removeCommand: (input: CommandRemoveInput) => ipcRenderer.invoke('commands:remove', input) as Promise<boolean>,
   listSnapshots: () => ipcRenderer.invoke('snapshots:list') as Promise<SnapshotListEntry[]>,
   searchFiles: (query: string) => ipcRenderer.invoke('workspace:searchFiles', { query }) as Promise<WorkspaceFileSearchEntry[]>,
   listWorkspaceTree: () => ipcRenderer.invoke('workspace:listTree') as Promise<WorkspaceTreeNode[]>,

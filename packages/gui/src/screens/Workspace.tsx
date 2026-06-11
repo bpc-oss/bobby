@@ -3,7 +3,7 @@ import type { KernelEvent } from '@bobby/shared';
 import { ChevronDown, ChevronUp, GitBranch, Lightbulb, Route, Search, Send, ShieldCheck, Square } from 'lucide-react';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { useChatStore, type ChatBlock } from '../store/chat-store';
-import type { SessionMode } from '../ipc/contract';
+import type { CommandRecordDto, SessionMode } from '../ipc/contract';
 
 type WorkspaceProps = {
   kernelClient?: {
@@ -11,6 +11,7 @@ type WorkspaceProps = {
     approveGate?: (gateId: string, decision: string) => Promise<unknown>;
     restoreSnapshot?: (snapshotId?: string) => Promise<unknown>;
     searchFiles?: (query: string) => Promise<Array<{ path: string; preview?: string | null }>>;
+    listCommands?: () => Promise<CommandRecordDto[]>;
     onEvent: (callback: (event: KernelEvent) => void) => () => void;
   };
   theme?: 'light' | 'dark';
@@ -155,6 +156,20 @@ function EvidenceRow({ block }: { block: ChatBlock & { kind: 'evidence' } }) {
   );
 }
 
+function expandCommandTemplate(template: string, input: string): string {
+  const trimmedInput = input.trim();
+  const replaced = template.replace(/\{\{\s*(input|args|text)\s*\}\}/gi, trimmedInput);
+  if (replaced !== template) {
+    return replaced.trim();
+  }
+
+  if (!trimmedInput) {
+    return template.trim();
+  }
+
+  return `${template.trim()}\n\n${trimmedInput}`.trim();
+}
+
 function StatusBanner({ block }: { block: ChatBlock & { kind: 'status' } }) {
   const palette = {
     done: { bg: 'var(--bobby-success-soft)', border: 'var(--bobby-success)', color: 'var(--bobby-success)', label: 'Completed' },
@@ -199,6 +214,7 @@ type ComposerItem = {
 
 function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: string) => void; busy: boolean; onAbort: () => void; kernelClient?: WorkspaceProps['kernelClient'] }) {
   const [input, setInput] = useState('');
+  const [customCommands, setCustomCommands] = useState<CommandRecordDto[]>([]);
   const [menuItems, setMenuItems] = useState<ComposerItem[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMode, setMenuMode] = useState<ComposerMode | null>(null);
@@ -212,7 +228,24 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
   const pendingSelection = useRef<{ start: number; end: number } | null>(null);
   const requestToken = useRef(0);
 
-  const commands = [
+  useEffect(() => {
+    if (!kernelClient?.listCommands) return;
+    let active = true;
+
+    void kernelClient.listCommands()
+      .then((commands) => {
+        if (active) setCustomCommands(commands);
+      })
+      .catch(() => {
+        if (active) setCustomCommands([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [kernelClient]);
+
+  const commands = React.useMemo(() => [
     {
       key: 'plan',
       title: 'plan',
@@ -236,8 +269,14 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
       title: 'cost',
       detail: 'Report current usage',
       run: () => onSend('Report the current task cost, token usage, and any notable spend.')
-    }
-  ] as const;
+    },
+    ...customCommands.map((command) => ({
+      key: command.sourcePath,
+      title: command.name,
+      detail: command.description,
+      run: () => onSend(expandCommandTemplate(command.promptTemplate, ''))
+    }))
+  ], [customCommands, kernelClient?.restoreSnapshot, onSend]);
 
   const applySelection = useCallback((nextValue: string, cursor: number) => {
     setInput(nextValue);
@@ -321,12 +360,29 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     closeMenu();
   }, [closeMenu, commands, kernelClient?.searchFiles, replaceToken]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    if (!input.trim().startsWith('/')) return;
+    openSuggestions(input, input.length);
+  }, [customCommands, input, menuOpen, openSuggestions]);
+
   const processCommand = useCallback((text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
 
     if (trimmed.startsWith('/')) {
       const command = trimmed.split(/\s+/, 1)[0].slice(1).toLowerCase();
+      const customCommand = customCommands.find((item) => item.name.toLowerCase() === command);
+      if (customCommand) {
+        const args = trimmed.slice(command.length + 2).trim();
+        onSend(expandCommandTemplate(customCommand.promptTemplate, args));
+        setInput('');
+        setHistory((current) => [trimmed, ...current.filter((item) => item !== trimmed)].slice(0, 20));
+        setHistoryIndex(-1);
+        closeMenu();
+        ref.current?.focus();
+        return;
+      }
       const store = useChatStore.getState();
       switch (command) {
         case 'clear':
@@ -363,7 +419,7 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     setHistoryIndex(-1);
     closeMenu();
     ref.current?.focus();
-  }, [closeMenu, kernelClient?.restoreSnapshot, onSend]);
+  }, [closeMenu, customCommands, kernelClient?.restoreSnapshot, onSend]);
 
   const send = useCallback(() => processCommand(input), [input, processCommand]);
 

@@ -141,6 +141,24 @@ export const TaskDetailSchema = z.object({
 });
 export type TaskDetail = z.infer<typeof TaskDetailSchema>;
 
+export const CommandRecordSchema = z.object({
+  sourcePath: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().min(1),
+  promptTemplate: z.string().min(1)
+});
+export type CommandRecordDto = z.infer<typeof CommandRecordSchema>;
+
+export const CommandUpsertInputSchema = CommandRecordSchema.omit({ sourcePath: true }).extend({
+  sourcePath: z.string().min(1).optional()
+});
+export type CommandUpsertInput = z.infer<typeof CommandUpsertInputSchema>;
+
+export const CommandRemoveInputSchema = z.object({
+  sourcePath: z.string().min(1)
+});
+export type CommandRemoveInput = z.infer<typeof CommandRemoveInputSchema>;
+
 export const ProposalSummarySchema = z.object({
   proposalId: z.string().min(1),
   proposalPath: z.string().min(1),
@@ -343,6 +361,9 @@ export function makeKernelClient() {
     readTask: (taskId: string) => window.bobby.readTask!(taskId),
     listProposals: () => window.bobby.listProposals!(),
     readProposal: (proposalId: string) => window.bobby.readProposal!(proposalId),
+    listCommands: () => window.bobby.listCommands?.() ?? Promise.resolve([]),
+    upsertCommand: (input: CommandUpsertInput) => window.bobby.upsertCommand!(input),
+    removeCommand: (input: CommandRemoveInput) => window.bobby.removeCommand!(input),
     listSnapshots: () => window.bobby.listSnapshots!(),
     searchFiles: (query: string) => window.bobby.searchFiles!(query),
     listWorkspaceTree: () => window.bobby.listWorkspaceTree!(),

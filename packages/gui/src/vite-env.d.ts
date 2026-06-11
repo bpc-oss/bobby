@@ -33,7 +33,10 @@ import type {
   WorkspaceFileSearchEntry,
   SessionRecordDto,
   TaskDetail,
-  TaskSummary
+  TaskSummary,
+  CommandRecordDto,
+  CommandRemoveInput,
+  CommandUpsertInput
 } from './ipc/contract';
 
 declare global {
@@ -55,6 +58,9 @@ declare global {
       saveSession?: (session: SessionRecordDto) => Promise<SessionRecordDto>;
       listTasks?: () => Promise<TaskSummary[]>;
       readTask?: (taskId: string) => Promise<TaskDetail | null>;
+      listCommands?: () => Promise<CommandRecordDto[]>;
+      upsertCommand?: (input: CommandUpsertInput) => Promise<CommandRecordDto>;
+      removeCommand?: (input: CommandRemoveInput) => Promise<boolean>;
       listProposals?: () => Promise<ProposalSummary[]>;
       readProposal?: (proposalId: string) => Promise<ProposalSummary | null>;
       applyProposal?: (input: ProposalApplyInput) => Promise<ProposalSummary | null>;

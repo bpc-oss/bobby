@@ -15,6 +15,7 @@ type KernelClientMock = {
   approveGate: ReturnType<typeof vi.fn>;
   restoreSnapshot: ReturnType<typeof vi.fn>;
   searchFiles: ReturnType<typeof vi.fn>;
+  listCommands: ReturnType<typeof vi.fn>;
   onEvent: (callback: (event: KernelEvent) => void) => () => void;
 };
 
@@ -28,6 +29,7 @@ function makeKernelClientMock(): KernelClientMock {
     approveGate: vi.fn().mockResolvedValue(undefined),
     restoreSnapshot: vi.fn().mockResolvedValue(undefined),
     searchFiles: vi.fn().mockResolvedValue([]),
+    listCommands: vi.fn().mockResolvedValue([]),
     onEvent: noopOnEvent
   };
 }
@@ -252,6 +254,30 @@ describe('workspace UI smoke', () => {
 
     fireEvent.click(screen.getByTitle(/Side Chat/));
     expect(screen.getByPlaceholderText(/side question/)).toBeTruthy();
+  });
+
+  it('loads custom slash commands into the composer menu and executes template injection', async () => {
+    const client = makeKernelClientMock();
+    client.listCommands.mockResolvedValueOnce([
+      {
+        sourcePath: 'E:\\ai-files\\Bobby\\.bobby\\commands\\summarize.md',
+        name: 'summarize',
+        description: 'Summarize the current task',
+        promptTemplate: 'Summarize this task:\n{{input}}'
+      }
+    ]);
+    render(<Workspace kernelClient={client} />);
+
+    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '/sum' } });
+    expect(await screen.findByText('summarize')).toBeTruthy();
+
+    fireEvent.change(input, { target: { value: '/summarize notes from the build' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await vi.waitFor(() => {
+      expect(client.startTask).toHaveBeenCalledWith('Summarize this task:\nnotes from the build', 'plan-only');
+    });
   });
 
   it('does not create a duplicate session when clicking the current session row', () => {

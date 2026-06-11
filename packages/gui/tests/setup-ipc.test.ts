@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { BrowserWindow } from 'electron';
-import type { AutomationRecord, SessionRecordDto, SnapshotListEntry } from '../src/ipc/contract';
+import type { AutomationRecord, CommandRecordDto, SessionRecordDto, SnapshotListEntry } from '../src/ipc/contract';
 
 const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>();
 let tempHome = '';
@@ -452,6 +452,53 @@ describe('agent IPC handlers', () => {
     expect(records.some((record) => record.proposalId === 'proposal-1' && record.status === 'completed')).toBe(true);
 
     expect(await remove(undefined, { sourcePath: created.sourcePath })).toBe(true);
+  });
+});
+
+describe('command IPC handlers', () => {
+  beforeEach(() => {
+    handlers.clear();
+  });
+
+  it('lists, upserts, and removes command templates in .bobby/commands', async () => {
+    await loadMain();
+    const projectRoot = mkdtempSync(join(tempHome, 'commands-project-'));
+    mkdirSync(join(projectRoot, '.bobby', 'commands'), { recursive: true });
+
+    const selectProject = handlers.get('project:select');
+    const list = handlers.get('commands:list');
+    const upsert = handlers.get('commands:upsert');
+    const remove = handlers.get('commands:remove');
+    if (!selectProject || !list || !upsert || !remove) {
+      throw new Error('command handlers not registered');
+    }
+
+    await selectProject(undefined, { projectDir: projectRoot });
+    writeFileSync(
+      join(projectRoot, '.bobby', 'commands', 'summarize.md'),
+      ['---', 'name: summarize', 'description: Summarize the current task', '---', 'Summarize: {{input}}'].join('\n'),
+      'utf8'
+    );
+
+    const initial = await list() as CommandRecordDto[];
+    expect(initial).toHaveLength(1);
+    expect(initial[0]).toMatchObject({
+      name: 'summarize',
+      description: 'Summarize the current task',
+      promptTemplate: 'Summarize: {{input}}'
+    });
+
+    const created = await upsert(undefined, {
+      name: 'rewrite',
+      description: 'Rewrite text',
+      promptTemplate: 'Rewrite the following:\n{{input}}'
+    }) as CommandRecordDto;
+    expect(created.sourcePath).toContain('.bobby');
+    expect(readFileSync(created.sourcePath, 'utf8')).toContain('Rewrite the following');
+
+    expect(await remove(undefined, { sourcePath: created.sourcePath })).toBe(true);
+    const afterRemove = await list() as CommandRecordDto[];
+    expect(afterRemove.some((item) => item.name === 'rewrite')).toBe(false);
   });
 });
 

@@ -31,6 +31,8 @@ import {
   AutomationRemoveInputSchema,
   AutomationToggleInputSchema,
   AutomationUpdateInputSchema,
+  CommandRemoveInputSchema,
+  CommandUpsertInputSchema,
   ProjectSelectResultSchema,
   ProposalApplyInputSchema,
   ProposalDiscardInputSchema,
@@ -79,6 +81,11 @@ import {
   updateSubAgentDispatchRecord,
   upsertSubAgent
 } from './agents-manager';
+import {
+  listCommands,
+  removeCommand,
+  upsertCommand
+} from './commands-manager';
 import {
   ensureDefaultMcpServers,
   listMcpServers,
@@ -961,6 +968,18 @@ ipcMain.handle('tasks:list', async () => taskIds().map(taskSummary).filter((item
 ipcMain.handle('tasks:read', async (_event, input) => {
   const taskId = typeof input === 'object' && input !== null && 'taskId' in input ? String((input as { taskId?: unknown }).taskId) : '';
   return taskId ? taskDetail(taskId) : null;
+});
+
+ipcMain.handle('commands:list', async () => listCommands(currentWorkspaceRoot()));
+
+ipcMain.handle('commands:upsert', async (_event, input) => {
+  const parsed = CommandUpsertInputSchema.parse(input);
+  return upsertCommand(currentWorkspaceRoot(), parsed);
+});
+
+ipcMain.handle('commands:remove', async (_event, input) => {
+  const parsed = CommandRemoveInputSchema.parse(input);
+  return removeCommand(currentWorkspaceRoot(), parsed);
 });
 
 ipcMain.handle('proposals:list', async () => listProposals());
