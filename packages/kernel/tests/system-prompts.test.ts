@@ -11,6 +11,7 @@ import {
   GRADER_SYSTEM_PROMPT,
   RUNNER_SYSTEM_PROMPT,
   getRunnerSystemPrompt,
+  getRunnerSystemPromptWithTools,
 } from '../src/brain/system-prompts';
 import { captureIntent } from '../src/brain/intent';
 import { executeStep } from '../src/brain/executor';
@@ -104,6 +105,16 @@ it('runner assembled prompt includes Flash coding rules', () => {
   expect(RUNNER_SYSTEM_PROMPT).toContain('JSON');
   expect(RUNNER_SYSTEM_PROMPT).toContain('\u8bc1\u636e');
   expect(RUNNER_SYSTEM_PROMPT).toContain('done/completed/verified');
+});
+
+it('runner prompt can append available tool catalog entries', () => {
+  const prompt = getRunnerSystemPromptWithTools('win32', [
+    { name: 'mcp:filesystem-demo:read_file', permissionTier: 'L2', description: 'Read a file' }
+  ]);
+
+  expect(prompt).toContain('Available tools:');
+  expect(prompt).toContain('mcp:filesystem-demo:read_file [L2]: Read a file');
+  expect(prompt).toContain('Current platform: win32');
 });
 
 it('grader assembled prompt includes Pro architecture rules', () => {

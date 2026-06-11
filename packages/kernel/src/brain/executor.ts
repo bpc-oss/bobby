@@ -1,7 +1,7 @@
 import type { PlanStep } from '@bobby/shared';
 import { z } from 'zod';
 import type { ModelClient, ModelRole, ReasoningEffort } from '../model/model-client';
-import { FORBIDDEN_WIN32_COMMANDS, getRunnerSystemPrompt } from './system-prompts';
+import { FORBIDDEN_WIN32_COMMANDS, getRunnerSystemPrompt, getRunnerSystemPromptWithTools, type RunnerToolDescriptor } from './system-prompts';
 import type { PlannedCall } from '../hands/evidence-provider';
 
 export interface Claim {
@@ -76,6 +76,7 @@ export interface ExecuteStepOptions {
   reasoningEffort?: ReasoningEffort;
   retryContext?: string;
   platform?: NodeJS.Platform | string;
+  tools?: readonly RunnerToolDescriptor[];
 }
 
 export async function executeStep(model: ModelClient, step: PlanStep, options: ExecuteStepOptions = {}): Promise<Claim> {
@@ -84,11 +85,14 @@ export async function executeStep(model: ModelClient, step: PlanStep, options: E
   const prompt = options.retryContext
     ? `${step.desc}\n\n${options.retryContext}`
     : step.desc;
+  const systemPrompt = options.tools && options.tools.length > 0
+    ? getRunnerSystemPromptWithTools(platform, options.tools)
+    : getRunnerSystemPrompt(platform);
 
   const response = await model.complete(
     role,
     [
-    { role: 'system', content: getRunnerSystemPrompt(platform) },
+    { role: 'system', content: systemPrompt },
     { role: 'user', content: prompt }
   ], {
     json: true,

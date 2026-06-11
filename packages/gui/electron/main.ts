@@ -3,7 +3,25 @@ import { homedir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, shell, Tray } from 'electron';
-import { applySubAgentProposal, KernelHost, listSnapshots, loadDeepSeekConfig, makeDeepSeekClient } from '@bobby/kernel';
+import {
+  applySubAgentProposal,
+  CompletionGate,
+  CommandExitOracle,
+  ExecTool,
+  FileDiffOracle,
+  FileExistsOracle,
+  FileExistsTool,
+  KernelHost,
+  listSnapshots,
+  loadDeepSeekConfig,
+  makeDeepSeekClient,
+  NoForbiddenPathChecker,
+  ToolEvidenceProvider,
+  ToolRegistry,
+  VerificationEngine,
+  Workspace,
+  WriteFileTool
+} from '@bobby/kernel';
 import {
   AppSettingsSchema,
   AppSettingsUpdateSchema,
@@ -16,6 +34,10 @@ import {
   ProposalApplyInputSchema,
   ProposalDiscardInputSchema,
   ProposalSummarySchema,
+  McpServerRecordSchema,
+  McpServerRemoveInputSchema,
+  McpServerToggleInputSchema,
+  McpServerUpsertInputSchema,
   SessionRecordSchema,
   SnapshotListEntrySchema,
   WorkspaceFileSearchEntrySchema,
@@ -27,11 +49,25 @@ import {
   type ProjectMeta,
   type ProjectSelectResult,
   type ProposalSummary,
+  type McpServerRecordDto,
+  type McpServerRemoveInput,
+  type McpServerToggleInput,
+  type McpServerUpsertInput,
   type SessionRecordDto,
   type TaskDetail,
   type TaskSummary,
   type WorkspaceFileSearchEntry
 } from '../src/ipc/contract';
+import {
+  ensureDefaultMcpServers,
+  listMcpServers,
+  registerMcpTools,
+  removeMcpServer,
+  resolveMcpServersFile,
+  saveMcpServers,
+  toggleMcpServer,
+  upsertMcpServer
+} from './mcp-manager';
 import { initAutoUpdate } from './updater';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -55,6 +91,21 @@ let currentProjectDir: string | null = null;
 let currentProject: ProjectMeta | null = null;
 let currentHost: KernelHost | null = null;
 let tray: Tray | null = null;
+const toolRegistry = new ToolRegistry();
+const toolEvidenceProvider = new ToolEvidenceProvider(toolRegistry);
+const conscienceDeps = {
+  engine: new VerificationEngine([new CommandExitOracle(), new FileDiffOracle(), new FileExistsOracle()]),
+  gate: new CompletionGate(),
+  evidenceFor: (
+    stepId: string,
+    acIds: string[],
+    calls?: Parameters<ToolEvidenceProvider['evidenceFor']>[2],
+    acCriteria?: Parameters<ToolEvidenceProvider['evidenceFor']>[3]
+  ) => toolEvidenceProvider.evidenceFor(stepId, acIds, calls, acCriteria),
+  constraintCheckers: [new NoForbiddenPathChecker()],
+  context: () => toolEvidenceProvider.context(),
+  toolRegistry
+};
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -351,6 +402,17 @@ function taskRoot(): string | null {
 
 function currentWorkspaceRoot(): string {
   return currentProjectDir ?? process.cwd();
+}
+
+function refreshToolRegistry(): void {
+  toolRegistry.clear();
+  const workspaceRoot = currentWorkspaceRoot();
+  const workspace = new Workspace(workspaceRoot);
+  toolRegistry.register(new ExecTool(workspaceRoot));
+  toolRegistry.register(new WriteFileTool(workspace));
+  toolRegistry.register(new FileExistsTool(workspace));
+  const servers = ensureDefaultMcpServers(app.getPath('userData'), workspaceRoot);
+  registerMcpTools(toolRegistry, servers, workspaceRoot);
 }
 
 function readTaskFile(taskId: string, fileName: string): unknown | null {
@@ -706,7 +768,8 @@ const createHost = async () => {
     const loaded = await loadDeepSeekConfig();
     const model = makeDeepSeekClient(readSecret() ?? loaded.apiKey, loaded.report, settings.baseUrl);
     const workspaceRoot = currentProjectDir ?? process.cwd();
-    const host = new KernelHost(() => model, undefined, workspaceRoot, true);
+    refreshToolRegistry();
+    const host = new KernelHost(() => model, conscienceDeps, workspaceRoot, true);
     currentHost = host;
     return host;
   } catch (err) {
@@ -818,6 +881,29 @@ ipcMain.handle('workspace:searchFiles', async (_event, input) => {
   const query = typeof input === 'object' && input !== null && 'query' in input ? String((input as { query?: unknown }).query ?? '') : '';
   const parsed = WorkspaceFileSearchEntrySchema.array().safeParse(searchWorkspaceFiles(currentWorkspaceRoot(), query));
   return parsed.success ? parsed.data : [];
+});
+
+ipcMain.handle('mcp:list', async () => listMcpServers(app.getPath('userData'), currentWorkspaceRoot()));
+
+ipcMain.handle('mcp:upsert', async (_event, input) => {
+  const parsed = McpServerUpsertInputSchema.parse(input);
+  const next = upsertMcpServer(app.getPath('userData'), currentWorkspaceRoot(), parsed);
+  refreshToolRegistry();
+  return next;
+});
+
+ipcMain.handle('mcp:toggle', async (_event, input) => {
+  const parsed = McpServerToggleInputSchema.parse(input);
+  const next = toggleMcpServer(app.getPath('userData'), parsed);
+  refreshToolRegistry();
+  return next;
+});
+
+ipcMain.handle('mcp:remove', async (_event, input) => {
+  const parsed = McpServerRemoveInputSchema.parse(input);
+  const removed = removeMcpServer(app.getPath('userData'), parsed);
+  refreshToolRegistry();
+  return removed;
 });
 
 ipcMain.handle('automations:list', async () => readAutomations());

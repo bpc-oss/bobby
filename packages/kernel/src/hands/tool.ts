@@ -9,6 +9,7 @@ export interface ToolResult {
 export interface Tool {
   name: string;
   permissionTier: Tier;
+  description?: string;
   run(input: Record<string, unknown>, ctx: { acId: string; claimId: string }): Promise<ToolResult>;
 }
 
@@ -25,6 +26,14 @@ export class ToolRegistry {
       throw new Error(`unknown tool: ${name}`);
     }
     return t;
+  }
+
+  unregister(name: string): boolean {
+    return this.map.delete(name);
+  }
+
+  clear(): void {
+    this.map.clear();
   }
 
   list(): Tool[] {

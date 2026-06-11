@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { BrowserWindow } from 'electron';
-import type { AutomationRecord, SessionRecordDto } from '../src/ipc/contract';
+import type { AutomationRecord, SessionRecordDto, SnapshotListEntry } from '../src/ipc/contract';
 
 const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>();
 let tempHome = '';
@@ -41,8 +41,74 @@ const KernelHostMock = vi.fn(() => ({
   subscribe: vi.fn(() => () => undefined),
   send: vi.fn(async () => undefined)
 }));
+class ToolRegistryMock {
+  private readonly tools = new Map<string, { name: string; permissionTier: string }>();
+
+  register(tool: { name: string; permissionTier: string }): void {
+    this.tools.set(tool.name, tool);
+  }
+
+  clear(): void {
+    this.tools.clear();
+  }
+
+  list(): Array<{ name: string; permissionTier: string }> {
+    return [...this.tools.values()];
+  }
+}
+class ToolEvidenceProviderMock {
+  constructor(private readonly registry: ToolRegistryMock) {}
+
+  evidenceFor = vi.fn(async () => []);
+  context = vi.fn(() => ({ touchedPaths: [] }));
+}
+class ExecToolMock {
+  name = 'exec';
+  permissionTier = 'L2';
+  description = 'execute a command';
+  constructor(_workspaceRoot: string) {}
+}
+class WriteFileToolMock {
+  name = 'write_file';
+  permissionTier = 'L1';
+  description = 'write a file';
+  constructor(_workspace: unknown) {}
+}
+class FileExistsToolMock {
+  name = 'file_exists';
+  permissionTier = 'L0';
+  description = 'check file';
+  constructor(_workspace: unknown) {}
+}
+class WorkspaceMock {
+  constructor(public root: string) {}
+}
+class VerificationEngineMock {
+  constructor(_oracles: unknown[]) {}
+}
+class CompletionGateMock {}
+class CommandExitOracleMock {}
+class FileDiffOracleMock {}
+class FileExistsOracleMock {}
+class NoForbiddenPathCheckerMock {}
+const createMcpTransport = vi.fn(() => ({
+  probe: vi.fn(async () => undefined),
+  call: vi.fn(async (tool: string, args: unknown) => ({ stdout: tool, isError: false, payload: { tool, args } }))
+}));
+const mcpToolToBobbyTool = vi.fn((name: string, transport: { call: (tool: string, args: unknown) => Promise<unknown> }, options?: { serverId?: string; permissionTier?: string; description?: string; evidenceType?: string }) => ({
+  name: options?.serverId ? `mcp:${options.serverId}:${name}` : `mcp:${name}`,
+  permissionTier: options?.permissionTier ?? 'L3',
+  description: options?.description ?? '',
+  run: async (input: Record<string, unknown>, ctx: { acId: string; claimId: string }) => {
+    const result = await transport.call(name, input);
+    return {
+      evidence: [{ claimId: ctx.claimId, acId: ctx.acId, evidenceType: 'command_output', payload: result, producedBy: 'tool' }],
+      result
+    };
+  }
+}));
 const makeDeepSeekClient = vi.fn(() => ({}));
-const listSnapshots = vi.fn(async () => []);
+const listSnapshots = vi.fn(async () => [] as SnapshotListEntry[]);
 const loadDeepSeekConfig = vi.fn(async () => ({
   apiKey: 'legacy-deepseek-key',
   report: {
@@ -98,6 +164,20 @@ vi.mock('electron', () => ({
 
 vi.mock('@bobby/kernel', () => ({
   KernelHost: KernelHostMock,
+  ToolRegistry: ToolRegistryMock,
+  ToolEvidenceProvider: ToolEvidenceProviderMock,
+  ExecTool: ExecToolMock,
+  FileExistsTool: FileExistsToolMock,
+  WriteFileTool: WriteFileToolMock,
+  Workspace: WorkspaceMock,
+  VerificationEngine: VerificationEngineMock,
+  CompletionGate: CompletionGateMock,
+  CommandExitOracle: CommandExitOracleMock,
+  FileDiffOracle: FileDiffOracleMock,
+  FileExistsOracle: FileExistsOracleMock,
+  NoForbiddenPathChecker: NoForbiddenPathCheckerMock,
+  createMcpTransport,
+  mcpToolToBobbyTool,
   listSnapshots,
   makeDeepSeekClient,
   loadDeepSeekConfig
@@ -236,6 +316,54 @@ describe('settings IPC handlers', () => {
       expect.objectContaining({ runnerModel: 'deepseek-chat' }),
       'https://deepseek.example.test'
     );
+  });
+});
+
+describe('mcp IPC handlers', () => {
+  beforeEach(() => {
+    handlers.clear();
+  });
+
+  it('lists the built-in filesystem demo and supports add toggle remove flows', async () => {
+    await loadMain();
+    const list = handlers.get('mcp:list');
+    const upsert = handlers.get('mcp:upsert');
+    const toggle = handlers.get('mcp:toggle');
+    const remove = handlers.get('mcp:remove');
+    if (!list || !upsert || !toggle || !remove) throw new Error('mcp handlers not registered');
+
+    const initial = await list() as Array<{ id: string; name: string; tools: Array<{ name: string }> }>;
+    expect(initial.some((server) => server.id === 'filesystem-demo')).toBe(true);
+    expect(initial.find((server) => server.id === 'filesystem-demo')?.tools.map((tool) => tool.name)).toEqual([
+      'read_file',
+      'write_file',
+      'list_directory',
+      'stat_path'
+    ]);
+
+    const created = await upsert(undefined, {
+      name: 'HTTP Files',
+      enabled: true,
+      transport: { kind: 'url', url: 'http://localhost:3010/mcp' },
+      tools: [
+        { name: 'read_remote', permissionTier: 'L2', description: 'Read remote file', evidenceType: 'command_output' }
+      ]
+    }) as { id: string; enabled: boolean; transport: { kind: string } };
+
+    expect(created.enabled).toBe(true);
+    expect(created.transport.kind).toBe('url');
+
+    const afterCreate = await list() as Array<{ id: string; enabled: boolean }>;
+    expect(afterCreate.some((server) => server.id === created.id)).toBe(true);
+
+    const toggled = await toggle(undefined, { id: created.id }) as { enabled: boolean };
+    expect(toggled.enabled).toBe(false);
+
+    const removed = await remove(undefined, { id: created.id });
+    expect(removed).toBe(true);
+
+    const afterRemove = await list() as Array<{ id: string }>;
+    expect(afterRemove.some((server) => server.id === created.id)).toBe(false);
   });
 });
 

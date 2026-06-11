@@ -4,6 +4,7 @@ import {
   ProjectListSchema,
   ProjectMetaSchema,
   SessionRecordSchema,
+  type SessionMode,
   type ProjectMeta,
   type SessionRecordDto
 } from '../ipc/contract';
@@ -366,7 +367,7 @@ function resolveThreadId(state: ChatState, taskId: string): string | null {
   if (existing) return existing.id;
   const historical = state.sessions.find((session) => session.taskId === taskId);
   if (historical) return historical.id;
-  return existing?.id ?? null;
+  return null;
 }
 
 async function persistSession(session: SessionRecordDto): Promise<void> {

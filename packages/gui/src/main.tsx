@@ -176,6 +176,7 @@ export function App() {
   const openProject = useChatStore((s) => s.openProject);
   const selectProject = useChatStore((s) => s.selectProject);
   const newSession = useChatStore((s) => s.newSession);
+  const resumeSession = useChatStore((s) => s.switchSession);
 
   React.useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);

@@ -182,16 +182,72 @@ export const WorkspaceFileSearchEntrySchema = z.object({
 });
 export type WorkspaceFileSearchEntry = z.infer<typeof WorkspaceFileSearchEntrySchema>;
 
+export const McpToolSchema = z.object({
+  name: z.string().min(1),
+  permissionTier: z.enum(['L0', 'L1', 'L2', 'L3', 'L4']),
+  description: z.string().min(1).optional(),
+  evidenceType: z.enum(['command_output', 'file_diff', 'file_exists']).optional()
+});
+export type McpTool = z.infer<typeof McpToolSchema>;
+
+export const McpStdioTransportSchema = z.object({
+  kind: z.literal('stdio'),
+  command: z.string().min(1),
+  args: z.array(z.string()).default([]),
+  cwd: z.string().min(1).optional(),
+  env: z.record(z.string()).optional()
+});
+export const McpUrlTransportSchema = z.object({
+  kind: z.literal('url'),
+  url: z.string().url(),
+  headers: z.record(z.string()).optional()
+});
+export const McpTransportSchema = z.discriminatedUnion('kind', [McpStdioTransportSchema, McpUrlTransportSchema]);
+export type McpTransport = z.infer<typeof McpTransportSchema>;
+
+export const McpServerRecordSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  enabled: z.boolean(),
+  transport: McpTransportSchema,
+  tools: z.array(McpToolSchema),
+  health: z.enum(['unknown', 'healthy', 'error', 'disabled']),
+  lastCheckedAt: z.string().nullable().optional(),
+  lastError: z.string().nullable().optional(),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1)
+});
+export type McpServerRecordDto = z.infer<typeof McpServerRecordSchema>;
+
+export const McpServerUpsertInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  name: z.string().min(1),
+  enabled: z.boolean().optional(),
+  transport: McpTransportSchema,
+  tools: z.array(McpToolSchema)
+});
+export type McpServerUpsertInput = z.infer<typeof McpServerUpsertInputSchema>;
+
+export const McpServerToggleInputSchema = z.object({
+  id: z.string().min(1)
+});
+export type McpServerToggleInput = z.infer<typeof McpServerToggleInputSchema>;
+
+export const McpServerRemoveInputSchema = z.object({
+  id: z.string().min(1)
+});
+export type McpServerRemoveInput = z.infer<typeof McpServerRemoveInputSchema>;
+
 export function makeKernelClient() {
   return {
     startTask: (input: string, mode?: SessionMode) => window.bobby.send({ type: 'startTask', input, mode }),
     approveGate: (gateId: string, decision: GateDecision) =>
       window.bobby.send({ type: 'approveGate', gateId, decision }),
-  onEvent: (cb: (event: KernelEvent) => void) => window.bobby.onEvent(cb),
-  getSetupStatus: () => window.bobby.getSetupStatus(),
-  openQuickstart: () => window.bobby.openQuickstart(),
-  openProject: () => window.bobby.openProject!(),
-  listProjects: () => window.bobby.listProjects!(),
+    onEvent: (cb: (event: KernelEvent) => void) => window.bobby.onEvent(cb),
+    getSetupStatus: () => window.bobby.getSetupStatus(),
+    openQuickstart: () => window.bobby.openQuickstart(),
+    openProject: () => window.bobby.openProject!(),
+    listProjects: () => window.bobby.listProjects!(),
     selectProject: (projectDir: string) => window.bobby.selectProject!(projectDir),
     getCurrentProject: () => window.bobby.getCurrentProject!(),
     getSettings: () => window.bobby.getSettings!(),
@@ -208,6 +264,10 @@ export function makeKernelClient() {
     restoreSnapshot: (snapshotId?: string) => window.bobby.send({ type: 'restoreSnapshot', snapshotId }),
     applyProposal: (input: ProposalApplyInput) => window.bobby.applyProposal!(input),
     discardProposal: (input: ProposalDiscardInput) => window.bobby.discardProposal!(input),
+    listMcpServers: () => window.bobby.listMcpServers!(),
+    upsertMcpServer: (input: McpServerUpsertInput) => window.bobby.upsertMcpServer!(input),
+    toggleMcpServer: (input: McpServerToggleInput) => window.bobby.toggleMcpServer!(input),
+    removeMcpServer: (input: McpServerRemoveInput) => window.bobby.removeMcpServer!(input),
     listAutomations: () => window.bobby.listAutomations(),
     createAutomation: (input: AutomationCreateInput) => window.bobby.createAutomation(input),
     updateAutomation: (input: AutomationUpdateInput) => window.bobby.updateAutomation(input),

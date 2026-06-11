@@ -18,6 +18,10 @@ type WindowWithBobby = Window & typeof globalThis & {
     onEvent: (callback: (event: unknown) => void) => () => void;
     getSetupStatus: () => Promise<SetupStatus>;
     openQuickstart: () => Promise<unknown>;
+    listMcpServers: () => Promise<unknown[]>;
+    upsertMcpServer: (input: unknown) => Promise<unknown>;
+    toggleMcpServer: (input: unknown) => Promise<unknown>;
+    removeMcpServer: (input: unknown) => Promise<boolean>;
     listAutomations: () => Promise<unknown[]>;
     createAutomation: (input: unknown) => Promise<unknown>;
     updateAutomation: (input: unknown) => Promise<unknown>;
@@ -42,6 +46,10 @@ function installBobby(send = vi.fn().mockResolvedValue(undefined), onEvent = vi.
       hasEnvKey: false
     }),
     openQuickstart: vi.fn().mockResolvedValue(undefined),
+    listMcpServers: vi.fn().mockResolvedValue([]),
+    upsertMcpServer: vi.fn().mockResolvedValue(undefined),
+    toggleMcpServer: vi.fn().mockResolvedValue(undefined),
+    removeMcpServer: vi.fn().mockResolvedValue(true),
     listAutomations: vi.fn().mockResolvedValue([]),
     createAutomation: vi.fn().mockResolvedValue(undefined),
     updateAutomation: vi.fn().mockResolvedValue(undefined),
@@ -120,6 +128,10 @@ async function expectSetupMethodsToBeExposed(): Promise<void> {
     onEvent: vi.fn(),
     getSetupStatus,
     openQuickstart,
+    listMcpServers: vi.fn().mockResolvedValue([]),
+    upsertMcpServer: vi.fn().mockResolvedValue(undefined),
+    toggleMcpServer: vi.fn().mockResolvedValue(undefined),
+    removeMcpServer: vi.fn().mockResolvedValue(true),
     listAutomations: vi.fn().mockResolvedValue([]),
     createAutomation: vi.fn().mockResolvedValue(undefined),
     updateAutomation: vi.fn().mockResolvedValue(undefined),
@@ -136,6 +148,32 @@ async function expectSetupMethodsToBeExposed(): Promise<void> {
   expect(openQuickstart).toHaveBeenCalledTimes(1);
 }
 
+async function expectMcpMethodsToDispatchCommands(): Promise<void> {
+  installBobby();
+
+  const client = makeKernelClient();
+  await client.listMcpServers();
+  await client.upsertMcpServer({
+    name: 'Demo',
+    enabled: true,
+    transport: { kind: 'stdio', command: 'node', args: [] },
+    tools: []
+  });
+  await client.toggleMcpServer({ id: 'mcp-1' });
+  await client.removeMcpServer({ id: 'mcp-1' });
+
+  const host = window as WindowWithBobby;
+  expect(host.bobby.listMcpServers).toHaveBeenCalledTimes(1);
+  expect(host.bobby.upsertMcpServer).toHaveBeenCalledWith({
+    name: 'Demo',
+    enabled: true,
+    transport: { kind: 'stdio', command: 'node', args: [] },
+    tools: []
+  });
+  expect(host.bobby.toggleMcpServer).toHaveBeenCalledWith({ id: 'mcp-1' });
+  expect(host.bobby.removeMcpServer).toHaveBeenCalledWith({ id: 'mcp-1' });
+}
+
 describe('makeKernelClient IPC contract', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -144,6 +182,7 @@ describe('makeKernelClient IPC contract', () => {
   it('startTask should dispatch startTask command', expectStartTaskToDispatchCommand);
   it('approveGate should dispatch allow decision command', expectAllowDecisionToDispatchCommand);
   it('approveGate should dispatch always decision command', expectAlwaysDecisionToDispatchCommand);
+  it('mcp methods should dispatch commands', expectMcpMethodsToDispatchCommands);
   it('onEvent should subscribe and return unsubscribe', expectOnEventToSubscribeAndReturnUnsubscribe);
   it('setup methods should delegate to window.bobby', expectSetupMethodsToBeExposed);
 });

@@ -8,6 +8,7 @@ import { useChatStore } from '../src/store/chat-store';
 import { EvidencePanel } from '../src/components/EvidencePanel';
 import { App } from '../src/main';
 import { Workspace } from '../src/screens/Workspace';
+import type { SessionRecordDto } from '../src/ipc/contract';
 
 type KernelClientMock = {
   startTask: ReturnType<typeof vi.fn>;
@@ -254,7 +255,7 @@ describe('workspace UI smoke', () => {
   });
 
   it('does not create a duplicate session when clicking the current session row', () => {
-    const current = {
+    const current: SessionRecordDto = {
       id: 'current',
       title: 'Run this through Mission Control',
       blocks: [{ kind: 'user', id: 'u-current', text: 'Run this through Mission Control' }],
@@ -289,7 +290,7 @@ describe('workspace UI smoke', () => {
   });
 
   it('renders the active session only once when history contains the same title', () => {
-    const current = {
+    const current: SessionRecordDto = {
       id: 'current',
       title: 'Run this through Mission Control',
       blocks: [{ kind: 'user', id: 'u-current', text: 'Run this through Mission Control' }],

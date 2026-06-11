@@ -126,6 +126,31 @@ export const GRADER_SYSTEM_PROMPT = `${PLAN_SYSTEM_PROMPT}\n\n${PRO_ARCHITECT_PR
 export const GRADER_INTENT_SYSTEM_PROMPT = `${INTENT_SYSTEM_PROMPT}\n\n${PRO_ARCHITECT_PROMPT}`;
 export const FORBIDDEN_WIN32_COMMANDS = ['test', 'rm', 'cat', 'ls', 'touch'] as const;
 
+export type RunnerToolDescriptor = {
+  name: string;
+  permissionTier: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
+  description?: string;
+};
+
+function formatToolCatalog(tools: readonly RunnerToolDescriptor[]): string {
+  if (tools.length === 0) {
+    return '';
+  }
+
+  return [
+    '',
+    'Available tools:',
+    ...tools.map((tool) => `- ${tool.name} [${tool.permissionTier}]${tool.description ? `: ${tool.description}` : ''}`)
+  ].join('\n');
+}
+
 export const getRunnerSystemPrompt = (platform: string = process.platform): string => {
   return `${RUNNER_SYSTEM_PROMPT}\n\nCurrent platform: ${platform?.toLowerCase()}`;
+};
+
+export const getRunnerSystemPromptWithTools = (
+  platform: string = process.platform,
+  tools: readonly RunnerToolDescriptor[] = []
+): string => {
+  return `${RUNNER_SYSTEM_PROMPT}${formatToolCatalog(tools)}\n\nCurrent platform: ${platform?.toLowerCase()}`;
 };

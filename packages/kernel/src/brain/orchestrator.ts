@@ -8,6 +8,7 @@ import { needsClarification } from './clarify';
 import { TraceStore } from '../trace/trace-store';
 import type { ModelClient } from '../model/model-client';
 import type { VerificationEngine } from '../conscience/engine';
+import type { ToolRegistry } from '../hands/tool';
 import { buildEscalationPlan, type EscalationPlan } from '../model/deepseek/escalation';
 import { allocateBudget, estimateDifficulty, scoreToTier, type DifficultyBudget } from '../model/deepseek/difficulty';
 import {
@@ -114,6 +115,7 @@ export interface ConscienceDeps {
   constraintCheckers?: ConstraintChecker[];
   context?: () => ExecContext;
   getExecContext?: () => ExecContext | Promise<ExecContext>;
+  toolRegistry?: ToolRegistry;
 }
 
 export class Orchestrator {
@@ -283,7 +285,12 @@ export class Orchestrator {
           role: plan.role,
           model: plan.model,
           reasoningEffort: plan.reasoning_effort,
-          retryContext
+          retryContext,
+          tools: conscience.toolRegistry?.list().map((tool) => ({
+            name: tool.name,
+            permissionTier: tool.permissionTier,
+            description: tool.description
+          }))
         });
 
         const claimResult = await this.processClaim(taskId, conscience, claim, step, criteria, verdicts);

@@ -739,7 +739,9 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange }: Work
       <SessionModeSwitcher
         mode={sessionMode}
         onChange={(nextMode) => {
-          if (MODE_CONFIG[nextMode].rank > MODE_CONFIG[sessionMode].rank) {
+          const nextConfig = MODE_CONFIG[nextMode as SessionMode];
+          const currentConfig = MODE_CONFIG[sessionMode];
+          if (nextConfig.rank > currentConfig.rank) {
             const ok = window.confirm('Switching to a higher permission mode will allow more execution. Continue?');
             if (!ok) return;
           }

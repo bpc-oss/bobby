@@ -12,6 +12,7 @@ export { ToolRegistry } from './hands/tool';
 export { ToolEvidenceProvider } from './hands/evidence-provider';
 export { ExecTool } from './hands/tools/exec';
 export { FileExistsTool, WriteFileTool } from './hands/tools/fs';
+export { createMcpTransport, mcpToolToBobbyTool, type McpTransport, type McpTransportConfig, type McpToolOptions } from './plugins/mcp-client';
 export { Workspace } from './hands/workspace';
 export { createSnapshot, listSnapshots, restoreSnapshot } from './hands/snapshot';
 export { FetchTransport } from './model/deepseek/transport';

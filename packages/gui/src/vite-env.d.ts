@@ -9,6 +9,10 @@ import type {
   AutomationRecord,
   AutomationToggleInput,
   AutomationUpdateInput,
+  McpServerRecordDto,
+  McpServerRemoveInput,
+  McpServerToggleInput,
+  McpServerUpsertInput,
   OnboardingStatus,
   ProjectList,
   ProjectMeta,
@@ -48,6 +52,10 @@ declare global {
       discardProposal?: (input: ProposalDiscardInput) => Promise<boolean>;
       listSnapshots?: () => Promise<SnapshotListEntry[]>;
       searchFiles?: (query: string) => Promise<WorkspaceFileSearchEntry[]>;
+      listMcpServers?: () => Promise<McpServerRecordDto[]>;
+      upsertMcpServer?: (input: McpServerUpsertInput) => Promise<McpServerRecordDto>;
+      toggleMcpServer?: (input: McpServerToggleInput) => Promise<McpServerRecordDto>;
+      removeMcpServer?: (input: McpServerRemoveInput) => Promise<boolean>;
       listAutomations: () => Promise<AutomationRecord[]>;
       createAutomation: (input: AutomationCreateInput) => Promise<AutomationRecord>;
       updateAutomation: (input: AutomationUpdateInput) => Promise<AutomationRecord>;
