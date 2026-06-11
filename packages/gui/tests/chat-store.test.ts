@@ -24,7 +24,8 @@ function session(id: string, title: string, blocks: ChatBlock[]): SessionRecordD
     error: null,
     costUsd: 0,
     spendUsd: 0,
-    model: null
+    model: null,
+    mode: 'standard'
   };
 }
 
@@ -291,5 +292,32 @@ describe('chat session store', () => {
 
     expect(activeSessionId).toBeTruthy();
     expect(new Set(savedIds)).toEqual(new Set([activeSessionId]));
+  });
+
+  it('restores the session-specific mode when switching between sessions', () => {
+    const standard = session('standard', 'Standard task', [userBlock('u-standard', 'Standard task')]);
+    const locked = session('locked', 'Locked task', [userBlock('u-locked', 'Locked task')]);
+    locked.mode = 'plan-only';
+    useChatStore.setState({
+      sessions: [standard, locked],
+      threads: {
+        standard,
+        locked
+      },
+      activeSessionId: 'standard',
+      blocks: standard.blocks as ChatBlock[],
+      sessionMode: 'standard'
+    });
+
+    useChatStore.getState().setSessionMode('full');
+    expect(useChatStore.getState().sessionMode).toBe('full');
+    expect(useChatStore.getState().threads.standard?.mode).toBe('full');
+
+    useChatStore.getState().switchSession('locked');
+    expect(useChatStore.getState().sessionMode).toBe('plan-only');
+    expect(useChatStore.getState().blocks).toEqual(locked.blocks);
+
+    useChatStore.getState().switchSession('standard');
+    expect(useChatStore.getState().sessionMode).toBe('full');
   });
 });
