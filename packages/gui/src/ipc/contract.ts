@@ -238,6 +238,49 @@ export const McpServerRemoveInputSchema = z.object({
 });
 export type McpServerRemoveInput = z.infer<typeof McpServerRemoveInputSchema>;
 
+export const SubAgentRecordSchema = z.object({
+  sourcePath: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().min(1),
+  model: z.string().min(1).optional(),
+  tools: z.array(z.string()),
+  triggers: z.array(z.string()),
+  systemPrompt: z.string().min(1)
+});
+export type SubAgentRecordDto = z.infer<typeof SubAgentRecordSchema>;
+
+export const SubAgentUpsertInputSchema = SubAgentRecordSchema.omit({ sourcePath: true }).extend({
+  sourcePath: z.string().min(1).optional()
+});
+export type SubAgentUpsertInput = z.infer<typeof SubAgentUpsertInputSchema>;
+
+export const SubAgentRemoveInputSchema = z.object({
+  sourcePath: z.string().min(1)
+});
+export type SubAgentRemoveInput = z.infer<typeof SubAgentRemoveInputSchema>;
+
+export const SubAgentDispatchInputSchema = z.object({
+  sourcePath: z.string().min(1),
+  task: z.string().min(1)
+});
+export type SubAgentDispatchInput = z.infer<typeof SubAgentDispatchInputSchema>;
+
+export const SubAgentDispatchRecordSchema = z.object({
+  id: z.string().min(1),
+  agentSourcePath: z.string().min(1),
+  agentName: z.string().min(1),
+  task: z.string().min(1),
+  status: z.enum(['queued', 'running', 'completed', 'failed']),
+  mergeState: z.enum(['pending', 'ready', 'applied', 'blocked']),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+  worktreePath: z.string().nullable(),
+  proposalId: z.string().nullable(),
+  proposalPath: z.string().nullable(),
+  error: z.string().nullable()
+});
+export type SubAgentDispatchRecordDto = z.infer<typeof SubAgentDispatchRecordSchema>;
+
 export function makeKernelClient() {
   return {
     startTask: (input: string, mode?: SessionMode) => window.bobby.send({ type: 'startTask', input, mode }),
@@ -268,6 +311,11 @@ export function makeKernelClient() {
     upsertMcpServer: (input: McpServerUpsertInput) => window.bobby.upsertMcpServer!(input),
     toggleMcpServer: (input: McpServerToggleInput) => window.bobby.toggleMcpServer!(input),
     removeMcpServer: (input: McpServerRemoveInput) => window.bobby.removeMcpServer!(input),
+    listSubAgents: () => window.bobby.listSubAgents!(),
+    upsertSubAgent: (input: SubAgentUpsertInput) => window.bobby.upsertSubAgent!(input),
+    removeSubAgent: (input: SubAgentRemoveInput) => window.bobby.removeSubAgent!(input),
+    dispatchSubAgent: (input: SubAgentDispatchInput) => window.bobby.dispatchSubAgent!(input),
+    listSubAgentDispatches: () => window.bobby.listSubAgentDispatches!(),
     listAutomations: () => window.bobby.listAutomations(),
     createAutomation: (input: AutomationCreateInput) => window.bobby.createAutomation(input),
     updateAutomation: (input: AutomationUpdateInput) => window.bobby.updateAutomation(input),

@@ -21,6 +21,11 @@ import type {
   ProposalDiscardInput,
   ProposalSummary,
   SnapshotListEntry,
+  SubAgentDispatchInput,
+  SubAgentDispatchRecordDto,
+  SubAgentRecordDto,
+  SubAgentRemoveInput,
+  SubAgentUpsertInput,
   WorkspaceFileSearchEntry,
   SessionRecordDto,
   TaskDetail,
@@ -56,6 +61,11 @@ declare global {
       upsertMcpServer?: (input: McpServerUpsertInput) => Promise<McpServerRecordDto>;
       toggleMcpServer?: (input: McpServerToggleInput) => Promise<McpServerRecordDto>;
       removeMcpServer?: (input: McpServerRemoveInput) => Promise<boolean>;
+      listSubAgents?: () => Promise<SubAgentRecordDto[]>;
+      upsertSubAgent?: (input: SubAgentUpsertInput) => Promise<SubAgentRecordDto>;
+      removeSubAgent?: (input: SubAgentRemoveInput) => Promise<boolean>;
+      dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<SubAgentDispatchRecordDto | null>;
+      listSubAgentDispatches?: () => Promise<SubAgentDispatchRecordDto[]>;
       listAutomations: () => Promise<AutomationRecord[]>;
       createAutomation: (input: AutomationCreateInput) => Promise<AutomationRecord>;
       updateAutomation: (input: AutomationUpdateInput) => Promise<AutomationRecord>;

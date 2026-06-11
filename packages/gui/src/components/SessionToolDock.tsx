@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useChatStore, type ChatBlock } from '../store/chat-store';
 import { DiffView } from './DiffView';
-import { makeKernelClient, type ProposalSummary, type SnapshotListEntry } from '../ipc/contract';
+import { makeKernelClient, type ProposalSummary, type SnapshotListEntry, type SubAgentDispatchRecordDto } from '../ipc/contract';
 
 type DockTab = 'mission' | 'plan' | 'review' | 'diff' | 'terminal' | 'files' | 'browser' | 'sidechat' | 'preview' | 'tasks';
 
@@ -282,8 +282,48 @@ function ToolCommand({
   );
 }
 
+function DispatchRow({ record }: { record: SubAgentDispatchRecordDto }) {
+  const palette = {
+    queued: { label: 'Queued', color: 'var(--bobby-muted)', bg: 'var(--bobby-surface-subtle)' },
+    running: { label: 'Running', color: 'var(--bobby-accent)', bg: 'var(--bobby-accent-soft)' },
+    completed: { label: 'Done', color: 'var(--bobby-success)', bg: 'var(--bobby-success-soft)' },
+    failed: { label: 'Failed', color: 'var(--bobby-danger)', bg: 'var(--bobby-danger-soft)' }
+  } as const;
+  const style = palette[record.status];
+  const mergeLabel =
+    record.mergeState === 'applied' ? 'Applied' :
+    record.mergeState === 'ready' ? 'Ready' :
+    record.mergeState === 'blocked' ? 'Blocked' :
+    'Pending';
+
+  return (
+    <div className="rounded-lg border px-3 py-2" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ background: style.bg, color: style.color }}>
+              {style.label}
+            </span>
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ background: 'var(--bobby-chip-bg)', color: 'var(--bobby-muted)' }}>
+              {mergeLabel}
+            </span>
+          </div>
+          <div className="mt-1 truncate text-[12px] font-medium text-bobby-ink">{record.agentName}</div>
+          <div className="mt-0.5 break-words text-[11px] text-bobby-faint">{record.task}</div>
+          <div className="mt-1 space-y-0.5 text-[11px] text-bobby-faint">
+            <div className="truncate">worktree: {record.worktreePath ?? '-'}</div>
+            <div className="truncate">proposal: {record.proposalPath ?? '-'}</div>
+          </div>
+        </div>
+        <div className="shrink-0 text-[10px] text-bobby-faint">{new Date(record.updatedAt).toLocaleTimeString()}</div>
+      </div>
+    </div>
+  );
+}
+
 function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'tasks' | 'sidechat' | 'preview' | 'files' }) {
   const blocks = useChatStore((s) => s.blocks);
+  const [dispatches, setDispatches] = React.useState<SubAgentDispatchRecordDto[]>([]);
   const command =
     kind === 'terminal' ? <ToolCommand kind="Terminal" icon={TerminalSquare} placeholder="pnpm test, git status, node script..." button="Run" buildPrompt={(value) => `Run this terminal command from the current project and show command_output evidence: ${value}`} /> :
     kind === 'browser' ? <ToolCommand kind="Browser" icon={Globe} placeholder="https://example.com or http://localhost:5174" button="Open" buildPrompt={(value) => `Open and inspect this web page, then report visible evidence: ${value}`} /> :
@@ -292,20 +332,63 @@ function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'tasks' | 'sidecha
     kind === 'tasks' ? <ToolCommand kind="Background Task" icon={Play} placeholder="Queue a parallel/background task..." button="Start" buildPrompt={(value) => `Start this as a background task. If it changes files, isolate it in a worktree and return a patch proposal linked to this session: ${value}`} /> :
     <ToolCommand kind="Files" icon={FolderOpen} placeholder="src/file.ts, package.json, or a folder path..." button="Open" buildPrompt={(value) => `Open this project file or folder, summarize it, and if edits are needed use a worktree-isolated patch proposal instead of modifying the main worktree: ${value}`} />;
 
+  React.useEffect(() => {
+    if (kind !== 'tasks') return;
+    const client = typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null;
+    let active = true;
+
+    const refresh = async () => {
+      if (!client?.listSubAgentDispatches) {
+        if (active) setDispatches([]);
+        return;
+      }
+
+      try {
+        const next = await client.listSubAgentDispatches();
+        if (active) setDispatches(next);
+      } catch {
+        if (active) setDispatches([]);
+      }
+    };
+
+    void refresh();
+    const timer = window.setInterval(() => {
+      void refresh();
+    }, 4000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [kind]);
+
   if (kind === 'files') {
     const files = collectFiles(blocks);
     const diffs = collectDiffs(blocks);
     const rows = [...files.map((file) => ({ title: file.path, meta: file.exists ? 'exists' : 'missing' })), ...diffs.map((diff) => ({ title: diff.path, meta: 'diff' }))];
     return <div className="space-y-2">{command}{rows.length === 0 ? <Empty title="No files touched yet." /> : rows.map((file) => <Row key={`${file.meta}-${file.title}`} icon={FolderOpen} title={file.title} meta={file.meta} />)}</div>;
   }
+  if (kind === 'tasks') {
+    return (
+      <div className="space-y-3">
+        {command}
+        {dispatches.length === 0 ? (
+          <Empty title="No background tasks dispatched yet." />
+        ) : (
+          <div className="space-y-2">
+            {dispatches.map((record) => <DispatchRow key={record.id} record={record} />)}
+          </div>
+        )}
+      </div>
+    );
+  }
   const filtered = blocks.filter((block) => {
     if (kind === 'terminal') return block.kind === 'tool';
     if (kind === 'browser') return block.kind === 'tool' && /browser|chrome|playwright|url|http/i.test(block.tool);
     if (kind === 'sidechat') return block.kind === 'user' || block.kind === 'assistant' || block.kind === 'reasoning';
-    if (kind === 'tasks') return block.kind === 'tool' || block.kind === 'status' || block.kind === 'gate';
     return block.kind === 'evidence';
   });
-  const icon = kind === 'browser' ? Globe : kind === 'sidechat' ? MessageCircle : kind === 'tasks' ? Play : kind === 'preview' ? MonitorPlay : TerminalSquare;
+  const icon = kind === 'browser' ? Globe : kind === 'sidechat' ? MessageCircle : kind === 'preview' ? MonitorPlay : TerminalSquare;
   return <div className="space-y-2">{command}{filtered.length === 0 ? <Empty title="No session data for this panel yet." /> : filtered.map((block) => <Row key={block.id} icon={icon} title={blockText(block)} meta={block.kind} />)}</div>;
 }
 

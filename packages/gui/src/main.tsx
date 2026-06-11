@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { CalendarClock, Clock3, MessageSquare, Plus, Puzzle, Settings2 } from 'lucide-react';
+import { Bot, CalendarClock, Clock3, MessageSquare, Plus, Puzzle, Settings2 } from 'lucide-react';
 import { setLang } from './lib/i18n';
 import { makeKernelClient } from './ipc/contract';
 import { useChatStore } from './store/chat-store';
@@ -9,6 +9,7 @@ import { Workspace } from './screens/Workspace';
 import { Settings } from './screens/Settings';
 import { SessionToolDock } from './components/SessionToolDock';
 import { PluginMarketplace } from './screens/PluginMarketplace';
+import { Agents } from './screens/Agents';
 import { ScheduleTasks } from './screens/ScheduleTasks';
 import { ClawMode } from './screens/ClawMode';
 import { ProjectHome } from './screens/ProjectHome';
@@ -16,7 +17,7 @@ import { History } from './screens/History';
 import type { OnboardingStatus } from './ipc/contract';
 import './styles/tokens.css';
 
-type AppPage = 'chat' | 'history' | 'plugins' | 'schedule' | 'claw' | 'settings';
+type AppPage = 'chat' | 'history' | 'plugins' | 'agents' | 'schedule' | 'claw' | 'settings';
 
 const ONBOARDING_COMPLETE_KEY = 'bobby-onboarding-complete';
 
@@ -63,6 +64,7 @@ function Sidebar({
 
   const toolbar = [
     { key: 'plugins', title: 'Plugins', icon: Puzzle, onClick: () => onPage('plugins') },
+    { key: 'agents', title: 'Agents', icon: Bot, onClick: () => onPage('agents') },
     { key: 'schedule', title: 'Automations', icon: CalendarClock, onClick: () => onPage('schedule') },
     { key: 'history', title: 'History', icon: Clock3, onClick: () => onPage('history') },
     { key: 'chat', title: 'Chat', icon: MessageSquare, onClick: () => onPage('chat') },
@@ -300,6 +302,7 @@ export function App() {
     setPage('chat');
   }} />;
   else if (page === 'plugins') content = <PluginMarketplace />;
+  else if (page === 'agents') content = <Agents />;
   else if (page === 'schedule') content = <ScheduleTasks />;
   else if (page === 'claw') content = <ClawMode onClose={() => setPage('chat')} />;
   else {

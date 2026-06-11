@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { BrowserWindow } from 'electron';
@@ -95,6 +95,42 @@ const createMcpTransport = vi.fn(() => ({
   probe: vi.fn(async () => undefined),
   call: vi.fn(async (tool: string, args: unknown) => ({ stdout: tool, isError: false, payload: { tool, args } }))
 }));
+const loadSubAgents = vi.fn((repoRoot: string) => {
+  const agentsDir = join(repoRoot, '.bobby', 'agents');
+  if (!existsSync(agentsDir)) {
+    return { agents: [], diagnostics: [] };
+  }
+
+  const agents = readdirSync(agentsDir)
+    .filter((entry) => entry.endsWith('.md'))
+    .map((entry) => {
+      const sourcePath = join(agentsDir, entry);
+      const content = readFileSync(sourcePath, 'utf8');
+      const nameMatch = content.match(/name:\s*("?)([^\n"]+)\1/i);
+      const descriptionMatch = content.match(/description:\s*("?)([^\n"]+)\1/i);
+      const body = content.split(/---\r?\n/).slice(2).join('---\n').trim();
+      return {
+        sourcePath,
+        name: nameMatch?.[2] ?? entry.replace(/\.md$/, ''),
+        description: (descriptionMatch?.[2] ?? body.slice(0, 60)) || 'Agent',
+        tools: [],
+        triggers: [],
+        model: undefined,
+        systemPrompt: body || 'You are a helper.'
+      };
+    });
+
+  return { agents, diagnostics: [] };
+});
+const dispatchSubAgent = vi.fn(async (_agent: unknown, _task: string, options: { runInWorktree?: (agent: unknown, task: string, worktreePath: string) => Promise<void> | void; repoRoot?: string; proposalRoot?: string }) => {
+  const worktreePath = join(tempHome, 'worktree');
+  await options.runInWorktree?.(_agent, _task, worktreePath);
+  return {
+    proposalPath: join(tempHome, '.bobby', 'proposals', 'proposal.patch'),
+    proposalId: 'proposal-1',
+    worktreePath
+  };
+});
 const mcpToolToBobbyTool = vi.fn((name: string, transport: { call: (tool: string, args: unknown) => Promise<unknown> }, options?: { serverId?: string; permissionTier?: string; description?: string; evidenceType?: string }) => ({
   name: options?.serverId ? `mcp:${options.serverId}:${name}` : `mcp:${name}`,
   permissionTier: options?.permissionTier ?? 'L3',
@@ -177,6 +213,8 @@ vi.mock('@bobby/kernel', () => ({
   FileExistsOracle: FileExistsOracleMock,
   NoForbiddenPathChecker: NoForbiddenPathCheckerMock,
   createMcpTransport,
+  loadSubAgents,
+  dispatchSubAgent,
   mcpToolToBobbyTool,
   listSnapshots,
   makeDeepSeekClient,
@@ -364,6 +402,56 @@ describe('mcp IPC handlers', () => {
 
     const afterRemove = await list() as Array<{ id: string }>;
     expect(afterRemove.some((server) => server.id === created.id)).toBe(false);
+  });
+});
+
+describe('agent IPC handlers', () => {
+  beforeEach(() => {
+    handlers.clear();
+  });
+
+  it('lists, upserts, dispatches, and records background task state', async () => {
+    await loadMain();
+    const projectRoot = mkdtempSync(join(tempHome, 'agents-project-'));
+    mkdirSync(join(projectRoot, '.bobby', 'agents'), { recursive: true });
+
+    const selectProject = handlers.get('project:select');
+    const list = handlers.get('agents:list');
+    const upsert = handlers.get('agents:upsert');
+    const dispatch = handlers.get('agents:dispatch');
+    const dispatches = handlers.get('agents:dispatches');
+    const remove = handlers.get('agents:remove');
+    if (!selectProject || !list || !upsert || !dispatch || !dispatches || !remove) {
+      throw new Error('agent handlers not registered');
+    }
+
+    await selectProject(undefined, { projectDir: projectRoot });
+
+    const created = await upsert(undefined, {
+      name: 'Writer',
+      description: 'Writes a patch proposal',
+      tools: ['write_file'],
+      triggers: ['fix'],
+      systemPrompt: 'You are a writer agent.'
+    }) as { sourcePath: string };
+
+    const agents = await list() as Array<{ name: string; sourcePath: string }>;
+    expect(agents.some((agent) => agent.name === 'Writer')).toBe(true);
+
+    const completed = await dispatch(undefined, {
+      sourcePath: created.sourcePath,
+      task: 'Update the notes file'
+    }) as { status: string; mergeState: string; proposalId: string | null; proposalPath: string | null; worktreePath: string | null };
+
+    expect(completed.status).toBe('completed');
+    expect(completed.mergeState).toBe('ready');
+    expect(completed.proposalId).toBe('proposal-1');
+    expect(completed.proposalPath).toContain('.bobby');
+
+    const records = await dispatches() as Array<{ proposalId: string | null; status: string }>;
+    expect(records.some((record) => record.proposalId === 'proposal-1' && record.status === 'completed')).toBe(true);
+
+    expect(await remove(undefined, { sourcePath: created.sourcePath })).toBe(true);
   });
 });
 

@@ -16,6 +16,7 @@ import {
   loadDeepSeekConfig,
   makeDeepSeekClient,
   NoForbiddenPathChecker,
+  dispatchSubAgent,
   ToolEvidenceProvider,
   ToolRegistry,
   VerificationEngine,
@@ -40,6 +41,9 @@ import {
   McpServerUpsertInputSchema,
   SessionRecordSchema,
   SnapshotListEntrySchema,
+  SubAgentDispatchInputSchema,
+  SubAgentRemoveInputSchema,
+  SubAgentUpsertInputSchema,
   WorkspaceFileSearchEntrySchema,
   TaskDetailSchema,
   TaskSummarySchema,
@@ -54,10 +58,21 @@ import {
   type McpServerToggleInput,
   type McpServerUpsertInput,
   type SessionRecordDto,
+  type SubAgentRecordDto,
   type TaskDetail,
   type TaskSummary,
   type WorkspaceFileSearchEntry
 } from '../src/ipc/contract';
+import {
+  createSubAgentDispatchRecord,
+  listSubAgentDispatches,
+  listSubAgents,
+  markProposalApplied,
+  removeSubAgent,
+  resolveAgentPath,
+  updateSubAgentDispatchRecord,
+  upsertSubAgent
+} from './agents-manager';
 import {
   ensureDefaultMcpServers,
   listMcpServers,
@@ -93,7 +108,35 @@ let currentHost: KernelHost | null = null;
 let tray: Tray | null = null;
 const toolRegistry = new ToolRegistry();
 const toolEvidenceProvider = new ToolEvidenceProvider(toolRegistry);
-const conscienceDeps = {
+
+function registerWorkspaceTools(registry: ToolRegistry, workspaceRoot: string): void {
+  const workspace = new Workspace(workspaceRoot);
+  registry.register(new ExecTool(workspaceRoot));
+  registry.register(new WriteFileTool(workspace));
+  registry.register(new FileExistsTool(workspace));
+  const servers = ensureDefaultMcpServers(app.getPath('userData'), workspaceRoot);
+  registerMcpTools(registry, servers, workspaceRoot);
+}
+
+function createConscienceDepsForWorkspace(workspaceRoot: string, registry = new ToolRegistry()) {
+  registerWorkspaceTools(registry, workspaceRoot);
+  const evidenceProvider = new ToolEvidenceProvider(registry);
+  return {
+    engine: new VerificationEngine([new CommandExitOracle(), new FileDiffOracle(), new FileExistsOracle()]),
+    gate: new CompletionGate(),
+    evidenceFor: (
+      stepId: string,
+      acIds: string[],
+      calls?: Parameters<ToolEvidenceProvider['evidenceFor']>[2],
+      acCriteria?: Parameters<ToolEvidenceProvider['evidenceFor']>[3]
+    ) => evidenceProvider.evidenceFor(stepId, acIds, calls, acCriteria),
+    constraintCheckers: [new NoForbiddenPathChecker()],
+    context: () => evidenceProvider.context(),
+    toolRegistry: registry
+  };
+}
+
+let conscienceDeps = {
   engine: new VerificationEngine([new CommandExitOracle(), new FileDiffOracle(), new FileExistsOracle()]),
   gate: new CompletionGate(),
   evidenceFor: (
@@ -406,13 +449,7 @@ function currentWorkspaceRoot(): string {
 
 function refreshToolRegistry(): void {
   toolRegistry.clear();
-  const workspaceRoot = currentWorkspaceRoot();
-  const workspace = new Workspace(workspaceRoot);
-  toolRegistry.register(new ExecTool(workspaceRoot));
-  toolRegistry.register(new WriteFileTool(workspace));
-  toolRegistry.register(new FileExistsTool(workspace));
-  const servers = ensureDefaultMcpServers(app.getPath('userData'), workspaceRoot);
-  registerMcpTools(toolRegistry, servers, workspaceRoot);
+  registerWorkspaceTools(toolRegistry, currentWorkspaceRoot());
 }
 
 function readTaskFile(taskId: string, fileName: string): unknown | null {
@@ -762,11 +799,29 @@ function setupDesktopIntegration(): void {
   }
 }
 
+async function createModelClient(agent?: SubAgentRecordDto) {
+  const settings = readPublicSettings();
+  const loaded = await loadDeepSeekConfig();
+  const report = agent?.model ? { ...loaded.report, runnerModel: agent.model } : loaded.report;
+  return makeDeepSeekClient(readSecret() ?? loaded.apiKey, report, settings.baseUrl);
+}
+
+function createSubAgentConscienceDeps(workspaceRoot: string) {
+  return createConscienceDepsForWorkspace(workspaceRoot);
+}
+
+async function runSubAgentTaskInWorktree(agent: SubAgentRecordDto, task: string, worktreePath: string): Promise<void> {
+  const model = await createModelClient(agent);
+  const host = new KernelHost(() => model, createSubAgentConscienceDeps(worktreePath), worktreePath, false);
+  await host.send({
+    type: 'startTask',
+    input: `${agent.systemPrompt}\n\nTask:\n${task}\n\nTools: ${agent.tools.join(', ')}`
+  });
+}
+
 const createHost = async () => {
   try {
-    const settings = readPublicSettings();
-    const loaded = await loadDeepSeekConfig();
-    const model = makeDeepSeekClient(readSecret() ?? loaded.apiKey, loaded.report, settings.baseUrl);
+    const model = await createModelClient();
     const workspaceRoot = currentProjectDir ?? process.cwd();
     refreshToolRegistry();
     const host = new KernelHost(() => model, conscienceDeps, workspaceRoot, true);
@@ -857,6 +912,7 @@ ipcMain.handle('proposals:apply', async (_event, input) => {
     return null;
   }
   applySubAgentProposal(path, parsed, currentProjectDir);
+  markProposalApplied(currentWorkspaceRoot(), parsed.proposalId);
   const summary = readProposalSummary(path);
   unlinkSync(path);
   return summary;
@@ -881,6 +937,61 @@ ipcMain.handle('workspace:searchFiles', async (_event, input) => {
   const query = typeof input === 'object' && input !== null && 'query' in input ? String((input as { query?: unknown }).query ?? '') : '';
   const parsed = WorkspaceFileSearchEntrySchema.array().safeParse(searchWorkspaceFiles(currentWorkspaceRoot(), query));
   return parsed.success ? parsed.data : [];
+});
+
+ipcMain.handle('agents:list', async () => listSubAgents(currentWorkspaceRoot()));
+
+ipcMain.handle('agents:upsert', async (_event, input) => {
+  const parsed = SubAgentUpsertInputSchema.parse(input);
+  return upsertSubAgent(currentWorkspaceRoot(), parsed);
+});
+
+ipcMain.handle('agents:remove', async (_event, input) => {
+  const parsed = SubAgentRemoveInputSchema.parse(input);
+  return removeSubAgent(currentWorkspaceRoot(), parsed);
+});
+
+ipcMain.handle('agents:dispatches', async () => listSubAgentDispatches(currentWorkspaceRoot()));
+
+ipcMain.handle('agents:dispatch', async (_event, input) => {
+  const parsed = SubAgentDispatchInputSchema.parse(input);
+  const workspaceRoot = currentWorkspaceRoot();
+  const agentPath = resolveAgentPath(workspaceRoot, parsed.sourcePath);
+  const agent = listSubAgents(workspaceRoot).find((item) => item.sourcePath === agentPath || resolveAgentPath(workspaceRoot, item.sourcePath) === agentPath);
+  if (!agent) {
+    throw new Error('Subagent not found');
+  }
+
+  const initial = createSubAgentDispatchRecord(workspaceRoot, agent, parsed.task);
+  updateSubAgentDispatchRecord(workspaceRoot, initial.id, {
+    status: 'running',
+    mergeState: 'pending'
+  });
+
+  try {
+    const result = await dispatchSubAgent(agent, parsed.task, {
+      repoRoot: workspaceRoot,
+      proposalRoot: join(workspaceRoot, BOBBY_DIR, 'proposals'),
+      runInWorktree: async (agentDescriptor, task, worktreePath) =>
+        runSubAgentTaskInWorktree(agentDescriptor as SubAgentRecordDto, task, worktreePath)
+    });
+
+    return updateSubAgentDispatchRecord(workspaceRoot, initial.id, {
+      status: 'completed',
+      mergeState: 'ready',
+      worktreePath: result.worktreePath,
+      proposalId: result.proposalId,
+      proposalPath: result.proposalPath,
+      error: null
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return updateSubAgentDispatchRecord(workspaceRoot, initial.id, {
+      status: 'failed',
+      mergeState: 'blocked',
+      error: message
+    });
+  }
 });
 
 ipcMain.handle('mcp:list', async () => listMcpServers(app.getPath('userData'), currentWorkspaceRoot()));
