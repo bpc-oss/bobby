@@ -225,14 +225,13 @@ vi.mock('../electron/updater', () => ({
   initAutoUpdate: vi.fn()
 }));
 
-async function loadMain(initialAutomations: AutomationRecord[] = []): Promise<void> {
+async function loadMain(initialAutomations: AutomationRecord[] = [], initialProjectDir?: string): Promise<void> {
   vi.resetModules();
   handlers.clear();
   tempHome = mkdtempSync(join(tmpdir(), 'bobby-gui-setup-'));
   mkdirSync(join(tempHome, '.bobby'), { recursive: true });
   writeFileSync(join(tempHome, '.bobby', 'key'), 'deepseek-key\n', 'utf8');
   writeFileSync(join(tempHome, '.bobby', 'capabilities.json'), '{}\n', 'utf8');
-  writeFileSync(join(tempHome, '.bobby', 'automations.json'), JSON.stringify(initialAutomations, null, 2), 'utf8');
   originalHome = process.env.HOME ?? '';
   originalUserProfile = process.env.USERPROFILE ?? '';
   process.env.HOME = tempHome;
@@ -246,6 +245,19 @@ async function loadMain(initialAutomations: AutomationRecord[] = []): Promise<vo
 
   await import('../electron/main');
   await appWhenReady.mock.results[0]?.value;
+
+  if (initialProjectDir) {
+    const selectProject = handlers.get('project:select');
+    if (!selectProject) {
+      throw new Error('project:select handler not registered');
+    }
+
+    await selectProject(undefined, { projectDir: initialProjectDir });
+    mkdirSync(join(initialProjectDir, '.bobby'), { recursive: true });
+    writeFileSync(join(initialProjectDir, '.bobby', 'automations.json'), JSON.stringify(initialAutomations, null, 2), 'utf8');
+  } else {
+    writeFileSync(join(tempHome, '.bobby', 'automations.json'), JSON.stringify(initialAutomations, null, 2), 'utf8');
+  }
 }
 
 afterEach(() => {
@@ -659,7 +671,9 @@ describe('automation IPC handlers', () => {
   });
 
   it('persists create, update, toggle, and remove operations to local storage', async () => {
-    await loadMain();
+    const projectRoot = mkdtempSync(join(tmpdir(), 'automation-project-'));
+    mkdirSync(join(projectRoot, '.bobby'), { recursive: true });
+    await loadMain([], projectRoot);
 
     const create = handlers.get('automations:create');
     const list = handlers.get('automations:list');
@@ -683,7 +697,7 @@ describe('automation IPC handlers', () => {
 
     const storedAfterCreate = await list() as AutomationRecord[];
     expect(storedAfterCreate).toHaveLength(1);
-    expect(readFileSync(join(tempHome, '.bobby', 'automations.json'), 'utf8')).toContain('Daily check-in');
+    expect(readFileSync(join(projectRoot, '.bobby', 'automations.json'), 'utf8')).toContain('Daily check-in');
 
     const updated = await update(undefined, {
       id: created.id,
@@ -702,6 +716,8 @@ describe('automation IPC handlers', () => {
   });
 
   it('surfaces run-now failures through visible error and notification hooks', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'automation-failure-'));
+    mkdirSync(join(projectRoot, '.bobby'), { recursive: true });
     const failingSend = vi.fn(async () => {
       throw new Error('boom');
     });
@@ -711,7 +727,7 @@ describe('automation IPC handlers', () => {
     }));
 
     try {
-      await loadMain();
+      await loadMain([], projectRoot);
       const create = handlers.get('automations:create');
       const runNow = handlers.get('automations:runNow');
       if (!create || !runNow) throw new Error('automation handlers not registered');
@@ -747,6 +763,31 @@ describe('automation IPC handlers', () => {
   it('runs due automations on the background timer', async () => {
     vi.useFakeTimers();
 
+    const listeners = new Set<(event: unknown) => void>();
+    KernelHostMock.mockImplementation(() => ({
+      subscribe: vi.fn((listener: (event: unknown) => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+          return undefined;
+        };
+      }),
+      send: vi.fn(async () => {
+        const taskId = 'automation-task-1';
+        const events = [
+          { type: 'intent_proposed', taskId, contract: { goal: 'Morning ping', acceptanceCriteria: [{ id: 'AC1', desc: 'Reply', oracleHint: 'human' }], constraints: [], inputs: [], outOfScope: [] } },
+          { type: 'plan_ready', taskId, steps: [{ id: 'S1', desc: 'Send reminder', satisfiesAcIds: ['AC1'], dependsOn: [] }] },
+          { type: 'direct_answer', taskId, text: 'Ping complete' },
+          { type: 'final_result', taskId, status: 'done' }
+        ] as const;
+        for (const event of events) {
+          for (const listener of listeners) {
+            listener(event);
+          }
+        }
+      })
+    }));
+
     const due = new Date(Date.now() - 60_000).toISOString();
     const automation: AutomationRecord = {
       id: 'automation-test-1',
@@ -761,24 +802,18 @@ describe('automation IPC handlers', () => {
       nextRunAt: due
     };
 
-    await loadMain([automation]);
+    const projectRoot = mkdtempSync(join(tmpdir(), 'automation-timer-'));
+    mkdirSync(join(projectRoot, '.bobby'), { recursive: true });
+    await loadMain([automation], projectRoot);
     await vi.advanceTimersByTimeAsync(15_000);
 
-    const host = (KernelHostMock as unknown as { mock: { results: Array<{ value: { send: ReturnType<typeof vi.fn> } }> } }).mock.results[0]?.value;
-    expect(host.send).toHaveBeenCalledWith({
-      type: 'startTask',
-      input: 'Ping Bobby and report back.'
-    });
+    const hostResults = (KernelHostMock as unknown as { mock: { results: Array<{ value: { send: ReturnType<typeof vi.fn> } }> } }).mock.results.map((result) => result.value);
+    expect(hostResults.some((host) => host.send.mock.calls.some(([cmd]) => (cmd as { type?: string }).type === 'startTask'))).toBe(true);
 
-    const windowInstance = (BrowserWindowMock as unknown as {
-      mock: { results: Array<{ value: { webContents: { send: ReturnType<typeof vi.fn> } } }> };
-    }).mock.results[0]?.value;
-    expect(windowInstance.webContents.send).toHaveBeenCalledWith(
-      'kernel:event',
-      expect.objectContaining({
-        type: 'direct_answer',
-        taskId: 'automation:automation-test-1'
-      })
-    );
+    const taskDir = join(projectRoot, '.bobby', 'tasks', 'automation-task-1');
+    expect(existsSync(join(taskDir, 'task.json'))).toBe(true);
+    expect(readFileSync(join(taskDir, 'task.json'), 'utf8')).toContain('Morning ping');
+    expect(readFileSync(join(taskDir, 'report.md'), 'utf8')).toContain('Ping complete');
+    expect(notificationShow).toHaveBeenCalled();
   });
 });

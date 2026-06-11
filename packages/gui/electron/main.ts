@@ -23,6 +23,7 @@ import {
   Workspace,
   WriteFileTool
 } from '@bobby/kernel';
+import type { KernelEvent } from '@bobby/shared';
 import {
   AppSettingsSchema,
   AppSettingsUpdateSchema,
@@ -565,7 +566,7 @@ function taskSummary(taskId: string): TaskSummary | null {
     taskType: String(meta.taskType ?? 'task'),
     createdAt: String(meta.createdAt ?? fallbackTime),
     updatedAt: String(meta.updatedAt ?? fallbackTime),
-    traceCount: Array.isArray(currentHost?.getTrace(taskId)) ? currentHost!.getTrace(taskId).length : 0,
+    traceCount: readTaskTrace(taskId).length,
     hasContract: existsSync(join(taskDir, 'contract.json')),
     hasPlan: existsSync(join(taskDir, 'plan.json')),
     hasReport: existsSync(join(taskDir, 'report.md'))
@@ -582,7 +583,7 @@ function taskDetail(taskId: string): TaskDetail | null {
     contract: readTaskFile(taskId, 'contract.json'),
     plan: readTaskFile(taskId, 'plan.json'),
     report: readTextTaskFile(taskId, 'report.md'),
-    trace: currentHost?.getTrace(taskId) ?? [],
+    trace: readTaskTrace(taskId),
     sessionIds: readSessions().filter((session) => session.taskId === taskId).map((session) => session.id)
   });
 }
@@ -637,8 +638,158 @@ function fileHasText(path: string): boolean {
   }
 }
 
+function automationWorkspaceRoot(): string {
+  return currentProjectDir ?? app.getPath('userData');
+}
+
 function resolveAutomationsPath() {
-  return join(homedir(), BOBBY_DIR, AUTOMATIONS_FILE);
+  return join(automationWorkspaceRoot(), BOBBY_DIR, AUTOMATIONS_FILE);
+}
+
+function automationTaskRoot(): string | null {
+  return join(automationWorkspaceRoot(), BOBBY_DIR, 'tasks');
+}
+
+function readPersistedTraceFile(path: string): unknown[] {
+  try {
+    if (!existsSync(path)) {
+      return [];
+    }
+
+    return readFileSync(path, 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line) as unknown;
+        } catch {
+          return null;
+        }
+      })
+      .filter((item): item is unknown => item !== null);
+  } catch {
+    return [];
+  }
+}
+
+function readTaskTrace(taskId: string): unknown[] {
+  const liveTrace = currentHost?.getTrace(taskId);
+  if (Array.isArray(liveTrace) && liveTrace.length > 0) {
+    return [...liveTrace];
+  }
+
+  const root = currentProjectDir ? join(currentProjectDir, BOBBY_DIR, 'traces') : null;
+  if (!root) {
+    return [];
+  }
+
+  return readPersistedTraceFile(join(root, `${taskId}.jsonl`));
+}
+
+function resolveAutomationStatus(events: KernelEvent[]): 'done' | 'failed' | 'blocked' {
+  const finalResult = [...events].reverse().find((event) => event.type === 'final_result');
+  if (finalResult?.type === 'final_result') {
+    return finalResult.status;
+  }
+
+  if (events.some((event) => event.type === 'direct_answer')) {
+    return 'done';
+  }
+
+  return 'failed';
+}
+
+function writeAutomationTaskArtifacts(
+  taskId: string,
+  automation: AutomationRecord,
+  events: KernelEvent[],
+  startedAt: string
+): void {
+  const root = automationTaskRoot();
+  if (!root) {
+    return;
+  }
+
+  const taskDir = join(root, taskId);
+  const status = resolveAutomationStatus(events);
+  const finishedAt = nowIso();
+  const intent = events.find((event): event is Extract<KernelEvent, { type: 'intent_proposed' }> => event.type === 'intent_proposed');
+  const plan = events.find((event): event is Extract<KernelEvent, { type: 'plan_ready' }> => event.type === 'plan_ready');
+
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(
+    join(taskDir, 'task.json'),
+    JSON.stringify(
+      {
+        id: taskId,
+        userGoal: automation.title,
+        goal: automation.prompt,
+        taskType: `automation:${automation.kind}`,
+        state: status,
+        createdAt: startedAt,
+        updatedAt: finishedAt,
+        automationId: automation.id,
+        automationTitle: automation.title,
+        automationKind: automation.kind
+      },
+      null,
+      2
+    ),
+    'utf8'
+  );
+
+  if (intent) {
+    writeFileSync(join(taskDir, 'contract.json'), JSON.stringify(intent.contract, null, 2), 'utf8');
+  }
+
+  if (plan) {
+    writeFileSync(join(taskDir, 'plan.json'), JSON.stringify(plan.steps, null, 2), 'utf8');
+  }
+
+  writeFileSync(
+    join(taskDir, 'report.md'),
+    [
+      `# Automation ${automation.title}`,
+      '',
+      `- taskId: ${taskId}`,
+      `- status: ${status}`,
+      `- kind: ${automation.kind}`,
+      `- intervalMinutes: ${automation.intervalMinutes}`,
+      `- startedAt: ${startedAt}`,
+      `- finishedAt: ${finishedAt}`,
+      '',
+      '## Prompt',
+      automation.prompt,
+      '',
+      '## Trace',
+      ...events.map((event) => {
+        if (event.type === 'direct_answer') {
+          return `- direct_answer: ${event.text}`;
+        }
+        if (event.type === 'error') {
+          return `- error: ${event.message}`;
+        }
+        if (event.type === 'intent_proposed') {
+          return `- intent_proposed: ${event.contract.goal}`;
+        }
+        if (event.type === 'plan_ready') {
+          return `- plan_ready: ${event.steps.map((step) => step.id).join(', ')}`;
+        }
+        if (event.type === 'final_result') {
+          return `- final_result: ${event.status}`;
+        }
+        return `- ${event.type}`;
+      })
+    ].join('\n'),
+    'utf8'
+  );
+}
+
+function notifyAutomation(message: string): void {
+  if (Notification.isSupported()) {
+    new Notification({ title: 'Bobby', body: message }).show();
+  }
 }
 
 function nowIso(): string {
@@ -709,11 +860,12 @@ function createAutomation(input: unknown): AutomationRecord {
 }
 
 async function runAutomation(automation: AutomationRecord): Promise<AutomationRecord> {
+  const startedAt = nowIso();
   const updated: AutomationRecord = {
     ...automation,
-    lastRunAt: nowIso(),
-    nextRunAt: addMinutes(nowIso(), automation.intervalMinutes),
-    updatedAt: nowIso()
+    lastRunAt: startedAt,
+    nextRunAt: addMinutes(startedAt, automation.intervalMinutes),
+    updatedAt: startedAt
   };
 
   upsertAutomation(updated);
@@ -724,18 +876,43 @@ async function runAutomation(automation: AutomationRecord): Promise<AutomationRe
     return updated;
   }
 
+  const observedEvents: KernelEvent[] = [];
+  let capturedTaskId: string | null = null;
+  let failedToRun = false;
+  const unsubscribe = host.subscribe((event) => {
+    if (!('taskId' in event) || event.taskId === 'system') {
+      return;
+    }
+
+    if (!capturedTaskId) {
+      capturedTaskId = event.taskId;
+    }
+
+    if (event.taskId === capturedTaskId) {
+      observedEvents.push(event);
+    }
+  });
+
   try {
     await host.send({ type: 'startTask', input: automation.prompt });
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('kernel:event', {
-        type: 'direct_answer',
-        taskId: `automation:${automation.id}`,
-        text: `Automation triggered: ${automation.title}`
-      });
-    }
   } catch (error: unknown) {
+    failedToRun = true;
     const message = error instanceof Error ? error.message : String(error);
     notifySystem(`Automation "${automation.title}" failed: ${message}`);
+  } finally {
+    unsubscribe();
+  }
+
+  const taskId = capturedTaskId ?? `automation-${automation.id}-${Date.now()}`;
+  writeAutomationTaskArtifacts(taskId, automation, observedEvents, startedAt);
+
+  const status = resolveAutomationStatus(observedEvents);
+
+  const message = `Automation "${automation.title}" completed with ${status} status.`;
+  if (status === 'failed' && !failedToRun) {
+    notifySystem(`Automation "${automation.title}" failed.`);
+  } else {
+    notifyAutomation(message);
   }
 
   return updated;
