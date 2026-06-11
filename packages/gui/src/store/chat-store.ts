@@ -378,6 +378,14 @@ async function persistSession(session: SessionRecordDto): Promise<void> {
   }
 }
 
+function readLastActiveSessionId(): string | null {
+  try {
+    return localStorage.getItem('bobby-last-active-session');
+  } catch {
+    return null;
+  }
+}
+
 // ---- Event sink ----
 
 export function reduceEvent(state: ChatState, event: KernelEvent): Partial<ChatState> {
@@ -811,7 +819,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const parsed = SessionRecordSchema.array().safeParse(await window.bobby.listSessions());
     if (parsed.success) {
       const sessions = dedupeSessions(parsed.data);
-      set({
+      const state = {
         sessions,
         threads: sessions.reduce<Record<string, ThreadRecord>>((accumulator, session) => {
           accumulator[session.id] = session;
@@ -823,7 +831,24 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           }
           return accumulator;
         }, {})
-      });
+      };
+      set(state);
+
+      const lastActiveSessionId = readLastActiveSessionId();
+      if (lastActiveSessionId) {
+        const target = sessions.find((session) => session.id === lastActiveSessionId);
+        if (target) {
+          set({
+            ...resetThreadState(target),
+            sessions: state.sessions,
+            threads: state.threads,
+            taskThreadIds: state.taskThreadIds,
+            currentProject: get().currentProject,
+            recentProjects: get().recentProjects,
+            _client: get()._client
+          });
+        }
+      }
     }
   }
 }));

@@ -21,6 +21,7 @@ import './styles/tokens.css';
 type AppPage = 'chat' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'claw' | 'settings';
 
 const ONBOARDING_COMPLETE_KEY = 'bobby-onboarding-complete';
+const LAST_ACTIVE_SESSION_KEY = 'bobby-last-active-session';
 
 function resolveKernelClient() {
   if (typeof window === 'undefined') return null;
@@ -41,6 +42,18 @@ function saveOnboardingComplete(value: boolean): void {
     localStorage.setItem(ONBOARDING_COMPLETE_KEY, String(value));
   } catch {
     // localStorage can be unavailable in tests or locked-down shells.
+  }
+}
+
+function saveLastActiveSessionId(sessionId: string | null): void {
+  try {
+    if (sessionId) {
+      localStorage.setItem(LAST_ACTIVE_SESSION_KEY, sessionId);
+    } else {
+      localStorage.removeItem(LAST_ACTIVE_SESSION_KEY);
+    }
+  } catch {
+    // ignore localStorage write failures
   }
 }
 
@@ -66,6 +79,7 @@ export function App() {
   const selectProject = useChatStore((s) => s.selectProject);
   const newSession = useChatStore((s) => s.newSession);
   const resumeSession = useChatStore((s) => s.switchSession);
+  const activeSessionId = useChatStore((s) => s.activeSessionId);
 
   React.useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -84,6 +98,10 @@ export function App() {
     void loadProjectState();
     void loadSessions();
   }, [loadProjectState, loadSessions]);
+
+  React.useEffect(() => {
+    saveLastActiveSessionId(activeSessionId);
+  }, [activeSessionId]);
 
   React.useEffect(() => {
     if (typeof window === 'undefined' || !window.bobby?.onAppCommand) return;
