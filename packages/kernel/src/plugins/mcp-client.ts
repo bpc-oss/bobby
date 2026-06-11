@@ -259,7 +259,16 @@ export function mcpToolToBobbyTool(name: string, transport: McpTransport, option
           ? {
               path: result.payload?.path ?? '',
               bytes: typeof result.payload?.bytes === 'number' ? result.payload.bytes : 0,
-              content: result.payload?.content
+              content: typeof result.payload?.content === 'string' ? result.payload.content : undefined,
+              patch:
+                typeof result.payload?.patch === 'string'
+                  ? result.payload.patch
+                  : typeof result.payload?.diff === 'string'
+                    ? result.payload.diff
+                    : typeof result.payload?.content === 'string'
+                      ? result.payload.content
+                      : undefined,
+              diff: typeof result.payload?.diff === 'string' ? result.payload.diff : undefined
             }
           : evidenceType === 'file_exists'
             ? {

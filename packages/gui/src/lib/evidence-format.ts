@@ -63,7 +63,15 @@ function fileDiffSummary(payload: Record<string, unknown>): string {
 
 function fileDiffDetail(payload: Record<string, unknown>): string {
   const path = typeof payload.path === 'string' && payload.path.length > 0 ? `path: ${payload.path}` : '';
-  const diff = typeof payload.diff === 'string' && payload.diff.length > 0 ? `diff: ${payload.diff}` : '';
+  const rawDiff =
+    typeof payload.patch === 'string' && payload.patch.length > 0
+      ? payload.patch
+      : typeof payload.diff === 'string' && payload.diff.length > 0
+        ? payload.diff
+        : typeof payload.content === 'string' && payload.content.length > 0
+          ? payload.content
+          : '';
+  const diff = rawDiff ? `diff: ${rawDiff}` : '';
 
   if (path && diff) {
     return `${path}\n${diff}`;

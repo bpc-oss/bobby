@@ -124,3 +124,36 @@ it('maps MCP error transport results to exitCode 1', async () => {
   expect(result.evidence).toHaveLength(1);
   expect(result.evidence[0].payload.exitCode).toBe(1);
 });
+
+it('includes patch-compatible file diff evidence when MCP returns file content', async () => {
+  const transport: McpTransport = {
+    call: async () => ({
+      stdout: 'wrote file',
+      isError: false,
+      payload: {
+        path: 'demo.txt',
+        bytes: 12,
+        content: '@@ -0,0 +1 @@\n+hello'
+      }
+    })
+  };
+
+  const tool = mcpToolToBobbyTool('write_file', transport, {
+    evidenceType: 'file_diff',
+    permissionTier: 'L1',
+    description: 'Write a file'
+  });
+
+  const result = await tool.run({ path: 'demo.txt' }, { acId: 'ac-4', claimId: 'claim-4' });
+
+  expect(result.evidence).toHaveLength(1);
+  expect(result.evidence[0]).toMatchObject({
+    evidenceType: 'file_diff',
+    payload: {
+      path: 'demo.txt',
+      bytes: 12,
+      content: '@@ -0,0 +1 @@\n+hello',
+      patch: '@@ -0,0 +1 @@\n+hello'
+    }
+  });
+});
