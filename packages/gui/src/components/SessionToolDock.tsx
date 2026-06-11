@@ -406,12 +406,45 @@ function DispatchRow({ record }: { record: SubAgentDispatchRecordDto }) {
   );
 }
 
+function CommandOutputRow({ block, index }: { block: ChatBlock; index: number }) {
+  if (block.kind !== 'evidence' || block.evidence.evidenceType !== 'command_output') {
+    return null;
+  }
+
+  const payload = block.evidence.payload as Record<string, unknown>;
+  const stdout = typeof payload.stdout === 'string' ? payload.stdout : '';
+  const stderr = typeof payload.stderr === 'string' ? payload.stderr : '';
+  const exitCode = typeof payload.exitCode === 'number' ? payload.exitCode : null;
+  const command = typeof payload.cmd === 'string' ? payload.cmd : 'command';
+  const args = Array.isArray(payload.args) ? payload.args.filter((item) => typeof item === 'string').map(String) : [];
+  const label = [command, ...args].join(' ').trim();
+
+  return (
+    <article className="rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+      <div className="flex items-center justify-between gap-2 text-[11px] text-bobby-faint">
+        <span className={exitCode === 0 ? 'text-bobby-success' : exitCode === null ? 'text-bobby-muted' : 'text-bobby-danger'}>
+          {exitCode === null ? 'running' : `exit ${exitCode}`}
+        </span>
+        <span className="truncate">{label}</span>
+      </div>
+      {stdout && <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-bobby-surface-subtle px-3 py-2 text-[12px] leading-5 text-bobby-ink">{stdout}</pre>}
+      {stderr && <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-bobby-danger-soft px-3 py-2 text-[12px] leading-5 text-bobby-danger">{stderr}</pre>}
+      <div className="mt-2 text-[10px] text-bobby-faint">step {index + 1}</div>
+    </article>
+  );
+}
+
 function TerminalPanel() {
   const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
+  const blocks = useChatStore((state) => state.blocks);
   const [command, setCommand] = React.useState('');
   const [runs, setRuns] = React.useState<TerminalRunResult[]>([]);
   const [running, setRunning] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const commandOutputs = React.useMemo(
+    () => blocks.filter((block): block is Extract<ChatBlock, { kind: 'evidence' }> => block.kind === 'evidence' && block.evidence.evidenceType === 'command_output'),
+    [blocks]
+  );
 
   async function runCommand() {
     if (!client?.runTerminalCommand || !command.trim()) return;
@@ -460,6 +493,25 @@ function TerminalPanel() {
         </div>
         {error && <div className="mt-2 rounded-md px-3 py-2 text-[12px]" style={{ background: 'var(--bobby-danger-soft)', color: 'var(--bobby-danger)' }}>{error}</div>}
       </div>
+
+      <section className="space-y-2">
+        <div className="flex items-center justify-between rounded-lg border px-3 py-2" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+          <div>
+            <div className="text-[12px] font-semibold text-bobby-ink">Task stream</div>
+            <div className="text-[11px] text-bobby-faint">Real command output evidence from the current session.</div>
+          </div>
+          <div className="text-[11px] text-bobby-faint">{commandOutputs.length} item{commandOutputs.length === 1 ? '' : 's'}</div>
+        </div>
+        {commandOutputs.length === 0 ? (
+          <Empty title="No command output evidence yet." />
+        ) : (
+          <div className="space-y-2">
+            {commandOutputs.map((block, index) => (
+              <CommandOutputRow key={block.id} block={block} index={index} />
+            ))}
+          </div>
+        )}
+      </section>
 
       {runs.length === 0 ? (
         <Empty title="No terminal commands yet." />

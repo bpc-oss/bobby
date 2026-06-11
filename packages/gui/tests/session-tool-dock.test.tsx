@@ -242,6 +242,75 @@ describe('SessionToolDock', () => {
     expect(screen.getByText('ok')).toBeTruthy();
   });
 
+  it('shows task command_output evidence in chronological order', async () => {
+    useChatStore.setState({
+      blocks: [
+        {
+          kind: 'evidence',
+          id: 'e-1',
+          evidence: {
+            claimId: 'c-1',
+            acId: 'AC1',
+            evidenceType: 'command_output',
+            payload: {
+              cmd: 'pnpm test',
+              args: [],
+              exitCode: 0,
+              stdout: 'first\n',
+              stderr: '',
+              signal: null,
+              timedOut: false
+            },
+            producedBy: 'tool'
+          }
+        },
+        {
+          kind: 'evidence',
+          id: 'e-2',
+          evidence: {
+            claimId: 'c-2',
+            acId: 'AC2',
+            evidenceType: 'command_output',
+            payload: {
+              cmd: 'git status',
+              args: [],
+              exitCode: 1,
+              stdout: '',
+              stderr: 'boom\n',
+              signal: null,
+              timedOut: false
+            },
+            producedBy: 'tool'
+          }
+        }
+      ],
+      currentPlan: [],
+      currentTaskId: 'task-1',
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-11T00:00:00.000Z'
+      },
+      status: 'running',
+      busy: true,
+      liveReasoning: '',
+      liveAssistant: '',
+      liveToolContent: '',
+      threads: {},
+      taskThreadIds: {},
+      pendingThreadIds: []
+    });
+
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Terminal/));
+    expect(await screen.findByText(/Task stream/)).toBeTruthy();
+    expect(screen.getByText('pnpm test')).toBeTruthy();
+    expect(screen.getByText('exit 0')).toBeTruthy();
+    expect(screen.getByText('git status')).toBeTruthy();
+    expect(screen.getByText('boom')).toBeTruthy();
+  });
+
   it('keeps proposal apply disabled while the current session still has a gate', async () => {
     (window as any).bobby.listProposals = vi.fn().mockResolvedValue([
       {
