@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { BrowserWindow } from 'electron';
@@ -456,6 +457,35 @@ describe('mcp IPC handlers', () => {
 
     const afterRemove = await list() as Array<{ id: string }>;
     expect(afterRemove.some((server) => server.id === created.id)).toBe(false);
+  });
+});
+
+describe('git IPC handlers', () => {
+  beforeEach(() => {
+    handlers.clear();
+  });
+
+  it('detects git projects and commits workspace changes', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'bobby-git-project-'));
+    spawnSync('git', ['init', '-q'], { cwd: projectRoot, encoding: 'utf8' });
+    spawnSync('git', ['config', 'user.email', 'test@example.com'], { cwd: projectRoot, encoding: 'utf8' });
+    spawnSync('git', ['config', 'user.name', 'Bobby Test'], { cwd: projectRoot, encoding: 'utf8' });
+    mkdirSync(join(projectRoot, 'src'), { recursive: true });
+    writeFileSync(join(projectRoot, 'src', 'note.txt'), 'before\n', 'utf8');
+
+    await loadMain([], projectRoot);
+    const isRepo = handlers.get('git:isRepo');
+    const commit = handlers.get('git:commit');
+    if (!isRepo || !commit) throw new Error('git handlers not registered');
+
+    await expect(isRepo()).resolves.toBe(true);
+    writeFileSync(join(projectRoot, 'src', 'note.txt'), 'after\n', 'utf8');
+
+    const result = await commit(undefined, { message: 'Test Bobby commit' }) as { committed: boolean; hash: string | null; output: string };
+    expect(result.committed).toBe(true);
+    expect(result.hash).toMatch(/^[0-9a-f]+$/i);
+    expect(result.output).toContain('Test Bobby commit');
+    expect(spawnSync('git', ['-C', projectRoot, 'log', '-1', '--pretty=%s'], { encoding: 'utf8' }).stdout.trim()).toBe('Test Bobby commit');
   });
 });
 

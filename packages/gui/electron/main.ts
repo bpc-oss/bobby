@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,10 +36,12 @@ import {
   AutomationUpdateInputSchema,
   CommandRemoveInputSchema,
   CommandUpsertInputSchema,
+  GitCommitInputSchema,
   ProjectSelectResultSchema,
   ProposalApplyInputSchema,
   ProposalDiscardInputSchema,
   ProposalSummarySchema,
+  GitCommitResultSchema,
   McpServerRecordSchema,
   McpServerRemoveInputSchema,
   McpServerToggleInputSchema,
@@ -962,6 +965,57 @@ function getSetupStatus(): OnboardingStatus {
   };
 }
 
+function runGit(args: string[], cwd: string): { ok: boolean; stdout: string; stderr: string; status: number | null } {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  return {
+    ok: result.status === 0,
+    stdout: result.stdout?.toString() ?? '',
+    stderr: result.stderr?.toString() ?? '',
+    status: typeof result.status === 'number' ? result.status : null
+  };
+}
+
+function isGitRepository(workspaceRoot: string): boolean {
+  const result = runGit(['rev-parse', '--is-inside-work-tree'], workspaceRoot);
+  return result.ok && /true/i.test(result.stdout.trim());
+}
+
+function commitWorkspace(workspaceRoot: string, message: string) {
+  if (!isGitRepository(workspaceRoot)) {
+    return GitCommitResultSchema.parse({
+      committed: false,
+      hash: null,
+      output: 'Not a git repository'
+    });
+  }
+
+  const status = runGit(['status', '--porcelain'], workspaceRoot);
+  if (status.stdout.trim().length === 0) {
+    return GitCommitResultSchema.parse({
+      committed: false,
+      hash: null,
+      output: 'No changes to commit'
+    });
+  }
+
+  const add = runGit(['add', '-A'], workspaceRoot);
+  if (!add.ok) {
+    throw new Error(add.stderr || add.stdout || 'git add failed');
+  }
+
+  const commit = runGit(['commit', '-m', message], workspaceRoot);
+  if (!commit.ok) {
+    throw new Error(commit.stderr || commit.stdout || 'git commit failed');
+  }
+
+  const hash = runGit(['rev-parse', '--short', 'HEAD'], workspaceRoot);
+  return GitCommitResultSchema.parse({
+    committed: true,
+    hash: hash.ok ? hash.stdout.trim() || null : null,
+    output: commit.stdout || commit.stderr || 'Committed changes'
+  });
+}
+
 function getCapabilityReport(): CapabilityReport | null {
   const paths = resolveSetupPaths();
   if (!existsSync(paths.capabilitiesPath)) {
@@ -1216,6 +1270,13 @@ ipcMain.handle('proposals:discard', async (_event, input) => {
   }
   unlinkSync(path);
   return true;
+});
+
+ipcMain.handle('git:isRepo', async () => isGitRepository(currentWorkspaceRoot()));
+
+ipcMain.handle('git:commit', async (_event, input) => {
+  const parsed = GitCommitInputSchema.parse(input);
+  return commitWorkspace(currentWorkspaceRoot(), parsed.message);
 });
 
 ipcMain.handle('snapshots:list', async () => {

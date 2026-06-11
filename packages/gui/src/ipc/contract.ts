@@ -196,6 +196,18 @@ export const ProposalDiscardInputSchema = z.object({
 });
 export type ProposalDiscardInput = z.infer<typeof ProposalDiscardInputSchema>;
 
+export const GitCommitInputSchema = z.object({
+  message: z.string().min(1)
+});
+export type GitCommitInput = z.infer<typeof GitCommitInputSchema>;
+
+export const GitCommitResultSchema = z.object({
+  committed: z.boolean(),
+  hash: z.string().nullable(),
+  output: z.string()
+});
+export type GitCommitResult = z.infer<typeof GitCommitResultSchema>;
+
 export const SnapshotListEntrySchema = z.object({
   id: z.string().min(1),
   createdAt: z.string().min(1),
@@ -389,6 +401,8 @@ export function makeKernelClient() {
     restoreSnapshot: (snapshotId?: string) => window.bobby.send({ type: 'restoreSnapshot', snapshotId }),
     applyProposal: (input: ProposalApplyInput) => window.bobby.applyProposal!(input),
     discardProposal: (input: ProposalDiscardInput) => window.bobby.discardProposal!(input),
+    gitIsRepo: () => window.bobby.gitIsRepo?.() ?? Promise.resolve(false),
+    gitCommit: (input: GitCommitInput) => window.bobby.gitCommit!(input),
     listMcpServers: () => window.bobby.listMcpServers!(),
     upsertMcpServer: (input: McpServerUpsertInput) => window.bobby.upsertMcpServer!(input),
     toggleMcpServer: (input: McpServerToggleInput) => window.bobby.toggleMcpServer!(input),

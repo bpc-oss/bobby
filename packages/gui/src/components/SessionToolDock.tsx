@@ -125,10 +125,34 @@ function PlanPanel() {
 function ReviewPanel({ proposals, refresh }: { proposals: ProposalSummary[]; refresh: () => Promise<void> }) {
   const blocks = useChatStore((s) => s.blocks);
   const status = useChatStore((s) => s.status);
+  const currentProject = useChatStore((s) => s.currentProject);
   const findings = blocks.filter((block) => block.kind === 'error' || (block.kind === 'verdict' && block.result !== 'pass'));
   const gates = blocks.filter((block) => block.kind === 'gate');
   const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
   const canApply = status === 'done' && findings.length === 0 && gates.length === 0;
+  const [isGitRepo, setIsGitRepo] = React.useState(false);
+  const [commitMessage, setCommitMessage] = React.useState('Apply Bobby proposal');
+  const [commitStatus, setCommitStatus] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    const probe = async () => {
+      if (!client?.gitIsRepo || !currentProject) {
+        if (active) setIsGitRepo(false);
+        return;
+      }
+      try {
+        const result = await client.gitIsRepo();
+        if (active) setIsGitRepo(result);
+      } catch {
+        if (active) setIsGitRepo(false);
+      }
+    };
+    void probe();
+    return () => {
+      active = false;
+    };
+  }, [client, currentProject]);
 
   async function applyProposal(proposal: ProposalSummary) {
     if (!client?.applyProposal) return;
@@ -148,6 +172,18 @@ function ReviewPanel({ proposals, refresh }: { proposals: ProposalSummary[]; ref
     await refresh();
   }
 
+  async function commitChanges() {
+    if (!client?.gitCommit) return;
+    if (!isGitRepo) return;
+    if (!window.confirm(`Commit current workspace changes?\n\n${commitMessage}`)) return;
+    try {
+      const result = await client.gitCommit({ message: commitMessage.trim() || 'Apply Bobby proposal' });
+      setCommitStatus(result.committed ? `Committed ${result.hash ?? 'changes'}` : result.output);
+    } catch (error) {
+      setCommitStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   return (
     <div className="space-y-3">
       {findings.length === 0 && gates.length === 0 ? <Row icon={CheckCircle2} title="No blocking review findings" tone="success" /> : null}
@@ -164,6 +200,35 @@ function ReviewPanel({ proposals, refresh }: { proposals: ProposalSummary[]; ref
           <DiffView patch={proposal.patch} maxHeight={180} />
         </section>
       ))}
+      <section className="rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="text-[12px] font-semibold text-bobby-ink">Git commit</div>
+            <div className="text-[11px] text-bobby-faint">{isGitRepo ? 'Stage and commit current workspace changes.' : 'Select a git project to enable commits.'}</div>
+          </div>
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ background: isGitRepo ? 'var(--bobby-success-soft)' : 'var(--bobby-hover)', color: isGitRepo ? 'var(--bobby-success)' : 'var(--bobby-muted)' }}>
+            {isGitRepo ? 'git repo' : 'not git'}
+          </span>
+        </div>
+        <input
+          value={commitMessage}
+          onChange={(event) => setCommitMessage(event.target.value)}
+          placeholder="Apply Bobby proposal"
+          className="mt-2 w-full rounded-md border px-2.5 py-1.5 text-[12px] text-bobby-ink outline-none"
+          style={{ background: 'var(--bobby-bg-canvas)', borderColor: 'var(--bobby-border)' }}
+        />
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={!isGitRepo}
+            onClick={() => void commitChanges()}
+            className="rounded-md bg-accent px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-40"
+          >
+            Commit changes
+          </button>
+          {commitStatus && <span className="text-[11px] text-bobby-faint">{commitStatus}</span>}
+        </div>
+      </section>
     </div>
   );
 }

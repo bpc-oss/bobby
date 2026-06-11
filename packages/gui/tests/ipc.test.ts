@@ -18,6 +18,8 @@ type WindowWithBobby = Window & typeof globalThis & {
     onEvent: (callback: (event: unknown) => void) => () => void;
     getSetupStatus: () => Promise<SetupStatus>;
     openQuickstart: () => Promise<unknown>;
+    gitIsRepo: () => Promise<boolean>;
+    gitCommit: (input: unknown) => Promise<unknown>;
     listMcpServers: () => Promise<unknown[]>;
     upsertMcpServer: (input: unknown) => Promise<unknown>;
     toggleMcpServer: (input: unknown) => Promise<unknown>;
@@ -54,6 +56,8 @@ function installBobby(send = vi.fn().mockResolvedValue(undefined), onEvent = vi.
       hasEnvKey: false
     }),
     openQuickstart: vi.fn().mockResolvedValue(undefined),
+    gitIsRepo: vi.fn().mockResolvedValue(false),
+    gitCommit: vi.fn().mockResolvedValue({ committed: false, hash: null, output: 'No changes to commit' }),
     listMcpServers: vi.fn().mockResolvedValue([]),
     upsertMcpServer: vi.fn().mockResolvedValue(undefined),
     toggleMcpServer: vi.fn().mockResolvedValue(undefined),

@@ -20,6 +20,8 @@ import type {
   ProjectSelectResult,
   ProposalApplyInput,
   ProposalDiscardInput,
+  GitCommitInput,
+  GitCommitResult,
   ProposalSummary,
   SnapshotListEntry,
   TerminalRunInput,
@@ -67,6 +69,8 @@ declare global {
       readProposal?: (proposalId: string) => Promise<ProposalSummary | null>;
       applyProposal?: (input: ProposalApplyInput) => Promise<ProposalSummary | null>;
       discardProposal?: (input: ProposalDiscardInput) => Promise<boolean>;
+      gitIsRepo?: () => Promise<boolean>;
+      gitCommit?: (input: GitCommitInput) => Promise<GitCommitResult>;
       listSnapshots?: () => Promise<SnapshotListEntry[]>;
       searchFiles?: (query: string) => Promise<WorkspaceFileSearchEntry[]>;
       listWorkspaceTree?: () => Promise<WorkspaceTreeNode[]>;
