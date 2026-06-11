@@ -298,6 +298,37 @@ describe('workspace UI smoke', () => {
     });
   });
 
+  it('refreshes custom slash commands after the command registry changes', async () => {
+    const client = makeKernelClientMock();
+    client.listCommands
+      .mockResolvedValueOnce([
+        {
+          sourcePath: 'E:\\ai-files\\Bobby\\.bobby\\commands\\summarize.md',
+          name: 'summarize',
+          description: 'Summarize the current task',
+          promptTemplate: 'Summarize this task:\n{{input}}'
+        }
+      ])
+      .mockResolvedValueOnce([
+        {
+          sourcePath: 'E:\\ai-files\\Bobby\\.bobby\\commands\\rewrite.md',
+          name: 'rewrite',
+          description: 'Rewrite the current draft',
+          promptTemplate: 'Rewrite this task:\n{{input}}'
+        }
+      ]);
+
+    render(<Workspace kernelClient={client} />);
+
+    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '/rew' } });
+    expect(screen.queryByText('rewrite')).toBeNull();
+
+    fireEvent(window, new Event('bobby:commands-changed'));
+
+    expect(await screen.findByText('rewrite')).toBeTruthy();
+  });
+
   it('does not create a duplicate session when clicking the current session row', () => {
     const current: SessionRecordDto = {
       id: 'current',

@@ -35,6 +35,11 @@ function draftFromCommand(command: CommandRecordDto): CommandDraft {
   };
 }
 
+function notifyCommandsChanged() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event('bobby:commands-changed'));
+}
+
 export function Commands() {
   const client = React.useMemo(resolveClient, []);
   const [items, setItems] = React.useState<CommandRecordDto[]>([]);
@@ -98,6 +103,7 @@ export function Commands() {
         return [saved, ...filtered].sort((left, right) => left.name.localeCompare(right.name));
       });
       setSelectedPath(saved.sourcePath);
+      notifyCommandsChanged();
       return saved;
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError));
@@ -117,6 +123,7 @@ export function Commands() {
       setItems((current) => current.filter((item) => item.sourcePath !== selectedPath));
       setSelectedPath(null);
       setDraft(blankDraft());
+      notifyCommandsChanged();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError));
     } finally {

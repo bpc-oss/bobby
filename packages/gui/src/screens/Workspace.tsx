@@ -269,22 +269,46 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
   const pendingSelection = useRef<{ start: number; end: number } | null>(null);
   const requestToken = useRef(0);
 
-  useEffect(() => {
-    if (!kernelClient?.listCommands) return;
-    let active = true;
+  const refreshCustomCommands = useCallback(async () => {
+    const listCommands = kernelClient?.listCommands;
+    if (!listCommands) return;
+    try {
+      setCustomCommands(await listCommands());
+    } catch {
+      setCustomCommands([]);
+    }
+  }, [kernelClient]);
 
-    void kernelClient.listCommands()
-      .then((commands) => {
+  useEffect(() => {
+    let active = true;
+    const listCommands = kernelClient?.listCommands;
+    if (!listCommands) return;
+
+    void (async () => {
+      try {
+        const commands = await listCommands();
         if (active) setCustomCommands(commands);
-      })
-      .catch(() => {
+      } catch {
         if (active) setCustomCommands([]);
-      });
+      }
+    })();
 
     return () => {
       active = false;
     };
-  }, [kernelClient]);
+  }, [kernelClient, refreshCustomCommands]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleCommandChange = () => {
+      void refreshCustomCommands();
+    };
+
+    window.addEventListener('bobby:commands-changed', handleCommandChange as EventListener);
+    return () => {
+      window.removeEventListener('bobby:commands-changed', handleCommandChange as EventListener);
+    };
+  }, [refreshCustomCommands]);
 
   const commands = React.useMemo(() => [
     {
