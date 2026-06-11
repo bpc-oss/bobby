@@ -170,9 +170,14 @@ function ReviewPanel({ proposals, refresh }: { proposals: ProposalSummary[]; ref
 
 function DiffPanel() {
   const blocks = useChatStore((s) => s.blocks);
+  const currentTaskId = useChatStore((s) => s.currentTaskId);
   const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
   const diffs = collectDiffs(blocks);
   const [snapshots, setSnapshots] = React.useState<SnapshotListEntry[]>([]);
+  const timelineSnapshots = React.useMemo(() => {
+    if (!currentTaskId) return snapshots;
+    return snapshots.filter((snapshot) => snapshot.taskId === currentTaskId);
+  }, [currentTaskId, snapshots]);
 
   const refreshSnapshots = React.useCallback(async () => {
     if (!client?.listSnapshots) {
@@ -208,11 +213,11 @@ function DiffPanel() {
           <h3 className="text-[12px] font-semibold text-bobby-ink">Checkpoint timeline</h3>
           <button type="button" onClick={() => void refreshSnapshots()} className="rounded-md px-2 py-1 text-[11px] text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink">Refresh</button>
         </div>
-        {snapshots.length === 0 ? (
+        {timelineSnapshots.length === 0 ? (
           <Empty title="No checkpoints found yet." />
         ) : (
           <div className="space-y-2">
-            {snapshots.map((snapshot, index) => (
+            {timelineSnapshots.map((snapshot, index) => (
               <div key={snapshot.id} className="rounded-lg border px-3 py-2" style={{ borderColor: 'var(--bobby-border-muted)', background: 'var(--bobby-bg-canvas)' }}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">

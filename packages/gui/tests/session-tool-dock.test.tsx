@@ -6,7 +6,7 @@ import { SessionToolDock } from '../src/components/SessionToolDock';
 import { useChatStore } from '../src/store/chat-store';
 
 function installBobby() {
-  (window as any).bobby = {
+    (window as any).bobby = {
     send: vi.fn().mockResolvedValue(undefined),
     onEvent: vi.fn().mockReturnValue(() => undefined),
     getSetupStatus: vi.fn().mockResolvedValue({
@@ -20,15 +20,26 @@ function installBobby() {
     }),
     openQuickstart: vi.fn().mockResolvedValue(undefined),
     listProposals: vi.fn().mockResolvedValue([]),
-    listSnapshots: vi.fn().mockResolvedValue([{
-      id: 'snap-1',
-      createdAt: '2026-06-11T00:00:00.000Z',
-      copied: [{ path: 'src/index.ts', bytes: 42 }],
-      skipped: [],
-      snapshotDir: 'E:\\ai-files\\Bobby\\.bobby\\snapshots\\snap-1',
-      taskId: 'task-1',
-      stepId: 'step-1'
-    }]),
+    listSnapshots: vi.fn().mockResolvedValue([
+      {
+        id: 'snap-1',
+        createdAt: '2026-06-11T00:00:00.000Z',
+        copied: [{ path: 'src/index.ts', bytes: 42 }],
+        skipped: [],
+        snapshotDir: 'E:\\ai-files\\Bobby\\.bobby\\snapshots\\snap-1',
+        taskId: 'task-1',
+        stepId: 'step-1'
+      },
+      {
+        id: 'snap-2',
+        createdAt: '2026-06-11T00:01:00.000Z',
+        copied: [{ path: 'src/utils.ts', bytes: 24 }],
+        skipped: [],
+        snapshotDir: 'E:\\ai-files\\Bobby\\.bobby\\snapshots\\snap-2',
+        taskId: 'task-2',
+        stepId: 'step-9'
+      }
+    ]),
     listWorkspaceTree: vi.fn().mockResolvedValue([{
       name: 'src',
       path: 'src',
@@ -137,6 +148,14 @@ describe('SessionToolDock', () => {
     const send = (window as any).bobby.send as ReturnType<typeof vi.fn>;
     expect(window.confirm).toHaveBeenCalledWith('Restore checkpoint snap-1?');
     expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot', snapshotId: 'snap-1' });
+  });
+
+  it('filters checkpoint timeline to the current task', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Diff/));
+    expect(await screen.findByText('#1 snap-1')).toBeTruthy();
+    expect(screen.queryByText('snap-2')).toBeNull();
   });
 
   it('loads workspace files from disk and previews the selected file', async () => {
