@@ -772,12 +772,20 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     if (shouldSnapshotActive && active) {
       void persistSession(currentThreadSnapshot(state, active.id));
     }
+    const nextProject = target.projectDir
+      ? {
+          name: target.projectDir.split(/[\\/]/).filter(Boolean).at(-1) ?? target.projectDir,
+          path: target.projectDir,
+          lastOpenedAt: nowIso()
+        }
+      : state.currentProject;
     set({
       ...resetThreadState(target),
       sessions: nextSessions,
       threads: replaceThread(state.threads, target),
       taskThreadIds: target.taskId ? { ...state.taskThreadIds, [target.taskId]: target.id } : state.taskThreadIds,
-      pendingThreadIds: state.pendingThreadIds.filter((pendingId) => pendingId !== target.id)
+      pendingThreadIds: state.pendingThreadIds.filter((pendingId) => pendingId !== target.id),
+      currentProject: nextProject
     });
   },
 

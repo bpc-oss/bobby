@@ -135,6 +135,32 @@ describe('chat session store', () => {
     expect(state.blocks).toEqual(target.blocks);
   });
 
+  it('switches the project context when opening a session from another workspace', () => {
+    const target = session('target', 'Run this through Mission Control', [userBlock('persisted-user', 'Run this through Mission Control')]);
+    target.projectDir = 'E:\\projects\\beta';
+    useChatStore.setState({
+      sessions: [target],
+      activeSessionId: 'current',
+      blocks: [userBlock('visible-user-with-different-id', 'Current task')],
+      currentProject: {
+        name: 'alpha',
+        path: 'E:\\projects\\alpha',
+        lastOpenedAt: '2026-06-11T00:00:00.000Z'
+      },
+      status: 'done'
+    });
+
+    useChatStore.getState().switchSession('target');
+
+    const state = useChatStore.getState();
+    expect(state.activeSessionId).toBe('target');
+    expect(state.currentProject).toEqual({
+      name: 'beta',
+      path: 'E:\\projects\\beta',
+      lastOpenedAt: expect.any(String)
+    });
+  });
+
   it('deduplicates persisted same-title sessions when loading sessions', async () => {
     const newest = { ...session('newest', 'Same task', [userBlock('u-new', 'Same task')]), updatedAt: '2026-06-11T01:00:00.000Z' };
     const duplicate = { ...session('duplicate', 'Same task', [userBlock('u-old', 'Same task')]), updatedAt: '2026-06-11T00:30:00.000Z' };
