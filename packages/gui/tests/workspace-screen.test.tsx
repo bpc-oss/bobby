@@ -298,6 +298,34 @@ describe('workspace UI smoke', () => {
     });
   });
 
+  it('inserts a local file path reference when an image is pasted into the composer', () => {
+    const client = makeKernelClientMock();
+    render(<Workspace kernelClient={client} />);
+
+    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const image = new File(['image-bytes'], 'clip.png', { type: 'image/png' }) as File & { path?: string };
+    Object.defineProperty(image, 'path', { value: 'C:\\temp\\clip.png' });
+
+    fireEvent.paste(input, { clipboardData: { files: [image] } });
+
+    expect(input.value).toContain('![clip.png](C:\\temp\\clip.png)');
+    expect(screen.getByText(/Vision is not enabled in this build/)).toBeTruthy();
+  });
+
+  it('inserts a local file path reference when an image is dropped into the composer', () => {
+    const client = makeKernelClientMock();
+    render(<Workspace kernelClient={client} />);
+
+    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const image = new File(['image-bytes'], 'drop.png', { type: 'image/png' }) as File & { path?: string };
+    Object.defineProperty(image, 'path', { value: 'C:\\temp\\drop.png' });
+
+    fireEvent.drop(input, { dataTransfer: { files: [image] } });
+
+    expect(input.value).toContain('![drop.png](C:\\temp\\drop.png)');
+    expect(screen.getByText(/Vision is not enabled in this build/)).toBeTruthy();
+  });
+
   it('refreshes custom slash commands after the command registry changes', async () => {
     const client = makeKernelClientMock();
     client.listCommands
