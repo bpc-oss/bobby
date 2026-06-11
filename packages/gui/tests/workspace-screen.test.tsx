@@ -48,6 +48,7 @@ beforeEach(() => {
     costUsd: 0,
     spendUsd: 0,
     model: null,
+    sessionMode: 'standard',
     threads: {},
     taskThreadIds: {},
     pendingThreadIds: [],
@@ -129,6 +130,23 @@ describe('workspace UI smoke', () => {
     await vi.waitFor(() => {
       expect(client.startTask).toHaveBeenCalledWith('plan this task', 'plan-only');
     });
+  });
+
+  it('wraps file mutation prompts with an isolated worktree instruction', async () => {
+    const client = makeKernelClientMock();
+    render(<Workspace kernelClient={client} />);
+
+    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'Edit src/screens/Workspace.tsx to fix the layout' } });
+    fireEvent.click(screen.getByText('Send'));
+
+    await vi.waitFor(() => {
+      expect(client.startTask).toHaveBeenCalledWith(expect.stringContaining('isolated git worktree'), 'standard');
+    });
+    expect(client.startTask).toHaveBeenCalledWith(
+      expect.stringContaining('Edit src/screens/Workspace.tsx to fix the layout'),
+      'standard'
+    );
   });
 
   it('inserts a fuzzy file reference from the @ menu into the composer', async () => {
@@ -276,7 +294,7 @@ describe('workspace UI smoke', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await vi.waitFor(() => {
-      expect(client.startTask).toHaveBeenCalledWith('Summarize this task:\nnotes from the build', 'plan-only');
+      expect(client.startTask).toHaveBeenCalledWith('Summarize this task:\nnotes from the build', 'standard');
     });
   });
 

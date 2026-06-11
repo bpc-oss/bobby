@@ -170,6 +170,47 @@ function expandCommandTemplate(template: string, input: string): string {
   return `${template.trim()}\n\n${trimmedInput}`.trim();
 }
 
+const FILE_MUTATION_ACTIONS = [
+  'create',
+  'edit',
+  'fix',
+  'modify',
+  'patch',
+  'refactor',
+  'rename',
+  'remove',
+  'delete',
+  'update',
+  'rewrite',
+  'replace',
+  'write'
+];
+
+const FILE_REFERENCE_PATTERN = /(?:^|[\s`"'([{])([A-Za-z0-9._/-]+\.[A-Za-z0-9]{1,12})\b/;
+
+function shouldUseWorktreePrompt(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized.includes('worktree') || normalized.includes('proposal')) return false;
+  if (!FILE_MUTATION_ACTIONS.some((action) => normalized.includes(action))) return false;
+  return FILE_REFERENCE_PATTERN.test(text) || /[\\/]/.test(text);
+}
+
+function prepareTaskPrompt(text: string): string {
+  const trimmed = text.trim();
+  if (!shouldUseWorktreePrompt(trimmed)) {
+    return trimmed;
+  }
+
+  return [
+    trimmed,
+    '',
+    'Use an isolated git worktree for any file changes.',
+    'Make edits in the worktree, then return a patch proposal instead of changing the main tree directly.',
+    'Report the files touched and any validation evidence.'
+  ].join('\n');
+}
+
 function StatusBanner({ block }: { block: ChatBlock & { kind: 'status' } }) {
   const palette = {
     done: { bg: 'var(--bobby-success-soft)', border: 'var(--bobby-success)', color: 'var(--bobby-success)', label: 'Completed' },
@@ -250,7 +291,7 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
       key: 'plan',
       title: 'plan',
       detail: 'Draft a step-by-step plan',
-      run: () => onSend('Create a detailed plan for this project with concrete steps and validation points.')
+      run: () => onSend(prepareTaskPrompt('Create a detailed plan for this project with concrete steps and validation points.'))
     },
     {
       key: 'undo',
@@ -262,13 +303,13 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
       key: 'status',
       title: 'status',
       detail: 'Summarize blockers and progress',
-      run: () => onSend('Summarize the current task status, blockers, and next step.')
+      run: () => onSend(prepareTaskPrompt('Summarize the current task status, blockers, and next step.'))
     },
     {
       key: 'cost',
       title: 'cost',
       detail: 'Report current usage',
-      run: () => onSend('Report the current task cost, token usage, and any notable spend.')
+      run: () => onSend(prepareTaskPrompt('Report the current task cost, token usage, and any notable spend.'))
     },
     ...customCommands.map((command) => ({
       key: command.sourcePath,
@@ -375,7 +416,7 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
       const customCommand = customCommands.find((item) => item.name.toLowerCase() === command);
       if (customCommand) {
         const args = trimmed.slice(command.length + 2).trim();
-        onSend(expandCommandTemplate(customCommand.promptTemplate, args));
+        onSend(prepareTaskPrompt(expandCommandTemplate(customCommand.promptTemplate, args)));
         setInput('');
         setHistory((current) => [trimmed, ...current.filter((item) => item !== trimmed)].slice(0, 20));
         setHistoryIndex(-1);
@@ -389,29 +430,29 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
           store.clearBlocks();
           break;
         case 'help':
-          onSend('help');
+          onSend(prepareTaskPrompt('help'));
           break;
         case 'plan':
-          onSend('Create a detailed plan for this project with concrete steps and validation points.');
+          onSend(prepareTaskPrompt('Create a detailed plan for this project with concrete steps and validation points.'));
           break;
         case 'review':
-          onSend('Review the code changes and identify bugs.');
+          onSend(prepareTaskPrompt('Review the code changes and identify bugs.'));
           break;
         case 'status':
-          onSend('Summarize the current task status, blockers, and next step.');
+          onSend(prepareTaskPrompt('Summarize the current task status, blockers, and next step.'));
           break;
         case 'cost':
-          onSend('Report the current task cost, token usage, and any notable spend.');
+          onSend(prepareTaskPrompt('Report the current task cost, token usage, and any notable spend.'));
           break;
         case 'undo':
           void kernelClient?.restoreSnapshot?.(undefined);
           break;
         default:
-          onSend(trimmed);
+          onSend(prepareTaskPrompt(trimmed));
           break;
       }
     } else {
-      onSend(trimmed);
+      onSend(prepareTaskPrompt(trimmed));
     }
 
     setInput('');
