@@ -320,4 +320,31 @@ describe('chat session store', () => {
     useChatStore.getState().switchSession('standard');
     expect(useChatStore.getState().sessionMode).toBe('full');
   });
+
+  it('resumes a historical session into a fresh thread with the same context', () => {
+    const original = session('original', 'Original task', [userBlock('u-original', 'Original task')]);
+    original.taskId = 'task-original';
+    useChatStore.setState({
+      sessions: [original],
+      threads: { original },
+      activeSessionId: 'original',
+      blocks: original.blocks as ChatBlock[],
+      currentTaskId: 'task-original',
+      status: 'done',
+      sessionMode: 'standard'
+    });
+
+    useChatStore.getState().resumeSession('original');
+
+    const state = useChatStore.getState();
+    expect(state.activeSessionId).not.toBe('original');
+    expect(state.sessions).toHaveLength(2);
+    expect(state.sessions.some((item) => item.id === 'original')).toBe(true);
+    const resumed = state.sessions.find((item) => item.id !== 'original');
+    expect(resumed?.taskId).toBeNull();
+    expect(resumed?.status).toBe('idle');
+    expect(resumed?.blocks).toEqual(original.blocks);
+    expect(state.blocks).toEqual(original.blocks);
+    expect(state.currentTaskId).toBeNull();
+  });
 });

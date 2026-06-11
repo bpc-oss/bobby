@@ -115,7 +115,7 @@ export function History({ onResumeTask }: { onResumeTask?: (sessionId: string) =
             <h2 className="text-[14px] font-semibold text-bobby-ink">History</h2>
             <p className="text-[11px] text-bobby-muted">TaskStore-backed replay</p>
           </div>
-          <button type="button" onClick={() => void load()} className="rounded-md p-1.5 text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink">
+          <button type="button" data-testid="history-refresh" onClick={() => void load()} className="rounded-md p-1.5 text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </button>
         </header>
@@ -123,7 +123,7 @@ export function History({ onResumeTask }: { onResumeTask?: (sessionId: string) =
           {error && <div className="mb-2 rounded-lg px-3 py-2 text-[12px]" style={{ background: 'var(--bobby-danger-soft)', color: 'var(--bobby-danger)' }}>{error}</div>}
           {tasks.length === 0 && !loading ? <p className="px-2 py-6 text-center text-[12px] text-bobby-faint">No persisted tasks found.</p> : null}
           {tasks.map((task) => (
-            <button key={task.taskId} type="button" onClick={() => void openTask(task.taskId)} className="mb-1 w-full rounded-lg px-3 py-2 text-left hover:bg-bobby-hover" style={selected === task.taskId ? { background: 'var(--bobby-accent-soft)' } : undefined}>
+            <button key={task.taskId} type="button" data-testid={`history-task-${task.taskId}`} onClick={() => void openTask(task.taskId)} className="mb-1 w-full rounded-lg px-3 py-2 text-left hover:bg-bobby-hover" style={selected === task.taskId ? { background: 'var(--bobby-accent-soft)' } : undefined}>
               <div className="truncate text-[12px] font-semibold text-bobby-ink">{short(task.userGoal)}</div>
               <div className="mt-1 flex items-center gap-2 text-[11px] text-bobby-faint">
                 <span>{task.state}</span>
@@ -153,6 +153,7 @@ export function History({ onResumeTask }: { onResumeTask?: (sessionId: string) =
                         <span>/</span>
                         <button
                           type="button"
+                          data-testid="history-continue"
                           onClick={() => onResumeTask(detail.sessionIds[0])}
                           className="rounded-md px-2 py-0.5 text-[11px] font-medium text-bobby-ink hover:bg-bobby-hover"
                           style={{ background: 'var(--bobby-accent-soft)' }}

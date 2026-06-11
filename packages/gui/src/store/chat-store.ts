@@ -125,6 +125,7 @@ export type ChatState = {
   clearBlocks: () => void;
   newSession: () => void;
   switchSession: (id: string) => void;
+  resumeSession: (id: string) => void;
   setSessionMode: (mode: SessionMode) => void;
   loadProjectState: () => Promise<void>;
   openProject: () => Promise<void>;
@@ -166,6 +167,26 @@ function makeBlankSession(id: string, projectDir: string | null, createdAt = now
     spendUsd: 0,
     model: null,
     mode: 'standard'
+  });
+}
+
+function cloneSessionForResume(source: SessionRecordDto, id = uid()): SessionRecordDto {
+  return SessionRecordSchema.parse({
+    ...source,
+    id,
+    title: source.title,
+    blocks: [...(source.blocks as ChatBlock[])],
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    taskId: null,
+    status: 'idle',
+    liveReasoning: '',
+    liveAssistant: '',
+    liveToolContent: '',
+    error: null,
+    costUsd: 0,
+    spendUsd: 0,
+    model: null
   });
 }
 
@@ -756,6 +777,25 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       threads: replaceThread(state.threads, target),
       taskThreadIds: target.taskId ? { ...state.taskThreadIds, [target.taskId]: target.id } : state.taskThreadIds,
       pendingThreadIds: state.pendingThreadIds.filter((pendingId) => pendingId !== target.id)
+    });
+  },
+
+  resumeSession: (id: string) => {
+    const state = get();
+    const target = state.threads[id] ?? state.sessions.find((session) => session.id === id);
+    if (!target) return;
+
+    const resume = cloneSessionForResume(target);
+    const nextProject = target.projectDir
+      ? { name: target.projectDir.split(/[\\/]/).filter(Boolean).at(-1) ?? target.projectDir, path: target.projectDir, lastOpenedAt: nowIso() }
+      : state.currentProject;
+
+    set({
+      ...resetThreadState(resume),
+      currentProject: nextProject,
+      sessions: replaceSession(state.sessions, resume),
+      threads: replaceThread(state.threads, resume),
+      pendingThreadIds: state.pendingThreadIds.filter((pendingId) => pendingId !== resume.id)
     });
   },
 

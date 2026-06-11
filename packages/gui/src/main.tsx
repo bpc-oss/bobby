@@ -78,7 +78,7 @@ export function App() {
   const openProject = useChatStore((s) => s.openProject);
   const selectProject = useChatStore((s) => s.selectProject);
   const newSession = useChatStore((s) => s.newSession);
-  const resumeSession = useChatStore((s) => s.switchSession);
+  const resumeSession = useChatStore((s) => s.resumeSession);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
 
   React.useEffect(() => {

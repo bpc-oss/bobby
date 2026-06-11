@@ -69,8 +69,8 @@ describe('History replay', () => {
     render(<History onResumeTask={onResumeTask} />);
 
     await screen.findAllByText('Create hello.txt');
-    await waitFor(() => expect(screen.getByText('Continue')).toBeTruthy());
-    screen.getByText('Continue').click();
+    await waitFor(() => expect(screen.getByTestId('history-continue')).toBeTruthy());
+    screen.getByTestId('history-continue').click();
 
     expect(onResumeTask).toHaveBeenCalledWith('session-1');
   });

@@ -13,7 +13,7 @@ export function ProjectHome({
 }) {
   return (
     <main className="flex h-full w-full flex-col bg-bobby-canvas">
-      <header className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: 'var(--bobby-border-muted)' }}>
+      <header data-testid="project-home" className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: 'var(--bobby-border-muted)' }}>
         <div>
           <h1 className="text-[15px] font-semibold text-bobby-ink">Bobby Workspace</h1>
           <p className="mt-0.5 text-[12px] text-bobby-muted">Open a project before starting agent sessions.</p>
@@ -40,6 +40,7 @@ export function ProjectHome({
               <button
                 key={project.path}
                 type="button"
+                data-testid={`project-home-project-${project.path.split(/[\\/]/).filter(Boolean).at(-1) ?? 'project'}`}
                 onClick={() => onSelectProject(project.path)}
                 className="flex min-w-0 items-center gap-3 rounded-lg border px-4 py-3 text-left hover:bg-bobby-hover"
                 style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}

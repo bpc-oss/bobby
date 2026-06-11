@@ -35,6 +35,7 @@ export function Sidebar({ theme, onThemeChange, onPage, onNewSession }: SidebarP
 
   return (
     <aside
+      data-testid="sidebar"
       className="flex h-full w-[260px] flex-col border-r"
       style={{ background: 'var(--bobby-bg-sidebar)', borderColor: 'var(--bobby-sidebar-border)' }}
     >
@@ -78,7 +79,7 @@ export function Sidebar({ theme, onThemeChange, onPage, onNewSession }: SidebarP
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 py-3">
+      <div data-testid="sidebar-task-list" className="flex-1 overflow-y-auto px-2 py-3">
         <h2 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-widest text-bobby-faint">Tasks</h2>
         {tasks.length === 0 && <p className="px-2 text-[12px] text-bobby-faint">No tasks yet</p>}
         <div className="space-y-0.5">
@@ -86,6 +87,7 @@ export function Sidebar({ theme, onThemeChange, onPage, onNewSession }: SidebarP
             <button
               key={task.id}
               type="button"
+              data-testid={`sidebar-task-${task.id}`}
               onClick={() => {
                 if (task.id !== activeSessionId) switchSession(task.id);
               }}
@@ -94,6 +96,7 @@ export function Sidebar({ theme, onThemeChange, onPage, onNewSession }: SidebarP
               title={task.taskId ? `${task.title} / ${task.taskId}` : task.title}
             >
               <div className="flex items-center gap-2">
+                <span data-testid={`sidebar-task-status-${task.id}`} className="sr-only">{task.status}</span>
                 <span className="min-w-0 flex-1 truncate">
                   {task.title.slice(0, 55)}
                   {task.title.length > 55 ? '...' : ''}
