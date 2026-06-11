@@ -182,6 +182,47 @@ export const WorkspaceFileSearchEntrySchema = z.object({
 });
 export type WorkspaceFileSearchEntry = z.infer<typeof WorkspaceFileSearchEntrySchema>;
 
+export type WorkspaceTreeNode = {
+  name: string;
+  path: string;
+  kind: 'file' | 'directory';
+  size?: number;
+  children?: WorkspaceTreeNode[];
+};
+
+export const WorkspaceTreeNodeSchema: z.ZodType<WorkspaceTreeNode> = z.lazy(() => z.object({
+  name: z.string().min(1),
+  path: z.string().min(1),
+  kind: z.enum(['file', 'directory']),
+  size: z.number().nonnegative().optional(),
+  children: z.array(WorkspaceTreeNodeSchema).optional()
+}));
+
+export const WorkspaceReadFileInputSchema = z.object({
+  path: z.string().min(1)
+});
+export type WorkspaceReadFileInput = z.infer<typeof WorkspaceReadFileInputSchema>;
+
+export const WorkspaceReadFileResultSchema = z.object({
+  path: z.string().min(1),
+  content: z.string()
+});
+export type WorkspaceReadFileResult = z.infer<typeof WorkspaceReadFileResultSchema>;
+
+export const TerminalRunInputSchema = z.object({
+  command: z.string().min(1),
+  timeoutMs: z.number().int().positive().optional()
+});
+export type TerminalRunInput = z.infer<typeof TerminalRunInputSchema>;
+
+export const TerminalRunResultSchema = z.object({
+  evidence: z.array(z.unknown()),
+  result: z.object({
+    exitCode: z.number().int()
+  })
+});
+export type TerminalRunResult = z.infer<typeof TerminalRunResultSchema>;
+
 export const McpToolSchema = z.object({
   name: z.string().min(1),
   permissionTier: z.enum(['L0', 'L1', 'L2', 'L3', 'L4']),
@@ -304,6 +345,9 @@ export function makeKernelClient() {
     readProposal: (proposalId: string) => window.bobby.readProposal!(proposalId),
     listSnapshots: () => window.bobby.listSnapshots!(),
     searchFiles: (query: string) => window.bobby.searchFiles!(query),
+    listWorkspaceTree: () => window.bobby.listWorkspaceTree!(),
+    readWorkspaceFile: (path: string) => window.bobby.readWorkspaceFile!(path),
+    runTerminalCommand: (input: TerminalRunInput) => window.bobby.runTerminalCommand!(input) as Promise<TerminalRunResult>,
     restoreSnapshot: (snapshotId?: string) => window.bobby.send({ type: 'restoreSnapshot', snapshotId }),
     applyProposal: (input: ProposalApplyInput) => window.bobby.applyProposal!(input),
     discardProposal: (input: ProposalDiscardInput) => window.bobby.discardProposal!(input),

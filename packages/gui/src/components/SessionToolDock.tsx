@@ -20,7 +20,15 @@ import {
 } from 'lucide-react';
 import { useChatStore, type ChatBlock } from '../store/chat-store';
 import { DiffView } from './DiffView';
-import { makeKernelClient, type ProposalSummary, type SnapshotListEntry, type SubAgentDispatchRecordDto } from '../ipc/contract';
+import {
+  makeKernelClient,
+  type ProposalSummary,
+  type SnapshotListEntry,
+  type SubAgentDispatchRecordDto,
+  type TerminalRunResult,
+  type WorkspaceReadFileResult,
+  type WorkspaceTreeNode
+} from '../ipc/contract';
 
 type DockTab = 'mission' | 'plan' | 'review' | 'diff' | 'terminal' | 'files' | 'browser' | 'sidechat' | 'preview' | 'tasks';
 
@@ -49,14 +57,6 @@ function collectDiffs(blocks: ChatBlock[]): Array<{ path: string; patch: string 
     const path = payloadValue(block, 'path');
     const patch = payloadValue(block, 'patch');
     return path && patch ? [{ path, patch }] : [];
-  });
-}
-
-function collectFiles(blocks: ChatBlock[]): Array<{ path: string; exists: boolean }> {
-  return blocks.flatMap((block) => {
-    if (block.kind !== 'evidence' || block.evidence.evidenceType !== 'file_exists') return [];
-    const payload = block.evidence.payload as Record<string, unknown>;
-    return typeof payload.path === 'string' ? [{ path: payload.path, exists: Boolean(payload.exists) }] : [];
   });
 }
 
@@ -321,17 +321,270 @@ function DispatchRow({ record }: { record: SubAgentDispatchRecordDto }) {
   );
 }
 
+function TerminalPanel() {
+  const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
+  const [command, setCommand] = React.useState('');
+  const [runs, setRuns] = React.useState<TerminalRunResult[]>([]);
+  const [running, setRunning] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function runCommand() {
+    if (!client?.runTerminalCommand || !command.trim()) return;
+    if (!window.confirm(`Run command in the current workspace?\n\n${command.trim()}`)) {
+      return;
+    }
+
+    setRunning(true);
+    setError(null);
+    try {
+      const result = await client.runTerminalCommand({ command: command.trim() });
+      setRuns((current) => [result, ...current].slice(0, 12));
+      setCommand('');
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : String(nextError));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border p-2.5" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+        <label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-bobby-faint">
+          <TerminalSquare className="h-3.5 w-3.5" />
+          Terminal
+        </label>
+        <div className="flex gap-2">
+          <input
+            value={command}
+            onChange={(event) => setCommand(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                void runCommand();
+              }
+            }}
+            placeholder="pnpm test, git status, node script..."
+            className="min-w-0 flex-1 rounded-md border bg-transparent px-2.5 py-1.5 text-[12px] text-bobby-ink outline-none placeholder:text-bobby-faint"
+            style={{ borderColor: 'var(--bobby-border)' }}
+          />
+          <button type="button" onClick={() => void runCommand()} disabled={running || !command.trim()} className="rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white disabled:opacity-40">
+            {running ? 'Running...' : 'Run'}
+          </button>
+        </div>
+        {error && <div className="mt-2 rounded-md px-3 py-2 text-[12px]" style={{ background: 'var(--bobby-danger-soft)', color: 'var(--bobby-danger)' }}>{error}</div>}
+      </div>
+
+      {runs.length === 0 ? (
+        <Empty title="No terminal commands yet." />
+      ) : (
+        <div className="space-y-2">
+          {runs.map((run, index) => {
+            const payload = (run.evidence[0] as { payload?: Record<string, unknown> } | undefined)?.payload ?? {};
+            const stdout = typeof payload.stdout === 'string' ? payload.stdout : '';
+            const stderr = typeof payload.stderr === 'string' ? payload.stderr : '';
+            const exitCode = typeof payload.exitCode === 'number' ? payload.exitCode : run.result.exitCode;
+            return (
+              <div key={`${index}-${exitCode}`} className="rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+                <div className="flex items-center justify-between gap-2 text-[11px] text-bobby-faint">
+                  <span className={exitCode === 0 ? 'text-bobby-success' : 'text-bobby-danger'}>exit {exitCode}</span>
+                  <span>{typeof payload.cmd === 'string' ? String(payload.cmd) : 'command'}</span>
+                </div>
+                {stdout && <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-bobby-surface-subtle px-3 py-2 text-[12px] leading-5 text-bobby-ink">{stdout}</pre>}
+                {stderr && <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-bobby-danger-soft px-3 py-2 text-[12px] leading-5 text-bobby-danger">{stderr}</pre>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FileTreeNode({
+  node,
+  selectedPath,
+  onSelect
+}: {
+  node: WorkspaceTreeNode;
+  selectedPath: string | null;
+  onSelect: (path: string) => void;
+}) {
+  if (node.kind === 'file') {
+    return (
+      <button
+        type="button"
+        onClick={() => onSelect(node.path)}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] hover:bg-bobby-hover"
+        style={selectedPath === node.path ? { background: 'var(--bobby-accent-soft)' } : undefined}
+      >
+        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-bobby-faint" />
+        <span className="min-w-0 truncate text-bobby-ink">{node.name}</span>
+      </button>
+    );
+  }
+
+  return (
+    <details open className="rounded-md px-1 py-0.5">
+      <summary className="cursor-pointer list-none rounded-md px-1.5 py-1 text-[12px] font-medium text-bobby-ink hover:bg-bobby-hover">{node.name}</summary>
+      <div className="ml-3 border-l border-bobby-border-muted pl-2">
+        {node.children?.map((child) => (
+          <FileTreeNode key={child.path} node={child} selectedPath={selectedPath} onSelect={onSelect} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function FilesPanel() {
+  const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
+  const [tree, setTree] = React.useState<WorkspaceTreeNode[]>([]);
+  const [selectedPath, setSelectedPath] = React.useState<string | null>(null);
+  const [pathInput, setPathInput] = React.useState('');
+  const [file, setFile] = React.useState<WorkspaceReadFileResult | null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  const refresh = React.useCallback(async () => {
+    if (!client?.listWorkspaceTree) {
+      setTree([]);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const next = await client.listWorkspaceTree();
+      setTree(next);
+      if (!selectedPath) {
+        const firstFile = findFirstFile(next);
+        if (firstFile) {
+          setSelectedPath(firstFile.path);
+          setFile(client.readWorkspaceFile ? await client.readWorkspaceFile(firstFile.path) : null);
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [client, selectedPath]);
+
+  React.useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  async function selectPath(path: string) {
+    setSelectedPath(path);
+    if (!client?.readWorkspaceFile) {
+      setFile(null);
+      return;
+    }
+    setFile(await client.readWorkspaceFile(path));
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between rounded-lg border px-3 py-2" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+        <div>
+          <div className="text-[12px] font-semibold text-bobby-ink">Workspace tree</div>
+          <div className="text-[11px] text-bobby-faint">{loading ? 'Loading...' : 'Click a file to preview contents'}</div>
+        </div>
+        <button type="button" onClick={() => void refresh()} className="rounded-md px-2 py-1 text-[11px] text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink">Refresh</button>
+      </div>
+
+      <div className="rounded-lg border p-2.5" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+        <label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-bobby-faint">
+          <FolderOpen className="h-3.5 w-3.5" />
+          Open path
+        </label>
+        <div className="flex gap-2">
+          <input
+            value={pathInput}
+            onChange={(event) => setPathInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                void selectPath(pathInput.trim());
+              }
+            }}
+            placeholder="src/file.ts"
+            className="min-w-0 flex-1 rounded-md border bg-transparent px-2.5 py-1.5 text-[12px] text-bobby-ink outline-none placeholder:text-bobby-faint"
+            style={{ borderColor: 'var(--bobby-border)' }}
+          />
+          <button type="button" onClick={() => void selectPath(pathInput.trim())} disabled={!pathInput.trim()} className="rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white disabled:opacity-40">
+            Open
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <div className="max-h-[520px] overflow-y-auto rounded-lg border p-2" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+          {tree.length === 0 ? <Empty title="No files found." /> : tree.map((node) => <FileTreeNode key={node.path} node={node} selectedPath={selectedPath} onSelect={(path) => void selectPath(path)} />)}
+        </div>
+        <div className="min-w-0 rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+          {file ? (
+            <>
+              <div className="mb-2 text-[11px] text-bobby-faint">{file.path}</div>
+              <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-md bg-bobby-surface-subtle px-3 py-2 text-[12px] leading-5 text-bobby-ink">{file.content}</pre>
+            </>
+          ) : (
+            <Empty title="Select a file to inspect its text content." />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function findFirstFile(nodes: WorkspaceTreeNode[]): WorkspaceTreeNode | null {
+  for (const node of nodes) {
+    if (node.kind === 'file') return node;
+    const nested = node.children ? findFirstFile(node.children) : null;
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function PreviewPanel() {
+  const [url, setUrl] = React.useState('http://localhost:5174');
+  const [activeUrl, setActiveUrl] = React.useState('http://localhost:5174');
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border p-2.5" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+        <label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-bobby-faint">
+          <MonitorPlay className="h-3.5 w-3.5" />
+          Preview
+        </label>
+        <div className="flex gap-2">
+          <input
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                setActiveUrl(url.trim());
+              }
+            }}
+            placeholder="http://localhost:5174"
+            className="min-w-0 flex-1 rounded-md border bg-transparent px-2.5 py-1.5 text-[12px] text-bobby-ink outline-none placeholder:text-bobby-faint"
+            style={{ borderColor: 'var(--bobby-border)' }}
+          />
+          <button type="button" onClick={() => setActiveUrl(url.trim())} className="rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white">
+            Open
+          </button>
+        </div>
+      </div>
+      <iframe
+        title="Preview"
+        src={activeUrl}
+        className="min-h-[520px] w-full rounded-lg border"
+        style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}
+      />
+    </div>
+  );
+}
+
 function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'tasks' | 'sidechat' | 'preview' | 'files' }) {
   const blocks = useChatStore((s) => s.blocks);
   const [dispatches, setDispatches] = React.useState<SubAgentDispatchRecordDto[]>([]);
-  const command =
-    kind === 'terminal' ? <ToolCommand kind="Terminal" icon={TerminalSquare} placeholder="pnpm test, git status, node script..." button="Run" buildPrompt={(value) => `Run this terminal command from the current project and show command_output evidence: ${value}`} /> :
-    kind === 'browser' ? <ToolCommand kind="Browser" icon={Globe} placeholder="https://example.com or http://localhost:5174" button="Open" buildPrompt={(value) => `Open and inspect this web page, then report visible evidence: ${value}`} /> :
-    kind === 'sidechat' ? <ToolCommand kind="Side Chat" icon={MessageCircle} placeholder="Ask a side question without changing the main mission..." button="Ask" buildPrompt={(value) => `Side chat for the current session: ${value}`} /> :
-    kind === 'preview' ? <ToolCommand kind="Preview" icon={MonitorPlay} placeholder="Preview URL, file path, or artifact id..." button="Preview" buildPrompt={(value) => `Preview this artifact or URL and summarize what changed: ${value}`} /> :
-    kind === 'tasks' ? <ToolCommand kind="Background Task" icon={Play} placeholder="Queue a parallel/background task..." button="Start" buildPrompt={(value) => `Start this as a background task. If it changes files, isolate it in a worktree and return a patch proposal linked to this session: ${value}`} /> :
-    <ToolCommand kind="Files" icon={FolderOpen} placeholder="src/file.ts, package.json, or a folder path..." button="Open" buildPrompt={(value) => `Open this project file or folder, summarize it, and if edits are needed use a worktree-isolated patch proposal instead of modifying the main worktree: ${value}`} />;
-
   React.useEffect(() => {
     if (kind !== 'tasks') return;
     const client = typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null;
@@ -362,16 +615,12 @@ function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'tasks' | 'sidecha
     };
   }, [kind]);
 
-  if (kind === 'files') {
-    const files = collectFiles(blocks);
-    const diffs = collectDiffs(blocks);
-    const rows = [...files.map((file) => ({ title: file.path, meta: file.exists ? 'exists' : 'missing' })), ...diffs.map((diff) => ({ title: diff.path, meta: 'diff' }))];
-    return <div className="space-y-2">{command}{rows.length === 0 ? <Empty title="No files touched yet." /> : rows.map((file) => <Row key={`${file.meta}-${file.title}`} icon={FolderOpen} title={file.title} meta={file.meta} />)}</div>;
-  }
+  if (kind === 'terminal') return <TerminalPanel />;
+  if (kind === 'files') return <FilesPanel />;
+  if (kind === 'preview') return <PreviewPanel />;
   if (kind === 'tasks') {
     return (
       <div className="space-y-3">
-        {command}
         {dispatches.length === 0 ? (
           <Empty title="No background tasks dispatched yet." />
         ) : (
@@ -382,13 +631,16 @@ function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'tasks' | 'sidecha
       </div>
     );
   }
+  const command =
+    kind === 'browser' ? <ToolCommand kind="Browser" icon={Globe} placeholder="https://example.com or http://localhost:5174" button="Open" buildPrompt={(value) => `Open and inspect this web page, then report visible evidence: ${value}`} /> :
+    kind === 'sidechat' ? <ToolCommand kind="Side Chat" icon={MessageCircle} placeholder="Ask a side question without changing the main mission..." button="Ask" buildPrompt={(value) => `Side chat for the current session: ${value}`} /> :
+    null;
   const filtered = blocks.filter((block) => {
-    if (kind === 'terminal') return block.kind === 'tool';
     if (kind === 'browser') return block.kind === 'tool' && /browser|chrome|playwright|url|http/i.test(block.tool);
     if (kind === 'sidechat') return block.kind === 'user' || block.kind === 'assistant' || block.kind === 'reasoning';
     return block.kind === 'evidence';
   });
-  const icon = kind === 'browser' ? Globe : kind === 'sidechat' ? MessageCircle : kind === 'preview' ? MonitorPlay : TerminalSquare;
+  const icon = kind === 'browser' ? Globe : MessageCircle;
   return <div className="space-y-2">{command}{filtered.length === 0 ? <Empty title="No session data for this panel yet." /> : filtered.map((block) => <Row key={block.id} icon={icon} title={blockText(block)} meta={block.kind} />)}</div>;
 }
 

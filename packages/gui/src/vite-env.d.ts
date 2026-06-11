@@ -21,6 +21,10 @@ import type {
   ProposalDiscardInput,
   ProposalSummary,
   SnapshotListEntry,
+  TerminalRunInput,
+  TerminalRunResult,
+  WorkspaceReadFileResult,
+  WorkspaceTreeNode,
   SubAgentDispatchInput,
   SubAgentDispatchRecordDto,
   SubAgentRecordDto,
@@ -57,6 +61,9 @@ declare global {
       discardProposal?: (input: ProposalDiscardInput) => Promise<boolean>;
       listSnapshots?: () => Promise<SnapshotListEntry[]>;
       searchFiles?: (query: string) => Promise<WorkspaceFileSearchEntry[]>;
+      listWorkspaceTree?: () => Promise<WorkspaceTreeNode[]>;
+      readWorkspaceFile?: (path: string) => Promise<WorkspaceReadFileResult | null>;
+      runTerminalCommand?: (input: TerminalRunInput) => Promise<TerminalRunResult>;
       listMcpServers?: () => Promise<McpServerRecordDto[]>;
       upsertMcpServer?: (input: McpServerUpsertInput) => Promise<McpServerRecordDto>;
       toggleMcpServer?: (input: McpServerToggleInput) => Promise<McpServerRecordDto>;

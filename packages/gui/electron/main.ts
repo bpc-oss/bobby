@@ -41,9 +41,13 @@ import {
   McpServerUpsertInputSchema,
   SessionRecordSchema,
   SnapshotListEntrySchema,
+  TerminalRunInputSchema,
   SubAgentDispatchInputSchema,
   SubAgentRemoveInputSchema,
   SubAgentUpsertInputSchema,
+  WorkspaceReadFileInputSchema,
+  WorkspaceReadFileResultSchema,
+  WorkspaceTreeNodeSchema,
   WorkspaceFileSearchEntrySchema,
   TaskDetailSchema,
   TaskSummarySchema,
@@ -61,6 +65,8 @@ import {
   type SubAgentRecordDto,
   type TaskDetail,
   type TaskSummary,
+  type WorkspaceReadFileResult,
+  type WorkspaceTreeNode,
   type WorkspaceFileSearchEntry
 } from '../src/ipc/contract';
 import {
@@ -286,6 +292,66 @@ function searchWorkspaceFiles(workspaceRoot: string, query: string, limit = 20):
     .sort((left, right) => left.score - right.score || left.path.localeCompare(right.path))
     .slice(0, limit)
     .map(({ score, ...entry }) => entry);
+}
+
+function isWorkspaceTreeExcluded(name: string): boolean {
+  return name === 'node_modules' || name === '.git' || name === '.bobby' || name === 'dist' || name === 'build';
+}
+
+function buildWorkspaceTreeEntries(workspaceRoot: string, currentPath = workspaceRoot, depth = 0, maxDepth = 4): WorkspaceTreeNode[] {
+  try {
+    const entries = readdirSync(currentPath, { withFileTypes: true });
+    return entries
+      .filter((entry) => !isWorkspaceTreeExcluded(entry.name))
+      .sort((left, right) => {
+        if (left.isDirectory() !== right.isDirectory()) {
+          return left.isDirectory() ? -1 : 1;
+        }
+        return left.name.localeCompare(right.name);
+      })
+      .map((entry) => {
+        const absolute = join(currentPath, entry.name);
+        const node: WorkspaceTreeNode = {
+          name: entry.name,
+          path: relative(workspaceRoot, absolute).split('\\').join('/'),
+          kind: entry.isDirectory() ? 'directory' : 'file'
+        };
+
+        if (!entry.isDirectory()) {
+          try {
+            node.size = statSync(absolute).size;
+          } catch {
+            node.size = undefined;
+          }
+          return node;
+        }
+
+        if (depth < maxDepth) {
+          node.children = buildWorkspaceTreeEntries(workspaceRoot, absolute, depth + 1, maxDepth);
+        }
+        return node;
+      });
+  } catch {
+    return [];
+  }
+}
+
+function readWorkspaceTextFile(workspaceRoot: string, relativePath: string): WorkspaceReadFileResult | null {
+  const absolute = resolve(workspaceRoot, relativePath);
+  const normalizedRoot = resolve(workspaceRoot);
+  if (relative(normalizedRoot, absolute).startsWith('..')) {
+    return null;
+  }
+
+  try {
+    const content = readFileSync(absolute, 'utf8');
+    return {
+      path: relative(normalizedRoot, absolute).split('\\').join('/'),
+      content
+    };
+  } catch {
+    return null;
+  }
 }
 
 function readRecentProjects(): ProjectMeta[] {
@@ -937,6 +1003,31 @@ ipcMain.handle('workspace:searchFiles', async (_event, input) => {
   const query = typeof input === 'object' && input !== null && 'query' in input ? String((input as { query?: unknown }).query ?? '') : '';
   const parsed = WorkspaceFileSearchEntrySchema.array().safeParse(searchWorkspaceFiles(currentWorkspaceRoot(), query));
   return parsed.success ? parsed.data : [];
+});
+
+ipcMain.handle('workspace:listTree', async () => {
+  const parsed = WorkspaceTreeNodeSchema.array().safeParse(buildWorkspaceTreeEntries(currentWorkspaceRoot()));
+  return parsed.success ? parsed.data : [];
+});
+
+ipcMain.handle('workspace:readFile', async (_event, input) => {
+  const parsed = WorkspaceReadFileInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return null;
+  }
+
+  const result = readWorkspaceTextFile(currentWorkspaceRoot(), parsed.data.path);
+  return result ? WorkspaceReadFileResultSchema.parse(result) : null;
+});
+
+ipcMain.handle('terminal:run', async (_event, input) => {
+  const parsed = TerminalRunInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return null;
+  }
+
+  const tool = new ExecTool(currentWorkspaceRoot());
+  return tool.run({ command: parsed.data.command, timeoutMs: parsed.data.timeoutMs }, { acId: 'terminal', claimId: 'terminal' });
 });
 
 ipcMain.handle('agents:list', async () => listSubAgents(currentWorkspaceRoot()));
