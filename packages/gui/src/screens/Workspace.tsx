@@ -270,6 +270,7 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
   const ref = useRef<HTMLTextAreaElement>(null);
   const pendingSelection = useRef<{ start: number; end: number } | null>(null);
   const requestToken = useRef(0);
+  const worktreeRecommended = shouldUseWorktreePrompt(input);
 
   const refreshCustomCommands = useCallback(async () => {
     const listCommands = kernelClient?.listCommands;
@@ -697,6 +698,14 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
         <span className="text-[11px] text-bobby-faint">Ctrl+N new / Ctrl+K clear / /help /plan /review /status /cost /undo</span>
         <span className="text-[11px] text-bobby-faint">Enter to send, Shift+Enter for new line</span>
       </div>
+      {worktreeRecommended && (
+        <div className="mx-auto max-w-[740px] px-4 pb-2">
+          <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] text-bobby-muted" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
+            <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: 'var(--bobby-accent)' }} />
+            Worktree proposal enabled
+          </div>
+        </div>
+      )}
       {notice && <div className="mx-auto max-w-[740px] px-4 pb-2 text-[11px] text-bobby-muted">{notice}</div>}
     </div>
   );

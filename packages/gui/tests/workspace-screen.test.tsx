@@ -138,6 +138,7 @@ describe('workspace UI smoke', () => {
 
     const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: 'Edit src/screens/Workspace.tsx to fix the layout' } });
+    expect(screen.getByText(/Worktree proposal enabled/)).toBeTruthy();
     fireEvent.click(screen.getByText('Send'));
 
     await vi.waitFor(() => {
