@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, shell, Tray } from 'electron';
-import { applySubAgentProposal, KernelHost, loadDeepSeekConfig, makeDeepSeekClient } from '@bobby/kernel';
+import { applySubAgentProposal, KernelHost, listSnapshots, loadDeepSeekConfig, makeDeepSeekClient } from '@bobby/kernel';
 import {
   AppSettingsSchema,
   AppSettingsUpdateSchema,
@@ -17,6 +17,7 @@ import {
   ProposalDiscardInputSchema,
   ProposalSummarySchema,
   SessionRecordSchema,
+  SnapshotListEntrySchema,
   TaskDetailSchema,
   TaskSummarySchema,
   type AppSettings,
@@ -273,6 +274,10 @@ function writeSession(session: unknown): SessionRecordDto {
 
 function taskRoot(): string | null {
   return currentProjectDir ? join(currentProjectDir, BOBBY_DIR, 'tasks') : null;
+}
+
+function currentWorkspaceRoot(): string {
+  return currentProjectDir ?? process.cwd();
 }
 
 function readTaskFile(taskId: string, fileName: string): unknown | null {
@@ -729,6 +734,11 @@ ipcMain.handle('proposals:discard', async (_event, input) => {
   }
   unlinkSync(path);
   return true;
+});
+
+ipcMain.handle('snapshots:list', async () => {
+  const parsed = SnapshotListEntrySchema.array().safeParse(await listSnapshots(currentWorkspaceRoot()));
+  return parsed.success ? parsed.data : [];
 });
 
 ipcMain.handle('automations:list', async () => readAutomations());

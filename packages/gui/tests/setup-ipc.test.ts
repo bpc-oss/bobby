@@ -42,6 +42,7 @@ const KernelHostMock = vi.fn(() => ({
   send: vi.fn(async () => undefined)
 }));
 const makeDeepSeekClient = vi.fn(() => ({}));
+const listSnapshots = vi.fn(async () => []);
 const loadDeepSeekConfig = vi.fn(async () => ({
   apiKey: 'legacy-deepseek-key',
   report: {
@@ -97,6 +98,7 @@ vi.mock('electron', () => ({
 
 vi.mock('@bobby/kernel', () => ({
   KernelHost: KernelHostMock,
+  listSnapshots,
   makeDeepSeekClient,
   loadDeepSeekConfig
 }));
@@ -308,6 +310,30 @@ describe('project IPC handlers', () => {
     expect(result.project.path).toBe('E:\\projects\\selected');
     expect(result.recentProjects[0]?.path).toBe('E:\\projects\\selected');
     expect(dialogShowOpenDialog).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists snapshots for the current workspace root', async () => {
+    await loadMain();
+    const selectProject = handlers.get('project:select');
+    const listSnapshotsHandler = handlers.get('snapshots:list');
+    if (!selectProject || !listSnapshotsHandler) throw new Error('snapshot handlers not registered');
+
+    listSnapshots.mockResolvedValueOnce([
+      {
+        id: 'snap-1',
+        createdAt: '2026-06-11T01:00:00.000Z',
+        copied: [{ path: 'src/index.ts', bytes: 42 }],
+        skipped: [],
+        snapshotDir: 'E:\\projects\\selected\\.bobby\\snapshots\\snap-1'
+      }
+    ]);
+
+    await selectProject(undefined, { projectDir: 'E:\\projects\\selected' });
+    const snapshots = await listSnapshotsHandler() as Array<{ id: string; copied: Array<{ path: string }> }>;
+
+    expect(listSnapshots).toHaveBeenCalledWith('E:\\projects\\selected');
+    expect(snapshots[0]?.id).toBe('snap-1');
+    expect(snapshots[0]?.copied[0]?.path).toBe('src/index.ts');
   });
 });
 

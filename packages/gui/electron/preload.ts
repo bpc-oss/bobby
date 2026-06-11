@@ -17,6 +17,7 @@ import type {
   ProposalApplyInput,
   ProposalDiscardInput,
   ProposalSummary,
+  SnapshotListEntry,
   SessionRecordDto,
   TaskDetail,
   TaskSummary
@@ -59,6 +60,7 @@ contextBridge.exposeInMainWorld('bobby', {
   readTask: (taskId: string) => ipcRenderer.invoke('tasks:read', { taskId }) as Promise<TaskDetail | null>,
   listProposals: () => ipcRenderer.invoke('proposals:list') as Promise<ProposalSummary[]>,
   readProposal: (proposalId: string) => ipcRenderer.invoke('proposals:read', { proposalId }) as Promise<ProposalSummary | null>,
+  listSnapshots: () => ipcRenderer.invoke('snapshots:list') as Promise<SnapshotListEntry[]>,
   applyProposal: (input: ProposalApplyInput) => ipcRenderer.invoke('proposals:apply', input) as Promise<ProposalSummary | null>,
   discardProposal: (input: ProposalDiscardInput) => ipcRenderer.invoke('proposals:discard', input) as Promise<boolean>,
   listAutomations: () => ipcRenderer.invoke('automations:list') as Promise<AutomationRecord[]>,

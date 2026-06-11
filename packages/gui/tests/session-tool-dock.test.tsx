@@ -19,7 +19,14 @@ function installBobby() {
       hasEnvKey: false
     }),
     openQuickstart: vi.fn().mockResolvedValue(undefined),
-    listProposals: vi.fn().mockResolvedValue([])
+    listProposals: vi.fn().mockResolvedValue([]),
+    listSnapshots: vi.fn().mockResolvedValue([{
+      id: 'snap-1',
+      createdAt: '2026-06-11T00:00:00.000Z',
+      copied: [{ path: 'src/index.ts', bytes: 42 }],
+      skipped: [],
+      snapshotDir: 'E:\\ai-files\\Bobby\\.bobby\\snapshots\\snap-1'
+    }])
   };
 }
 
@@ -73,5 +80,16 @@ describe('SessionToolDock', () => {
 
     const send = (window as any).bobby.send as ReturnType<typeof vi.fn>;
     expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot' });
+  });
+
+  it('shows checkpoint snapshots and restores a specific checkpoint', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Diff/));
+    expect(await screen.findByText('#1 snap-1')).toBeTruthy();
+    fireEvent.click(screen.getByText('Restore'));
+
+    const send = (window as any).bobby.send as ReturnType<typeof vi.fn>;
+    expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot', snapshotId: 'snap-1' });
   });
 });

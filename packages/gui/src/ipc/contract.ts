@@ -163,6 +163,15 @@ export const ProposalDiscardInputSchema = z.object({
 });
 export type ProposalDiscardInput = z.infer<typeof ProposalDiscardInputSchema>;
 
+export const SnapshotListEntrySchema = z.object({
+  id: z.string().min(1),
+  createdAt: z.string().min(1),
+  copied: z.array(z.object({ path: z.string(), bytes: z.number().nonnegative() })),
+  skipped: z.array(z.object({ path: z.string(), reason: z.enum(['binary-or-non-text', 'excluded']) })),
+  snapshotDir: z.string().min(1)
+});
+export type SnapshotListEntry = z.infer<typeof SnapshotListEntrySchema>;
+
 export function makeKernelClient() {
   return {
     startTask: (input: string) => window.bobby.send({ type: 'startTask', input }),
@@ -184,7 +193,8 @@ export function makeKernelClient() {
     readTask: (taskId: string) => window.bobby.readTask!(taskId),
     listProposals: () => window.bobby.listProposals!(),
     readProposal: (proposalId: string) => window.bobby.readProposal!(proposalId),
-    restoreSnapshot: () => window.bobby.send({ type: 'restoreSnapshot' }),
+    listSnapshots: () => window.bobby.listSnapshots!(),
+    restoreSnapshot: (snapshotId?: string) => window.bobby.send({ type: 'restoreSnapshot', snapshotId }),
     applyProposal: (input: ProposalApplyInput) => window.bobby.applyProposal!(input),
     discardProposal: (input: ProposalDiscardInput) => window.bobby.discardProposal!(input),
     listAutomations: () => window.bobby.listAutomations(),

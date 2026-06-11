@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useChatStore, type ChatBlock } from '../store/chat-store';
 import { DiffView } from './DiffView';
-import { makeKernelClient, type ProposalSummary } from '../ipc/contract';
+import { makeKernelClient, type ProposalSummary, type SnapshotListEntry } from '../ipc/contract';
 
 type DockTab = 'mission' | 'plan' | 'review' | 'diff' | 'terminal' | 'files' | 'browser' | 'sidechat' | 'preview' | 'tasks';
 
@@ -172,11 +172,57 @@ function DiffPanel() {
   const blocks = useChatStore((s) => s.blocks);
   const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
   const diffs = collectDiffs(blocks);
+  const [snapshots, setSnapshots] = React.useState<SnapshotListEntry[]>([]);
+
+  const refreshSnapshots = React.useCallback(async () => {
+    if (!client?.listSnapshots) {
+      setSnapshots([]);
+      return;
+    }
+    try {
+      setSnapshots(await client.listSnapshots());
+    } catch {
+      setSnapshots([]);
+    }
+  }, [client]);
+
+  React.useEffect(() => {
+    void refreshSnapshots();
+  }, [refreshSnapshots]);
+
+  async function restoreSnapshot(snapshotId?: string) {
+    await client?.restoreSnapshot?.(snapshotId);
+  }
+
   return (
     <div className="space-y-3">
-      <button type="button" onClick={() => void client?.restoreSnapshot?.()} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] text-bobby-ink" style={{ borderColor: 'var(--bobby-border)' }}>
+      <button type="button" onClick={() => void restoreSnapshot()} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] text-bobby-ink" style={{ borderColor: 'var(--bobby-border)' }}>
         <Undo2 className="h-3.5 w-3.5" /> Undo
       </button>
+      <section className="rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-[12px] font-semibold text-bobby-ink">Checkpoints</h3>
+          <button type="button" onClick={() => void refreshSnapshots()} className="rounded-md px-2 py-1 text-[11px] text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink">Refresh</button>
+        </div>
+        {snapshots.length === 0 ? (
+          <Empty title="No checkpoints found yet." />
+        ) : (
+          <div className="space-y-2">
+            {snapshots.map((snapshot, index) => (
+              <div key={snapshot.id} className="rounded-lg border px-3 py-2" style={{ borderColor: 'var(--bobby-border-muted)', background: 'var(--bobby-bg-canvas)' }}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-[12px] font-medium text-bobby-ink">#{index + 1} {snapshot.id}</div>
+                    <div className="mt-0.5 text-[11px] text-bobby-faint">{new Date(snapshot.createdAt).toLocaleString()}</div>
+                  </div>
+                  <button type="button" onClick={() => void restoreSnapshot(snapshot.id)} className="rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-white">Restore</button>
+                </div>
+                <div className="mt-2 text-[11px] text-bobby-faint">{snapshot.copied.length} copied / {snapshot.skipped.length} skipped</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
       {diffs.length === 0 ? <Empty title="No file diffs yet." /> : diffs.map((diff, index) => <DiffView key={`${diff.path}-${index}`} patch={diff.patch} filePath={diff.path} maxHeight={260} />)}
     </div>
   );
