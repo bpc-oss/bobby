@@ -903,7 +903,7 @@ async function runAutomation(automation: AutomationRecord): Promise<AutomationRe
 
   const host = await (pendingHost ?? (pendingHost = createHost()));
   if (!host) {
-    notifySystem(`Automation "${automation.title}" is ready, but Bobby is not configured yet.`, { type: 'open-page', page: 'schedule' });
+    notifySystem(`Automation "${automation.title}" is ready, but Bobby is not configured yet.`, { type: 'open-page', page: 'history' });
     return updated;
   }
 
@@ -929,7 +929,7 @@ async function runAutomation(automation: AutomationRecord): Promise<AutomationRe
   } catch (error: unknown) {
     failedToRun = true;
     const message = error instanceof Error ? error.message : String(error);
-    notifySystem(`Automation "${automation.title}" failed: ${message}`, { type: 'open-page', page: 'schedule' });
+    notifySystem(`Automation "${automation.title}" failed: ${message}`, { type: 'open-page', page: 'history' });
   } finally {
     unsubscribe();
   }
@@ -941,9 +941,9 @@ async function runAutomation(automation: AutomationRecord): Promise<AutomationRe
 
   const message = `Automation "${automation.title}" completed with ${status} status.`;
   if (status === 'failed' && !failedToRun) {
-    notifySystem(`Automation "${automation.title}" failed.`, { type: 'open-page', page: 'schedule' });
+    notifySystem(`Automation "${automation.title}" failed.`, { type: 'open-page', page: 'history' });
   } else {
-    notifyAutomation(message, { type: 'open-page', page: 'schedule' });
+    notifyAutomation(message, { type: 'open-page', page: 'history' });
   }
 
   return updated;

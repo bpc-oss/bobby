@@ -752,7 +752,7 @@ describe('desktop integration', () => {
     expect(windowInstance.webContents.send).toHaveBeenCalledWith('app:command', { type: 'new-task' });
   });
 
-  it('clicking automation notifications jumps back into the schedule page', async () => {
+  it('clicking automation notifications jumps back into the history page', async () => {
     const projectRoot = mkdtempSync(join(tmpdir(), 'automation-notify-'));
     mkdirSync(join(projectRoot, '.bobby'), { recursive: true });
     await loadMain([
@@ -781,7 +781,7 @@ describe('desktop integration', () => {
     const windowInstance = (BrowserWindowMock as unknown as {
       mock: { results: Array<{ value: { webContents: { send: ReturnType<typeof vi.fn> } } }> };
     }).mock.results[0]?.value;
-    expect(windowInstance.webContents.send).toHaveBeenCalledWith('app:command', { type: 'open-page', page: 'schedule' });
+    expect(windowInstance.webContents.send).toHaveBeenCalledWith('app:command', { type: 'open-page', page: 'history' });
   });
 });
 
