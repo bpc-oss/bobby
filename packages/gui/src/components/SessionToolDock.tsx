@@ -191,6 +191,10 @@ function DiffPanel() {
   }, [refreshSnapshots]);
 
   async function restoreSnapshot(snapshotId?: string) {
+    const label = snapshotId ? `Restore checkpoint ${snapshotId}?` : 'Restore the latest checkpoint?';
+    if (!window.confirm(label)) {
+      return;
+    }
     await client?.restoreSnapshot?.(snapshotId);
   }
 

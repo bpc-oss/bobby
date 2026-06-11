@@ -28,6 +28,7 @@ function installBobby() {
       snapshotDir: 'E:\\ai-files\\Bobby\\.bobby\\snapshots\\snap-1'
     }])
   };
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
 }
 
 beforeEach(() => {
@@ -79,6 +80,7 @@ describe('SessionToolDock', () => {
     fireEvent.click(screen.getByText('Undo'));
 
     const send = (window as any).bobby.send as ReturnType<typeof vi.fn>;
+    expect(window.confirm).toHaveBeenCalledWith('Restore the latest checkpoint?');
     expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot' });
   });
 
@@ -90,6 +92,7 @@ describe('SessionToolDock', () => {
     fireEvent.click(screen.getByText('Restore'));
 
     const send = (window as any).bobby.send as ReturnType<typeof vi.fn>;
+    expect(window.confirm).toHaveBeenCalledWith('Restore checkpoint snap-1?');
     expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot', snapshotId: 'snap-1' });
   });
 });
