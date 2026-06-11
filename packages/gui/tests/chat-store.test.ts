@@ -175,6 +175,23 @@ describe('chat session store', () => {
     expect(state.blocks).toEqual(restored.blocks);
   });
 
+  it('restores the project context when reloading the last active session', async () => {
+    const restored = session('restored', 'Restored task', [userBlock('u-restored', 'Restored task')]);
+    restored.projectDir = 'E:\\projects\\alpha';
+    localStorage.setItem('bobby-last-active-session', 'restored');
+    (window as unknown as { bobby: { listSessions: ReturnType<typeof vi.fn> } }).bobby.listSessions = vi.fn().mockResolvedValue([restored]);
+
+    await useChatStore.getState().loadSessions();
+
+    const state = useChatStore.getState();
+    expect(state.activeSessionId).toBe('restored');
+    expect(state.currentProject).toEqual({
+      name: 'alpha',
+      path: 'E:\\projects\\alpha',
+      lastOpenedAt: expect.any(String)
+    });
+  });
+
   it('routes background task events into their own session without polluting the visible session', () => {
     const first = session('first', 'First task', [userBlock('u-first', 'First task')]);
     first.taskId = 'task-first';

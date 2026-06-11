@@ -880,12 +880,19 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       if (lastActiveSessionId) {
         const target = sessions.find((session) => session.id === lastActiveSessionId);
         if (target) {
+          const nextProject = target.projectDir
+            ? {
+                name: target.projectDir.split(/[\\/]/).filter(Boolean).at(-1) ?? target.projectDir,
+                path: target.projectDir,
+                lastOpenedAt: nowIso()
+              }
+            : get().currentProject;
           set({
             ...resetThreadState(target),
             sessions: state.sessions,
             threads: state.threads,
             taskThreadIds: state.taskThreadIds,
-            currentProject: get().currentProject,
+            currentProject: nextProject,
             recentProjects: get().recentProjects,
             _client: get()._client
           });
