@@ -123,6 +123,7 @@ let automationTimer: NodeJS.Timeout | null = null;
 let currentProjectDir: string | null = null;
 let currentProject: ProjectMeta | null = null;
 let currentHost: KernelHost | null = null;
+let currentHostUnsubscribe: (() => void) | null = null;
 let tray: Tray | null = null;
 let pendingAppCommand: { type: 'new-task' } | { type: 'open-page'; page: 'chat' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'claw' | 'settings'; sessionId?: string } | null = null;
 const toolRegistry = new ToolRegistry();
@@ -168,6 +169,25 @@ let conscienceDeps = {
   context: () => toolEvidenceProvider.context(),
   toolRegistry
 };
+
+function bindHostEvents(host: KernelHost | null): void {
+  if (currentHostUnsubscribe) {
+    currentHostUnsubscribe();
+    currentHostUnsubscribe = null;
+  }
+
+  if (!host) {
+    return;
+  }
+
+  currentHostUnsubscribe = host.subscribe((event) => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+
+    mainWindow.webContents.send('kernel:event', event);
+  });
+}
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -522,6 +542,10 @@ function taskRoot(): string | null {
   return currentProjectDir ? join(currentProjectDir, BOBBY_DIR, 'tasks') : null;
 }
 
+function traceRoot(): string | null {
+  return currentProjectDir ? join(currentProjectDir, BOBBY_DIR, 'traces') : null;
+}
+
 function currentWorkspaceRoot(): string {
   return currentProjectDir ?? process.cwd();
 }
@@ -549,32 +573,108 @@ function readTextTaskFile(taskId: string, fileName: string): string | null {
 }
 
 function taskIds(): string[] {
+  const ids = new Set<string>();
   const root = taskRoot();
   try {
-    if (!root || !existsSync(root)) return [];
-    return readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    if (root && existsSync(root)) {
+      for (const entry of readdirSync(root, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          ids.add(entry.name);
+        }
+      }
+    }
   } catch {
-    return [];
+    // Ignore task directory scan failures; trace-backed summaries may still exist.
   }
+
+  const traces = traceRoot();
+  try {
+    if (traces && existsSync(traces)) {
+      for (const entry of readdirSync(traces, { withFileTypes: true })) {
+        if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+          const taskId = entry.name.replace(/\.jsonl$/, '');
+          if (taskId !== 'system') {
+            ids.add(taskId);
+          }
+        }
+      }
+    }
+  } catch {
+    // Ignore trace scan failures; task directory data may still exist.
+  }
+
+  return Array.from(ids);
 }
 
 function taskSummary(taskId: string): TaskSummary | null {
   const root = taskRoot();
-  if (!root) return null;
-  const taskDir = join(root, taskId);
-  const meta = readJsonFile<Record<string, unknown>>(join(taskDir, 'task.json'), {});
-  const fallbackTime = existsSync(taskDir) ? new Date(statSync(taskDir).mtimeMs).toISOString() : new Date().toISOString();
+  const taskDir = root ? join(root, taskId) : null;
+  if (taskDir && existsSync(taskDir)) {
+    const meta = readJsonFile<Record<string, unknown>>(join(taskDir, 'task.json'), {});
+    const fallbackTime = new Date(statSync(taskDir).mtimeMs).toISOString();
+    const summary = {
+      taskId,
+      userGoal: String(meta.userGoal ?? meta.goal ?? taskId),
+      state: String(meta.state ?? meta.status ?? 'unknown'),
+      taskType: String(meta.taskType ?? 'task'),
+      createdAt: String(meta.createdAt ?? fallbackTime),
+      updatedAt: String(meta.updatedAt ?? fallbackTime),
+      traceCount: readTaskTrace(taskId).length,
+      hasContract: existsSync(join(taskDir, 'contract.json')),
+      hasPlan: existsSync(join(taskDir, 'plan.json')),
+      hasReport: existsSync(join(taskDir, 'report.md'))
+    };
+    const parsed = TaskSummarySchema.safeParse(summary);
+    return parsed.success ? parsed.data : null;
+  }
+
+  const trace = readTaskTrace(taskId);
+  if (trace.length === 0) {
+    return null;
+  }
+
+  const fallbackTime = traceRoot() && existsSync(join(traceRoot()!, `${taskId}.jsonl`))
+    ? new Date(statSync(join(traceRoot()!, `${taskId}.jsonl`)).mtimeMs).toISOString()
+    : new Date().toISOString();
+  let userGoal = taskId;
+  let state: TaskSummary['state'] = 'running';
+  let hasContract = false;
+  let hasPlan = false;
+  let hasReport = false;
+
+  for (const event of trace) {
+    if (!event || typeof event !== 'object') continue;
+    const item = event as Record<string, unknown>;
+    if (item.type === 'intent_proposed' && item.contract && typeof item.contract === 'object') {
+      const contract = item.contract as Record<string, unknown>;
+      userGoal = String(contract.goal ?? userGoal);
+      hasContract = true;
+    }
+    if (item.type === 'plan_ready') {
+      hasPlan = true;
+    }
+    if (item.type === 'final_result') {
+      hasReport = true;
+      if (item.status === 'done' || item.status === 'failed' || item.status === 'blocked') {
+        state = item.status;
+      }
+    }
+    if (item.type === 'error') {
+      state = 'failed';
+    }
+  }
+
   const summary = {
     taskId,
-    userGoal: String(meta.userGoal ?? meta.goal ?? taskId),
-    state: String(meta.state ?? meta.status ?? 'unknown'),
-    taskType: String(meta.taskType ?? 'task'),
-    createdAt: String(meta.createdAt ?? fallbackTime),
-    updatedAt: String(meta.updatedAt ?? fallbackTime),
-    traceCount: readTaskTrace(taskId).length,
-    hasContract: existsSync(join(taskDir, 'contract.json')),
-    hasPlan: existsSync(join(taskDir, 'plan.json')),
-    hasReport: existsSync(join(taskDir, 'report.md'))
+    userGoal,
+    state,
+    taskType: 'task',
+    createdAt: fallbackTime,
+    updatedAt: fallbackTime,
+    traceCount: trace.length,
+    hasContract,
+    hasPlan,
+    hasReport
   };
   const parsed = TaskSummarySchema.safeParse(summary);
   return parsed.success ? parsed.data : null;
@@ -583,12 +683,35 @@ function taskSummary(taskId: string): TaskSummary | null {
 function taskDetail(taskId: string): TaskDetail | null {
   const summary = taskSummary(taskId);
   if (!summary) return null;
+
+  const taskDir = taskRoot() ? join(taskRoot()!, taskId) : null;
+  const trace = readTaskTrace(taskId);
+  const traceIntent = trace.find((event): event is Extract<KernelEvent, { type: 'intent_proposed' }> => {
+    return Boolean(event && typeof event === 'object' && (event as Record<string, unknown>).type === 'intent_proposed');
+  });
+  const tracePlan = trace.find((event): event is Extract<KernelEvent, { type: 'plan_ready' }> => {
+    return Boolean(event && typeof event === 'object' && (event as Record<string, unknown>).type === 'plan_ready');
+  });
+  const traceFinal = [...trace].reverse().find((event): event is Extract<KernelEvent, { type: 'final_result' }> => {
+    return Boolean(event && typeof event === 'object' && (event as Record<string, unknown>).type === 'final_result');
+  });
   return TaskDetailSchema.parse({
     summary,
-    contract: readTaskFile(taskId, 'contract.json'),
-    plan: readTaskFile(taskId, 'plan.json'),
-    report: readTextTaskFile(taskId, 'report.md'),
-    trace: readTaskTrace(taskId),
+    contract: taskDir && existsSync(join(taskDir, 'contract.json')) ? readTaskFile(taskId, 'contract.json') : traceIntent?.contract ?? null,
+    plan: taskDir && existsSync(join(taskDir, 'plan.json')) ? readTaskFile(taskId, 'plan.json') : tracePlan?.steps ?? null,
+    report:
+      taskDir && existsSync(join(taskDir, 'report.md'))
+        ? readTextTaskFile(taskId, 'report.md')
+        : traceFinal
+          ? [
+              `# Task ${taskId}`,
+              '',
+              `- status: ${traceFinal.status}`,
+              `- events: ${trace.length}`,
+              `- goal: ${summary.userGoal}`
+            ].join('\n')
+          : null,
+    trace,
     sessionIds: readSessions().filter((session) => session.taskId === taskId).map((session) => session.id)
   });
 }
@@ -679,7 +802,7 @@ function readPersistedTraceFile(path: string): unknown[] {
 }
 
 function readTaskTrace(taskId: string): unknown[] {
-  const liveTrace = currentHost?.getTrace(taskId);
+  const liveTrace = typeof currentHost?.getTrace === 'function' ? currentHost.getTrace(taskId) : null;
   if (Array.isArray(liveTrace) && liveTrace.length > 0) {
     return [...liveTrace];
   }
@@ -1096,7 +1219,7 @@ const createWindow = () => {
     x: state.x,
     y: state.y,
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      preload: join(__dirname, 'preload.cjs'),
       contextIsolation: true
     }
   });
@@ -1191,6 +1314,7 @@ const createHost = async () => {
     refreshToolRegistry();
     const host = new KernelHost(() => model, conscienceDeps, workspaceRoot, true);
     currentHost = host;
+    bindHostEvents(host);
     return host;
   } catch (err) {
     if (err instanceof Error) {
@@ -1203,18 +1327,7 @@ const createHost = async () => {
 };
 
 const bootstrap = async () => {
-  const runtimeHost = await (pendingHost ?? (pendingHost = createHost()));
-  if (!runtimeHost) {
-    return;
-  }
-
-  runtimeHost.subscribe((event) => {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      return;
-    }
-
-    mainWindow.webContents.send('kernel:event', event);
-  });
+  await (pendingHost ?? (pendingHost = createHost()));
 };
 
 ipcMain.handle('setup:status', async () => getSetupStatus());

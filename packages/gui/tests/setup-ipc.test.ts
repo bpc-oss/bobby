@@ -554,6 +554,81 @@ describe('agent IPC handlers', () => {
   });
 });
 
+describe('task IPC handlers', () => {
+  beforeEach(() => {
+    handlers.clear();
+  });
+
+  it('lists and reads trace-backed tasks when no task artifact directory exists', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'bobby-trace-task-'));
+    mkdirSync(join(projectRoot, '.bobby', 'traces'), { recursive: true });
+    writeFileSync(
+      join(projectRoot, '.bobby', 'traces', 'trace-task-1.jsonl'),
+      [
+        JSON.stringify({
+          taskId: 'trace-task-1',
+          type: 'intent_proposed',
+          contract: {
+            goal: 'Trace-backed task',
+            acceptanceCriteria: [{ id: 'AC1', desc: 'Add the note', oracleHint: 'file' }],
+            constraints: [],
+            inputs: [],
+            outOfScope: []
+          }
+        }),
+        JSON.stringify({
+          taskId: 'trace-task-1',
+          type: 'plan_ready',
+          steps: [{ id: 'S1', desc: 'Add the note', satisfiesAcIds: ['AC1'], dependsOn: [] }]
+        }),
+        JSON.stringify({
+          taskId: 'trace-task-1',
+          type: 'final_result',
+          status: 'done'
+        })
+      ].join('\n'),
+      'utf8'
+    );
+
+    await loadMain([], projectRoot);
+    const selectProject = handlers.get('project:select');
+    const listTasks = handlers.get('tasks:list');
+    const readTask = handlers.get('tasks:read');
+    if (!selectProject || !listTasks || !readTask) {
+      throw new Error('task handlers not registered');
+    }
+
+    await selectProject(undefined, { projectDir: projectRoot });
+
+    const tasks = await listTasks() as Array<{ taskId: string; userGoal: string; state: string; traceCount: number; hasContract: boolean; hasPlan: boolean; hasReport: boolean }>;
+    expect(tasks.some((task) => task.taskId === 'trace-task-1')).toBe(true);
+
+    const detail = await readTask(undefined, { taskId: 'trace-task-1' }) as {
+      summary: { taskId: string; userGoal: string; state: string; traceCount: number; hasContract: boolean; hasPlan: boolean; hasReport: boolean };
+      contract: { goal?: string } | null;
+      plan: Array<{ id: string }> | null;
+      report: string | null;
+      trace: Array<{ type: string }>;
+      sessionIds: string[];
+    };
+
+    expect(detail.summary).toMatchObject({
+      taskId: 'trace-task-1',
+      userGoal: 'Trace-backed task',
+      state: 'done',
+      traceCount: 3,
+      hasContract: true,
+      hasPlan: true,
+      hasReport: true
+    });
+    expect(detail.contract).toMatchObject({ goal: 'Trace-backed task' });
+    expect(detail.plan).toHaveLength(1);
+    expect(detail.report).toContain('Trace-backed task');
+    expect(detail.trace.map((event) => event.type)).toEqual(['intent_proposed', 'plan_ready', 'final_result']);
+    expect(detail.sessionIds).toEqual([]);
+  });
+});
+
 describe('command IPC handlers', () => {
   beforeEach(() => {
     handlers.clear();

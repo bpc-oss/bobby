@@ -64,6 +64,45 @@ describe('History replay', () => {
     expect(screen.getByText('Final status: done')).toBeTruthy();
   });
 
+  it('switches to a clicked task and reveals its continue action', async () => {
+    (window as any).bobby = {
+      listTasks: vi.fn().mockResolvedValue([
+        summary,
+        {
+          ...summary,
+          taskId: 'task-2',
+          userGoal: 'Resume me',
+          updatedAt: '2026-06-11T00:02:00.000Z'
+        }
+      ]),
+      readTask: vi.fn().mockImplementation(async (taskId: string) => {
+        if (taskId === 'task-2') {
+          return {
+            summary: {
+              ...summary,
+              taskId: 'task-2',
+              userGoal: 'Resume me'
+            },
+            contract: null,
+            plan: null,
+            report: null,
+            sessionIds: ['session-2'],
+            trace: []
+          };
+        }
+        return detail;
+      })
+    };
+
+    render(<History onResumeTask={vi.fn()} />);
+
+    await screen.findAllByText('Create hello.txt');
+    screen.getByTestId('history-task-task-2').click();
+
+    await waitFor(() => expect(screen.getByText('Resume me')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('history-continue')).toBeTruthy());
+  });
+
   it('offers a continue action for the selected task session', async () => {
     const onResumeTask = vi.fn();
     render(<History onResumeTask={onResumeTask} />);

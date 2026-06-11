@@ -70,7 +70,7 @@ export function App() {
   const [setupStatus, setSetupStatus] = React.useState<OnboardingStatus | null>(null);
   const [setupLoading, setSetupLoading] = React.useState(false);
   const [onboardingComplete, setOnboardingComplete] = React.useState(() => readOnboardingComplete());
-  const client = React.useMemo(() => resolveKernelClient(), []);
+  const [client, setClient] = React.useState(() => resolveKernelClient());
   const currentProject = useChatStore((s) => s.currentProject);
   const recentProjects = useChatStore((s) => s.recentProjects);
   const loadProjectState = useChatStore((s) => s.loadProjectState);
@@ -93,6 +93,19 @@ export function App() {
   React.useEffect(() => {
     setLang(lang);
   }, [lang]);
+
+  React.useEffect(() => {
+    if (client) return;
+    const timer = window.setInterval(() => {
+      const nextClient = resolveKernelClient();
+      if (nextClient) {
+        setClient(nextClient);
+        window.clearInterval(timer);
+      }
+    }, 100);
+
+    return () => window.clearInterval(timer);
+  }, [client]);
 
   React.useEffect(() => {
     void loadProjectState();

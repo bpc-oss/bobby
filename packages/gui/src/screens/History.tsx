@@ -81,7 +81,7 @@ export function History({ onResumeTask }: { onResumeTask?: (sessionId: string) =
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const load = React.useCallback(async (nextSelected = selected) => {
+  const load = React.useCallback(async (nextSelected: string | null = null) => {
     if (!window.bobby?.listTasks) return;
     setLoading(true);
     setError(null);
@@ -96,10 +96,10 @@ export function History({ onResumeTask }: { onResumeTask?: (sessionId: string) =
     } finally {
       setLoading(false);
     }
-  }, [selected]);
+  }, []);
 
   React.useEffect(() => {
-    void load(null);
+    void load();
   }, [load]);
 
   async function openTask(taskId: string) {

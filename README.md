@@ -41,3 +41,5 @@
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+
+Bobby desktop parity is under verification.
