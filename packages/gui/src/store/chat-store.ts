@@ -102,6 +102,9 @@ export type ChatState = {
   costUsd: number;
   spendUsd: number;
   model: string | null;
+  threads: Record<string, ThreadRecord>;
+  taskThreadIds: Record<string, string>;
+  pendingThreadIds: string[];
   sessions: SessionRecordDto[];
   activeSessionId: string | null;
   currentProject: ProjectMeta | null;
@@ -126,6 +129,8 @@ export type ChatState = {
   loadSessions: () => Promise<void>;
 };
 
+type ThreadRecord = SessionRecordDto;
+
 // ---- Helpers ----
 
 let nextId = 1;
@@ -139,8 +144,30 @@ function sessionTitle(blocks: ChatBlock[]): string {
   return blocks.find((b) => b.kind === 'user')?.text?.slice(0, 80) || 'New session';
 }
 
+function makeBlankSession(id: string, projectDir: string | null, createdAt = nowIso()): SessionRecordDto {
+  return SessionRecordSchema.parse({
+    id,
+    title: 'New session',
+    blocks: [],
+    createdAt,
+    updatedAt: createdAt,
+    projectDir,
+    taskId: null,
+    status: 'idle',
+    liveReasoning: '',
+    liveAssistant: '',
+    liveToolContent: '',
+    currentPlan: [],
+    error: null,
+    costUsd: 0,
+    spendUsd: 0,
+    model: null
+  });
+}
+
 function snapshotSession(state: ChatState, id = state.activeSessionId ?? uid()): SessionRecordDto {
-  const createdAt = state.sessions.find((session) => session.id === id)?.createdAt ?? nowIso();
+  const current = state.threads[id] ?? state.sessions.find((session) => session.id === id);
+  const createdAt = current?.createdAt ?? nowIso();
   return SessionRecordSchema.parse({
     id,
     title: sessionTitle(state.blocks),
@@ -166,6 +193,14 @@ function replaceSession(sessions: SessionRecordDto[], next: SessionRecordDto): S
   return [next, ...filtered].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
 }
 
+function replaceThread(threads: Record<string, ThreadRecord>, next: ThreadRecord): Record<string, ThreadRecord> {
+  return { ...threads, [next.id]: next };
+}
+
+function threadOrder(threads: Record<string, ThreadRecord>): ThreadRecord[] {
+  return Object.values(threads).sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+}
+
 function dedupeSessions(sessions: SessionRecordDto[]): SessionRecordDto[] {
   const byTitle = new Map<string, SessionRecordDto>();
   for (const session of sessions) {
@@ -175,6 +210,66 @@ function dedupeSessions(sessions: SessionRecordDto[]): SessionRecordDto[] {
     }
   }
   return Array.from(byTitle.values()).sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+}
+
+function resetThreadState(session?: SessionRecordDto) {
+  return {
+    blocks: session ? [...(session.blocks as ChatBlock[])] : [],
+    liveReasoning: session?.liveReasoning ?? '',
+    liveAssistant: session?.liveAssistant ?? '',
+    liveToolContent: session?.liveToolContent ?? '',
+    busy: session?.status === 'running',
+    currentTaskId: session?.taskId ?? null,
+    currentPlan: session?.currentPlan ?? [],
+    status: session?.status ?? 'idle',
+    error: session?.error ?? null,
+    costUsd: session?.costUsd ?? 0,
+    spendUsd: session?.spendUsd ?? 0,
+    model: session?.model ?? null,
+    activeSessionId: session?.id ?? null
+  };
+}
+
+function currentThreadSnapshot(state: ChatState, id = state.activeSessionId ?? uid()): SessionRecordDto {
+  const existing = state.threads[id] ?? state.sessions.find((session) => session.id === id);
+  const createdAt = existing?.createdAt ?? nowIso();
+  return SessionRecordSchema.parse({
+    id,
+    title: sessionTitle(state.blocks),
+    blocks: state.blocks,
+    createdAt,
+    updatedAt: nowIso(),
+    projectDir: state.currentProject?.path ?? existing?.projectDir ?? null,
+    taskId: state.currentTaskId,
+    status: state.status,
+    liveReasoning: state.liveReasoning,
+    liveAssistant: state.liveAssistant,
+    liveToolContent: state.liveToolContent,
+    currentPlan: state.currentPlan,
+    error: state.error,
+    costUsd: state.costUsd,
+    spendUsd: state.spendUsd,
+    model: state.model
+  });
+}
+
+function updateCurrentThreadState(state: ChatState, thread: SessionRecordDto): Partial<ChatState> {
+  return {
+    blocks: [...(thread.blocks as ChatBlock[])],
+    liveReasoning: thread.liveReasoning,
+    liveAssistant: thread.liveAssistant,
+    liveToolContent: thread.liveToolContent,
+    busy: thread.status === 'running',
+    currentTaskId: thread.taskId,
+    currentPlan: thread.currentPlan,
+    status: thread.status,
+    error: thread.error,
+    costUsd: thread.costUsd,
+    spendUsd: thread.spendUsd,
+    model: thread.model,
+    activeSessionId: thread.id,
+    threads: replaceThread(state.threads, thread)
+  };
 }
 
 function sameBlocks(left: ChatBlock[], right: unknown[]): boolean {
@@ -203,15 +298,67 @@ function resetLiveState(session?: SessionRecordDto) {
   };
 }
 
-function stateFromSession(base: ChatState, session: SessionRecordDto): ChatState {
+function stateFromThread(base: ChatState, thread: ThreadRecord): ChatState {
   return {
     ...base,
-    ...resetLiveState(session),
-    sessions: base.sessions,
+    ...resetLiveState(thread),
+    sessions: replaceSession(base.sessions, thread),
+    threads: replaceThread(base.threads, thread),
+    taskThreadIds: thread.taskId ? { ...base.taskThreadIds, [thread.taskId]: thread.id } : base.taskThreadIds,
+    pendingThreadIds: base.pendingThreadIds.filter((threadId) => threadId !== thread.id),
     currentProject: base.currentProject,
     recentProjects: base.recentProjects,
     _client: base._client
   };
+}
+
+function threadSummary(state: ChatState): ThreadRecord[] {
+  return threadOrder(state.threads);
+}
+
+function activeThreadFromState(state: ChatState): ThreadRecord | null {
+  if (state.activeSessionId && state.threads[state.activeSessionId]) {
+    return state.threads[state.activeSessionId];
+  }
+  if (state.activeSessionId) {
+    const session = state.sessions.find((item) => item.id === state.activeSessionId);
+    if (session) {
+      return session;
+    }
+  }
+  if (state.blocks.length > 0 || state.currentTaskId || state.liveAssistant || state.liveReasoning || state.liveToolContent) {
+    return currentThreadSnapshot(state);
+  }
+  return null;
+}
+
+function upsertThread(state: ChatState, thread: ThreadRecord, options: { active?: boolean; updateSession?: boolean } = {}): Partial<ChatState> {
+  const nextThreads = replaceThread(state.threads, thread);
+  const nextSessions = options.updateSession === false ? state.sessions : replaceSession(state.sessions, thread);
+  return {
+    threads: nextThreads,
+    sessions: nextSessions,
+    ...(options.active ? updateCurrentThreadState(state, thread) : {})
+  };
+}
+
+function startPendingThread(state: ChatState, threadId: string): Partial<ChatState> {
+  return {
+    activeSessionId: threadId,
+    pendingThreadIds: [...state.pendingThreadIds, threadId]
+  };
+}
+
+function resolveThreadId(state: ChatState, taskId: string): string | null {
+  const mapped = state.taskThreadIds[taskId];
+  if (mapped) return mapped;
+  const pending = state.pendingThreadIds.find((threadId) => !state.threads[threadId]?.taskId);
+  if (pending) return pending;
+  const existing = threadSummary(state).find((thread) => thread.taskId === taskId);
+  if (existing) return existing.id;
+  const historical = state.sessions.find((session) => session.taskId === taskId);
+  if (historical) return historical.id;
+  return existing?.id ?? null;
 }
 
 async function persistSession(session: SessionRecordDto): Promise<void> {
@@ -386,6 +533,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   costUsd: 0,
   spendUsd: 0,
   model: null,
+  threads: {},
+  taskThreadIds: {},
+  pendingThreadIds: [],
   sessions: [],
   activeSessionId: null,
   currentProject: null,
@@ -395,28 +545,52 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   setClient: (client) => set({ _client: client as typeof client | null }),
 
   sendMessage: async (text: string) => {
-    const block: UserBlock = { kind: 'user', id: uid(), text };
-    const nextActiveSessionId = get().activeSessionId ?? uid();
-    set((s) => ({
-      ...(s.busy && s.blocks.length > 0
-        ? {
-            sessions: replaceSession(s.sessions, snapshotSession(s)),
-            blocks: [block],
-            activeSessionId: uid(),
-            currentTaskId: null,
-            currentPlan: []
-          }
-        : {
-            blocks: [...s.blocks, block],
-            activeSessionId: s.activeSessionId ?? nextActiveSessionId
-          }),
-      busy: true,
+    const state = get();
+    const active = activeThreadFromState(state);
+    const reuseActive = Boolean(active && active.blocks.length === 0 && active.status === 'idle' && !active.taskId);
+    const currentSnapshot = active && !reuseActive && active.blocks.length > 0 ? currentThreadSnapshot(state, active.id) : null;
+    const userBlock: UserBlock = { kind: 'user', id: uid(), text };
+    const threadId = reuseActive && active ? active.id : uid();
+    const createdAt = reuseActive && active ? active.createdAt : nowIso();
+    const nextThread = SessionRecordSchema.parse({
+      id: threadId,
+      title: sessionTitle([userBlock]),
+      blocks: [userBlock],
+      createdAt,
+      updatedAt: nowIso(),
+      projectDir: state.currentProject?.path ?? currentSnapshot?.projectDir ?? active?.projectDir ?? null,
+      taskId: null,
       status: 'running',
-      error: null,
       liveReasoning: '',
       liveAssistant: '',
-      liveToolContent: ''
-    }));
+      liveToolContent: '',
+      currentPlan: [],
+      error: null,
+      costUsd: 0,
+      spendUsd: 0,
+      model: null
+    });
+
+    set({
+      blocks: [userBlock],
+      liveReasoning: '',
+      liveAssistant: '',
+      liveToolContent: '',
+      busy: true,
+      currentTaskId: null,
+      currentPlan: [],
+      status: 'running',
+      error: null,
+      costUsd: 0,
+      spendUsd: 0,
+      model: null,
+      activeSessionId: threadId,
+      pendingThreadIds: reuseActive ? state.pendingThreadIds : [...state.pendingThreadIds, threadId],
+      threads: reuseActive
+        ? replaceThread(state.threads, nextThread)
+        : replaceThread(currentSnapshot ? replaceThread(state.threads, currentSnapshot) : state.threads, nextThread),
+      sessions: currentSnapshot ? replaceSession(state.sessions, currentSnapshot) : state.sessions
+    });
 
     const { _client } = get();
     if (_client) {
@@ -430,35 +604,70 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         return;
       }
     }
-    // Mock mode: simulate response when no backend
     mockReply(text);
   },
 
   handleEvent: (event: KernelEvent) => {
     const state = get();
-    const targetSession = state.currentTaskId !== event.taskId
-      ? state.sessions.find((session) => session.taskId === event.taskId)
-      : undefined;
-
-    if (targetSession) {
-      const sessionState = stateFromSession(state, targetSession);
-      const partial = reduceEvent(sessionState, event);
-      if (Object.keys(partial).length > 0) {
-        const nextSession = snapshotSession({ ...sessionState, ...partial }, targetSession.id);
-        set({ sessions: replaceSession(state.sessions, nextSession) });
-        void persistSession(nextSession);
+    let threadId = resolveThreadId(state, event.taskId);
+    if (!threadId && state.activeSessionId) {
+      const active = state.threads[state.activeSessionId];
+      if (active && (!active.taskId || active.taskId === event.taskId)) {
+        threadId = active.id;
       }
+    }
+    if (!threadId) {
+      threadId = state.activeSessionId ?? uid();
+    }
+
+    const baseThread = state.threads[threadId] ?? makeBlankSession(threadId, state.currentProject?.path ?? null);
+    const threadState = stateFromThread(state, baseThread);
+    const partial = reduceEvent(threadState, event);
+    if (Object.keys(partial).length === 0) {
       return;
     }
 
-    const partial = reduceEvent(state, event);
-    if (Object.keys(partial).length > 0) {
-      set(partial);
-      const nextState = get();
-      if (nextState.blocks.length > 0) {
-        void persistSession(snapshotSession(nextState));
-      }
+    const nextThread: ThreadRecord = SessionRecordSchema.parse({
+      ...baseThread,
+      id: threadId,
+      title: baseThread.title || sessionTitle(threadState.blocks),
+      blocks: (partial.blocks ?? threadState.blocks) as unknown[],
+      createdAt: baseThread.createdAt,
+      updatedAt: nowIso(),
+      projectDir: threadState.currentProject?.path ?? baseThread.projectDir ?? null,
+      taskId: partial.currentTaskId ?? threadState.currentTaskId ?? baseThread.taskId ?? (event.type === 'intent_proposed' ? event.taskId : null),
+      status: partial.status ?? threadState.status,
+      liveReasoning: partial.liveReasoning ?? threadState.liveReasoning,
+      liveAssistant: partial.liveAssistant ?? threadState.liveAssistant,
+      liveToolContent: partial.liveToolContent ?? threadState.liveToolContent,
+      currentPlan: partial.currentPlan ?? threadState.currentPlan,
+      error: partial.error ?? threadState.error,
+      costUsd: partial.costUsd ?? threadState.costUsd,
+      spendUsd: partial.spendUsd ?? threadState.spendUsd,
+      model: partial.model ?? threadState.model
+    });
+
+    const nextThreads = replaceThread(state.threads, nextThread);
+    const nextSessions = replaceSession(state.sessions, nextThread);
+    const nextTaskThreadIds = nextThread.taskId ? { ...state.taskThreadIds, [nextThread.taskId]: nextThread.id } : state.taskThreadIds;
+    const nextPending = state.pendingThreadIds.filter((pendingId) => pendingId !== nextThread.id);
+    const basePatch: Partial<ChatState> = {
+      threads: nextThreads,
+      sessions: nextSessions,
+      taskThreadIds: nextTaskThreadIds,
+      pendingThreadIds: nextPending
+    };
+
+    if (threadId === state.activeSessionId) {
+      set({
+        ...basePatch,
+        ...resetThreadState(nextThread)
+      });
+    } else {
+      set(basePatch);
     }
+
+    void persistSession(nextThread);
   },
 
   approveGate: async (gateId: string, decision: 'allow' | 'always' | 'deny') => {
@@ -468,7 +677,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   approvePlan: async (taskId: string, decision: 'approve' | 'reject' | 'edit', instructions?: string) => {
-    // Update plan block status
     set((s) => ({
       blocks: s.blocks.map((b) =>
         b.kind === 'plan' ? { ...b, status: decision === 'approve' ? 'approved' as const : 'rejected' as const } : b
@@ -488,34 +696,50 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   newSession: () => {
-    const s = get();
-    if (s.blocks.length > 0) {
-      const session = snapshotSession(s);
-      void persistSession(session);
-      set({
-        sessions: replaceSession(s.sessions, session),
-        ...resetLiveState(undefined)
-      });
-    }
+    const state = get();
+    const active = activeThreadFromState(state);
+    const threadId = uid();
+    const blank = makeBlankSession(threadId, state.currentProject?.path ?? active?.projectDir ?? null);
+    const nextThreads = replaceThread(state.threads, blank);
+    const nextSessions = active && active.blocks.length > 0 ? replaceSession(state.sessions, currentThreadSnapshot(state, active.id)) : state.sessions;
+    set({
+      ...resetThreadState(blank),
+      threads: nextThreads,
+      sessions: nextSessions,
+      pendingThreadIds: state.pendingThreadIds.filter((pendingId) => pendingId !== threadId)
+    });
   },
+
   switchSession: (id: string) => {
-    const s = get();
-    let sessions = s.sessions;
-    const target = sessions.find(x => x.id === id);
+    const state = get();
+    const target = state.threads[id] ?? state.sessions.find((session) => session.id === id);
     if (!target) return;
-    const visibleTitle = sessionTitle(s.blocks);
-    if (s.activeSessionId === id || sameBlocks(s.blocks, target.blocks) || (!s.activeSessionId && visibleTitle === target.title)) {
-      set({ sessions: dedupeSessions(sessions), ...resetLiveState(target) });
-      return;
+    const active = activeThreadFromState(state);
+    const visibleTitle = sessionTitle(active ? (active.blocks as ChatBlock[]) : state.blocks);
+    const shouldSnapshotActive = Boolean(
+      active &&
+      active.blocks.length > 0 &&
+      active.id !== target.id &&
+      !sameBlocks(active.blocks as ChatBlock[], target.blocks as unknown[]) &&
+      !( !state.activeSessionId && visibleTitle === target.title )
+    );
+    const nextSessions = shouldSnapshotActive
+      ? replaceSession(state.sessions, currentThreadSnapshot(state, active!.id))
+      : state.sessions;
+    if (shouldSnapshotActive && active) {
+      void persistSession(currentThreadSnapshot(state, active.id));
     }
-    if (s.blocks.length > 0) {
-      const current = snapshotSession(s);
-      sessions = replaceSession(s.sessions, current);
-      void persistSession(current);
-    }
-    set({ sessions: dedupeSessions(sessions), ...resetLiveState(target) });
+    set({
+      ...resetThreadState(target),
+      sessions: nextSessions,
+      threads: replaceThread(state.threads, target),
+      taskThreadIds: target.taskId ? { ...state.taskThreadIds, [target.taskId]: target.id } : state.taskThreadIds,
+      pendingThreadIds: state.pendingThreadIds.filter((pendingId) => pendingId !== target.id)
+    });
   },
+
   clearBlocks: () => set({ blocks: [], liveReasoning: '', liveAssistant: '', liveToolContent: '' }),
+
   loadProjectState: async () => {
     if (typeof window === 'undefined' || !window.bobby) return;
     const [project, projects] = await Promise.all([
@@ -527,20 +751,38 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       recentProjects: ProjectListSchema.parse(projects ?? [])
     });
   },
+
   openProject: async () => {
     if (typeof window === 'undefined' || !window.bobby?.openProject) return;
     const result = await window.bobby.openProject();
     if (!result) return;
     set({ currentProject: result.project, recentProjects: result.recentProjects });
   },
+
   selectProject: async (projectDir: string) => {
     if (typeof window === 'undefined' || !window.bobby?.selectProject) return;
     const result = await window.bobby.selectProject(projectDir);
     set({ currentProject: result.project, recentProjects: result.recentProjects });
   },
+
   loadSessions: async () => {
     if (typeof window === 'undefined' || !window.bobby?.listSessions) return;
     const parsed = SessionRecordSchema.array().safeParse(await window.bobby.listSessions());
-    if (parsed.success) set({ sessions: dedupeSessions(parsed.data) });
+    if (parsed.success) {
+      const sessions = dedupeSessions(parsed.data);
+      set({
+        sessions,
+        threads: sessions.reduce<Record<string, ThreadRecord>>((accumulator, session) => {
+          accumulator[session.id] = session;
+          return accumulator;
+        }, {}),
+        taskThreadIds: sessions.reduce<Record<string, string>>((accumulator, session) => {
+          if (session.taskId) {
+            accumulator[session.taskId] = session.id;
+          }
+          return accumulator;
+        }, {})
+      });
+    }
   }
 }));

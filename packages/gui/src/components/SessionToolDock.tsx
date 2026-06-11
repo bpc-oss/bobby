@@ -243,8 +243,8 @@ function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'tasks' | 'sidecha
     kind === 'browser' ? <ToolCommand kind="Browser" icon={Globe} placeholder="https://example.com or http://localhost:5174" button="Open" buildPrompt={(value) => `Open and inspect this web page, then report visible evidence: ${value}`} /> :
     kind === 'sidechat' ? <ToolCommand kind="Side Chat" icon={MessageCircle} placeholder="Ask a side question without changing the main mission..." button="Ask" buildPrompt={(value) => `Side chat for the current session: ${value}`} /> :
     kind === 'preview' ? <ToolCommand kind="Preview" icon={MonitorPlay} placeholder="Preview URL, file path, or artifact id..." button="Preview" buildPrompt={(value) => `Preview this artifact or URL and summarize what changed: ${value}`} /> :
-    kind === 'tasks' ? <ToolCommand kind="Background Task" icon={Play} placeholder="Queue a parallel/background task..." button="Start" buildPrompt={(value) => `Start this as a background task and keep evidence linked to this session: ${value}`} /> :
-    <ToolCommand kind="Files" icon={FolderOpen} placeholder="src/file.ts, package.json, or a folder path..." button="Open" buildPrompt={(value) => `Open this project file or folder, summarize it, and surface relevant evidence: ${value}`} />;
+    kind === 'tasks' ? <ToolCommand kind="Background Task" icon={Play} placeholder="Queue a parallel/background task..." button="Start" buildPrompt={(value) => `Start this as a background task. If it changes files, isolate it in a worktree and return a patch proposal linked to this session: ${value}`} /> :
+    <ToolCommand kind="Files" icon={FolderOpen} placeholder="src/file.ts, package.json, or a folder path..." button="Open" buildPrompt={(value) => `Open this project file or folder, summarize it, and if edits are needed use a worktree-isolated patch proposal instead of modifying the main worktree: ${value}`} />;
 
   if (kind === 'files') {
     const files = collectFiles(blocks);

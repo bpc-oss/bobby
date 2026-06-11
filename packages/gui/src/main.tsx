@@ -51,23 +51,14 @@ function Sidebar({
   onThemeChange: (t: 'light' | 'dark') => void;
   onPage: (p: AppPage) => void;
 }) {
-  const sessions = useChatStore((s) => s.sessions);
-  const blocks = useChatStore((s) => s.blocks);
+  const threads = useChatStore((s) => s.threads);
   const busy = useChatStore((s) => s.busy);
   const status = useChatStore((s) => s.status);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const newSession = useChatStore((s) => s.newSession);
   const switchSession = useChatStore((s) => s.switchSession);
-  const hasContent = blocks.length > 0;
-  const currentTitle = blocks.find((b) => b.kind === 'user')?.text?.slice(0, 80) || 'Current session';
-  const currentPreview = hasContent ? { id: activeSessionId ?? '__current__', title: currentTitle, current: true } : null;
-  const visibleSessions = [
-    ...(currentPreview ? [currentPreview] : []),
-    ...sessions
-      .filter((session) => session.id !== activeSessionId)
-      .filter((session) => !currentPreview || session.title !== currentPreview.title)
-      .map((session) => ({ id: session.id, title: session.title, current: false }))
-  ];
+  const tasks = React.useMemo(() => Object.values(threads).sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()), [threads]);
+  const activeThread = activeSessionId ? threads[activeSessionId] : null;
 
   const toolbar = [
     { key: 'plugins', title: 'Plugins', icon: Puzzle, onClick: () => onPage('plugins') },
@@ -99,9 +90,8 @@ function Sidebar({
           <button
             type="button"
             onClick={newSession}
-            disabled={busy || !hasContent}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-[14px] text-bobby-muted hover:bg-bobby-sidebar-row-hover hover:text-bobby-ink disabled:opacity-30"
-            title="New session"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-[14px] text-bobby-muted hover:bg-bobby-sidebar-row-hover hover:text-bobby-ink"
+            title="New task thread"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -112,29 +102,40 @@ function Sidebar({
         <div className="flex items-center gap-2">
           <span
             className="inline-block h-2 w-2 rounded-full"
-            style={{ background: busy ? 'var(--bobby-accent)' : status !== 'idle' ? 'var(--bobby-success)' : 'var(--bobby-border)' }}
+            style={{ background: activeThread?.status === 'running' || busy ? 'var(--bobby-accent)' : activeThread?.status && activeThread.status !== 'idle' ? 'var(--bobby-success)' : 'var(--bobby-border)' }}
           />
-          <span className="text-[12px] text-bobby-muted">{busy ? 'Working...' : status === 'idle' ? 'Ready' : status}</span>
+          <span className="text-[12px] text-bobby-muted">{activeThread?.status === 'running' || busy ? 'Working...' : activeThread?.status === 'idle' || status === 'idle' ? 'Ready' : activeThread?.status ?? status}</span>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-3">
-        <h2 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-widest text-bobby-faint">Sessions</h2>
-        {sessions.length === 0 && !hasContent && <p className="px-2 text-[12px] text-bobby-faint">No sessions yet</p>}
+        <h2 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-widest text-bobby-faint">Tasks</h2>
+        {tasks.length === 0 && <p className="px-2 text-[12px] text-bobby-faint">No tasks yet</p>}
         <div className="space-y-0.5">
-          {visibleSessions.map((session) => (
+          {tasks.map((task) => (
             <button
-              key={session.id}
+              key={task.id}
               type="button"
               onClick={() => {
-                if (!session.current) switchSession(session.id);
+                if (task.id !== activeSessionId) switchSession(task.id);
               }}
-              className="w-full truncate rounded-lg px-3 py-2 text-left text-[12px] text-bobby-ink transition hover:bg-bobby-sidebar-row-hover"
-              style={session.current ? { background: 'var(--bobby-sidebar-row-active)' } : undefined}
-              title={session.current ? 'Current session' : session.title}
+              className="flex w-full flex-col gap-1 rounded-lg px-3 py-2 text-left text-[12px] text-bobby-ink transition hover:bg-bobby-sidebar-row-hover"
+              style={task.id === activeSessionId ? { background: 'var(--bobby-sidebar-row-active)' } : undefined}
+              title={task.taskId ? `${task.title} / ${task.taskId}` : task.title}
             >
-              {session.title.slice(0, 55)}
-              {session.title.length > 55 ? '...' : ''}
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate">
+                  {task.title.slice(0, 55)}
+                  {task.title.length > 55 ? '...' : ''}
+                </span>
+                <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ background: task.status === 'running' ? 'var(--bobby-accent-soft)' : task.status === 'failed' ? 'var(--bobby-danger-soft)' : task.status === 'blocked' ? 'rgba(217, 119, 6, 0.16)' : 'var(--bobby-hover)', color: task.status === 'running' ? 'var(--bobby-accent)' : task.status === 'failed' ? 'var(--bobby-danger)' : task.status === 'blocked' ? '#d97706' : 'var(--bobby-muted)' }}>
+                  {task.status}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-[11px] text-bobby-faint">
+                <span className="truncate">{task.projectDir ? task.projectDir.split(/[\\/]/).filter(Boolean).at(-1) ?? task.projectDir : 'No project'}</span>
+                <span className="shrink-0">{task.taskId ?? task.id}</span>
+              </div>
             </button>
           ))}
         </div>

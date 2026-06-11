@@ -34,10 +34,21 @@ beforeEach(() => {
     liveAssistant: '',
     liveToolContent: '',
     busy: false,
+    currentTaskId: null,
+    currentPlan: [],
     status: 'idle',
     error: null,
     costUsd: 0,
-    model: null
+    spendUsd: 0,
+    model: null,
+    threads: {},
+    taskThreadIds: {},
+    pendingThreadIds: [],
+    sessions: [],
+    activeSessionId: null,
+    currentProject: null,
+    recentProjects: [],
+    _client: null
   });
 });
 
@@ -110,6 +121,62 @@ describe('workspace UI smoke', () => {
     expect(screen.queryByTitle('Code')).toBeNull();
   });
 
+  it('renders the sidebar task list with task status and project name', () => {
+    useChatStore.setState({
+      activeSessionId: 'thread-2',
+      threads: {
+        'thread-1': {
+          id: 'thread-1',
+          title: 'First task',
+          blocks: [{ kind: 'user', id: 'u-1', text: 'First task' }],
+          createdAt: '2026-06-11T00:00:00.000Z',
+          updatedAt: '2026-06-11T00:02:00.000Z',
+          projectDir: 'E:\\ai-files\\Bobby',
+          taskId: 'task-1',
+          status: 'done',
+          liveReasoning: '',
+          liveAssistant: '',
+          liveToolContent: '',
+          currentPlan: [],
+          error: null,
+          costUsd: 0,
+          spendUsd: 0,
+          model: null
+        },
+        'thread-2': {
+          id: 'thread-2',
+          title: 'Second task',
+          blocks: [{ kind: 'user', id: 'u-2', text: 'Second task' }],
+          createdAt: '2026-06-11T00:03:00.000Z',
+          updatedAt: '2026-06-11T00:04:00.000Z',
+          projectDir: 'E:\\ai-files\\Bobby',
+          taskId: 'task-2',
+          status: 'running',
+          liveReasoning: '',
+          liveAssistant: '',
+          liveToolContent: '',
+          currentPlan: [],
+          error: null,
+          costUsd: 0,
+          spendUsd: 0,
+          model: null
+        }
+      },
+      sessions: [],
+      blocks: [{ kind: 'user', id: 'u-2', text: 'Second task' }],
+      currentTaskId: 'task-2',
+      status: 'running',
+      busy: true
+    });
+
+    render(<App />);
+
+    expect(screen.getByText('Tasks')).toBeTruthy();
+    expect(screen.getAllByText('Second task').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('running').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Bobby').length).toBeGreaterThan(0);
+  });
+
   it('starts from brainstorming mission guidance instead of write/code modules', () => {
     render(<Workspace kernelClient={makeKernelClientMock()} />);
 
@@ -140,14 +207,33 @@ describe('workspace UI smoke', () => {
   });
 
   it('does not create a duplicate session when clicking the current session row', () => {
+    const current = {
+      id: 'current',
+      title: 'Run this through Mission Control',
+      blocks: [{ kind: 'user', id: 'u-current', text: 'Run this through Mission Control' }],
+      createdAt: '2026-06-11T00:00:00.000Z',
+      updatedAt: '2026-06-11T00:00:00.000Z',
+      projectDir: null,
+      taskId: null,
+      status: 'done',
+      liveReasoning: '',
+      liveAssistant: '',
+      liveToolContent: '',
+      currentPlan: [],
+      error: null,
+      costUsd: 0,
+      spendUsd: 0,
+      model: null
+    };
     useChatStore.setState({
       blocks: [{ kind: 'user', id: 'u-current', text: 'Run this through Mission Control' }],
       sessions: [],
+      threads: { current },
       activeSessionId: 'current'
     });
     render(<App />);
 
-    fireEvent.click(screen.getByTitle('Current session'));
+    fireEvent.click(screen.getByTitle('Run this through Mission Control'));
 
     expect(useChatStore.getState().sessions).toHaveLength(0);
     expect(useChatStore.getState().blocks).toEqual([
@@ -156,9 +242,28 @@ describe('workspace UI smoke', () => {
   });
 
   it('renders the active session only once when history contains the same title', () => {
+    const current = {
+      id: 'current',
+      title: 'Run this through Mission Control',
+      blocks: [{ kind: 'user', id: 'u-current', text: 'Run this through Mission Control' }],
+      createdAt: '2026-06-11T00:00:00.000Z',
+      updatedAt: '2026-06-11T00:00:00.000Z',
+      projectDir: null,
+      taskId: null,
+      status: 'done',
+      liveReasoning: '',
+      liveAssistant: '',
+      liveToolContent: '',
+      currentPlan: [],
+      error: null,
+      costUsd: 0,
+      spendUsd: 0,
+      model: null
+    };
     useChatStore.setState({
       blocks: [{ kind: 'user', id: 'u-current', text: 'Run this through Mission Control' }],
       activeSessionId: 'current',
+      threads: { current },
       sessions: [{
         id: 'persisted',
         title: 'Run this through Mission Control',
@@ -181,7 +286,6 @@ describe('workspace UI smoke', () => {
 
     render(<App />);
 
-    expect(screen.getAllByTitle('Current session')).toHaveLength(1);
-    expect(screen.queryByTitle('Run this through Mission Control')).toBeNull();
+    expect(screen.getAllByTitle('Run this through Mission Control')).toHaveLength(1);
   });
 });

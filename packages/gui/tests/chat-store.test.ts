@@ -45,6 +45,9 @@ beforeEach(() => {
     costUsd: 0,
     spendUsd: 0,
     model: null,
+    threads: {},
+    taskThreadIds: {},
+    pendingThreadIds: [],
     sessions: [],
     activeSessionId: null,
     currentProject: null,
@@ -175,6 +178,48 @@ describe('chat session store', () => {
     const updatedFirst = state.sessions.find((item) => item.id === 'first');
     expect(updatedFirst?.blocks).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'tool', tool: 'exec pnpm test' })
+    ]));
+  });
+
+  it('keeps two parallel task threads isolated by taskId', async () => {
+    const startTask = vi.fn().mockResolvedValue(undefined);
+    useChatStore.setState({ _client: { startTask } });
+
+    await useChatStore.getState().sendMessage('Task one');
+    const firstThreadId = useChatStore.getState().activeSessionId;
+    if (!firstThreadId) throw new Error('first thread missing');
+
+    useChatStore.getState().handleEvent({
+      type: 'intent_proposed',
+      taskId: 'task-one',
+      contract: { goal: 'Task one', acceptanceCriteria: [], constraints: [], inputs: [], outOfScope: [] }
+    });
+
+    await useChatStore.getState().sendMessage('Task two');
+    const secondThreadId = useChatStore.getState().activeSessionId;
+    if (!secondThreadId) throw new Error('second thread missing');
+
+    useChatStore.getState().handleEvent({
+      type: 'intent_proposed',
+      taskId: 'task-two',
+      contract: { goal: 'Task two', acceptanceCriteria: [], constraints: [], inputs: [], outOfScope: [] }
+    });
+    useChatStore.getState().handleEvent({ type: 'assistant_delta', taskId: 'task-one', content: 'First thread', sequence: 0 });
+    useChatStore.getState().handleEvent({ type: 'final_result', taskId: 'task-one', status: 'failed' });
+    useChatStore.getState().handleEvent({ type: 'assistant_delta', taskId: 'task-two', content: 'Second thread', sequence: 0 });
+    useChatStore.getState().handleEvent({ type: 'final_result', taskId: 'task-two', status: 'done' });
+
+    const state = useChatStore.getState();
+    expect(startTask).toHaveBeenCalledTimes(2);
+    expect(state.threads[firstThreadId]?.taskId).toBe('task-one');
+    expect(state.threads[firstThreadId]?.status).toBe('failed');
+    expect(state.threads[secondThreadId]?.taskId).toBe('task-two');
+    expect(state.threads[secondThreadId]?.status).toBe('done');
+    expect(state.blocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'user', text: 'Task two' })
+    ]));
+    expect(state.blocks).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'assistant', text: 'First thread' })
     ]));
   });
 

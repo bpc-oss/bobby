@@ -29,8 +29,13 @@ function resetStore() {
     costUsd: 0,
     spendUsd: 0,
     model: null,
+    threads: {},
+    taskThreadIds: {},
+    pendingThreadIds: [],
     sessions: [],
     activeSessionId: null,
+    currentProject: null,
+    recentProjects: [],
     _client: null
   });
 }

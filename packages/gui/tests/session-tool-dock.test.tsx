@@ -51,7 +51,10 @@ beforeEach(() => {
     busy: true,
     liveReasoning: '',
     liveAssistant: '',
-    liveToolContent: ''
+    liveToolContent: '',
+    threads: {},
+    taskThreadIds: {},
+    pendingThreadIds: []
   });
 });
 
