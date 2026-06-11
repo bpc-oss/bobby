@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('electron-updater', () => ({
+  default: {
+    autoUpdater: {
+      on: vi.fn(),
+      checkForUpdatesAndNotify: vi.fn().mockResolvedValue(undefined)
+    }
+  }
+}));
+
 import { initAutoUpdate } from '../electron/updater';
 
 interface FakeUpdater {
@@ -12,7 +21,7 @@ describe('initAutoUpdate', () => {
     vi.clearAllMocks();
   });
 
-  it('registers update listeners and notifies with expected messages', () => {
+  it('registers update listeners and notifies with expected messages', async () => {
     const listeners = new Map<'update-available' | 'update-downloaded', () => void>();
     const notify = vi.fn();
     const updater: FakeUpdater = {
@@ -22,17 +31,17 @@ describe('initAutoUpdate', () => {
       checkForUpdatesAndNotify: vi.fn().mockResolvedValue(undefined)
     };
 
-    initAutoUpdate(notify, updater);
+    await initAutoUpdate(notify, updater);
 
     expect(updater.on).toHaveBeenCalledTimes(2);
     expect(updater.on).toHaveBeenCalledWith('update-available', expect.any(Function));
     expect(updater.on).toHaveBeenCalledWith('update-downloaded', expect.any(Function));
 
     listeners.get('update-available')?.();
-    expect(notify).toHaveBeenCalledWith('发现新版本，正在后台下载...');
+    expect(notify).toHaveBeenCalledWith('New version found. Downloading in the background...');
 
     listeners.get('update-downloaded')?.();
-    expect(notify).toHaveBeenCalledWith('新版本已就绪，重启后生效。');
+    expect(notify).toHaveBeenCalledWith('New version is ready. Restart Bobby to apply it.');
   });
 
   it('silently swallows update check failures', async () => {

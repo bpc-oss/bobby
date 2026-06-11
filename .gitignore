@@ -9,3 +9,4 @@ packages/gui/dist-electron/
 packages/gui/release-verify*/
 packages/gui/electron-builder.package.local.yml
 .claude/
+.bobby/

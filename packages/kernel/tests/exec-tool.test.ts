@@ -84,6 +84,29 @@ it('supports legacy command input by normalizing to cmd+args and returning comma
   expect(evidence.payload.stdout).toContain('1');
 });
 
+it('splits canonical cmd inline arguments when args is omitted', async () => {
+  const tool = new ExecTool(process.cwd());
+  const result = await tool.run(
+    {
+      cmd: `"${process.execPath}" -e "process.stdout.write('inline-ok')"`
+    },
+    {
+      acId,
+      claimId
+    }
+  );
+
+  expect(result.evidence[0]).toMatchObject({
+    evidenceType: 'command_output',
+    payload: {
+      cmd: process.execPath,
+      args: ['-e', "process.stdout.write('inline-ok')"],
+      exitCode: 0
+    }
+  });
+  expect(result.evidence[0]?.payload.stdout).toContain('inline-ok');
+});
+
 it('handles canonical mkdir -p command in workspace-safe mode without shell execution', async () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'bobby-kernel-exec-canonical-mkdir-'));
 

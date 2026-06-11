@@ -1,17 +1,544 @@
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, ipcMain } from 'electron';
-import { KernelHost, makeDeepSeekClientFromBobbyConfig } from '@bobby/kernel';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, shell, Tray } from 'electron';
+import { applySubAgentProposal, KernelHost, loadDeepSeekConfig, makeDeepSeekClient } from '@bobby/kernel';
+import {
+  AppSettingsSchema,
+  AppSettingsUpdateSchema,
+  AutomationCreateInputSchema,
+  AutomationRecordSchema,
+  AutomationRemoveInputSchema,
+  AutomationToggleInputSchema,
+  AutomationUpdateInputSchema,
+  ProjectSelectResultSchema,
+  ProposalApplyInputSchema,
+  ProposalDiscardInputSchema,
+  ProposalSummarySchema,
+  SessionRecordSchema,
+  TaskDetailSchema,
+  TaskSummarySchema,
+  type AppSettings,
+  type AutomationRecord,
+  type OnboardingStatus,
+  type ProjectMeta,
+  type ProjectSelectResult,
+  type ProposalSummary,
+  type SessionRecordDto,
+  type TaskDetail,
+  type TaskSummary
+} from '../src/ipc/contract';
 import { initAutoUpdate } from './updater';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const QUICKSTART_URL = 'https://github.com/bpc-oss/bobby/blob/main/docs/quickstart.md';
+const BOBBY_DIR = '.bobby';
+const KEY_FILE = 'key';
+const CAPABILITIES_FILE = 'capabilities.json';
+const AUTOMATIONS_FILE = 'automations.json';
+const AUTOMATION_TICK_MS = 15_000;
+const PROJECTS_FILE = 'projects.json';
+const SETTINGS_FILE = 'settings.json';
+const SECRET_FILE = 'deepseek.key';
+const SESSIONS_DIR = 'sessions';
+const WINDOW_STATE_FILE = 'window-state.json';
+
 let pendingHost: Promise<KernelHost | null> | null = null;
 let hostInitError: Error | null = null;
+let automationTimer: NodeJS.Timeout | null = null;
+let currentProjectDir: string | null = null;
+let currentProject: ProjectMeta | null = null;
+let currentHost: KernelHost | null = null;
+let tray: Tray | null = null;
 
 let mainWindow: BrowserWindow | null = null;
 
+const DEFAULT_SETTINGS: AppSettings = {
+  modelStrategy: 'auto',
+  baseUrl: 'https://api.deepseek.com',
+  workspaceDir: process.cwd(),
+  budgetUsd: 10,
+  defaultPermission: 'L1',
+  strongSandbox: true,
+  hasApiKey: false
+};
+
+type WindowState = {
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+};
+
+function resolveSetupPaths() {
+  const homeDir = homedir();
+  const bobbyDir = join(homeDir, BOBBY_DIR);
+  return {
+    homeDir,
+    bobbyDir,
+    keyPath: join(bobbyDir, KEY_FILE),
+    capabilitiesPath: join(bobbyDir, CAPABILITIES_FILE)
+  };
+}
+
+function userDataPath(fileName: string): string {
+  return join(app.getPath('userData'), fileName);
+}
+
+function readJsonFile<T>(path: string, fallback: T): T {
+  try {
+    if (!existsSync(path)) return fallback;
+    return JSON.parse(readFileSync(path, 'utf8')) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonFile(path: string, value: unknown): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(value, null, 2), 'utf8');
+}
+
+function readWindowState(): WindowState {
+  const parsed = readJsonFile<Partial<WindowState>>(userDataPath(WINDOW_STATE_FILE), {});
+  return {
+    width: typeof parsed.width === 'number' ? parsed.width : 1180,
+    height: typeof parsed.height === 'number' ? parsed.height : 760,
+    x: typeof parsed.x === 'number' ? parsed.x : undefined,
+    y: typeof parsed.y === 'number' ? parsed.y : undefined
+  };
+}
+
+function writeWindowState(window: BrowserWindow): void {
+  if (window.isDestroyed()) return;
+  writeJsonFile(userDataPath(WINDOW_STATE_FILE), window.getBounds());
+}
+
+function projectName(projectDir: string): string {
+  return projectDir.split(/[\\/]/).filter(Boolean).at(-1) ?? projectDir;
+}
+
+function readRecentProjects(): ProjectMeta[] {
+  const parsed = readJsonFile<unknown[]>(userDataPath(PROJECTS_FILE), []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .map((item) => {
+      const result = ProjectSelectResultSchema.shape.project.safeParse(item);
+      return result.success ? result.data : null;
+    })
+    .filter((item): item is ProjectMeta => item !== null);
+}
+
+function writeRecentProjects(projects: ProjectMeta[]): void {
+  writeJsonFile(userDataPath(PROJECTS_FILE), projects.slice(0, 20));
+}
+
+function rememberProject(projectDir: string): ProjectSelectResult {
+  const project: ProjectMeta = {
+    name: projectName(projectDir),
+    path: projectDir,
+    lastOpenedAt: new Date().toISOString()
+  };
+  const recentProjects = [project, ...readRecentProjects().filter((item) => item.path !== projectDir)];
+  writeRecentProjects(recentProjects);
+  currentProjectDir = projectDir;
+  currentProject = project;
+  pendingHost = createHost();
+  return ProjectSelectResultSchema.parse({ project, recentProjects });
+}
+
+function secretPath(): string {
+  return userDataPath(SECRET_FILE);
+}
+
+function hasStoredSecret(): boolean {
+  return existsSync(secretPath()) || fileHasText(resolveSetupPaths().keyPath) || Boolean(process.env.DEEPSEEK_API_KEY?.trim());
+}
+
+function writeSecret(secret: string): void {
+  mkdirSync(dirname(secretPath()), { recursive: true });
+  const value = safeStorage.isEncryptionAvailable()
+    ? safeStorage.encryptString(secret).toString('base64')
+    : Buffer.from(secret, 'utf8').toString('base64');
+  writeFileSync(secretPath(), value, 'utf8');
+}
+
+function readSecret(): string | null {
+  const envKey = process.env.DEEPSEEK_API_KEY?.trim();
+  if (envKey) return envKey;
+  try {
+    if (!existsSync(secretPath())) return null;
+    const raw = readFileSync(secretPath(), 'utf8').trim();
+    if (!raw) return null;
+    const buffer = Buffer.from(raw, 'base64');
+    return safeStorage.isEncryptionAvailable()
+      ? safeStorage.decryptString(buffer)
+      : buffer.toString('utf8');
+  } catch {
+    return null;
+  }
+}
+
+function readPublicSettings(): AppSettings {
+  const raw = readJsonFile<unknown>(userDataPath(SETTINGS_FILE), {});
+  const parsed = AppSettingsSchema.omit({ hasApiKey: true }).partial().safeParse(raw);
+  return AppSettingsSchema.parse({
+    ...DEFAULT_SETTINGS,
+    ...(parsed.success ? parsed.data : {}),
+    workspaceDir: currentProjectDir ?? (parsed.success ? parsed.data.workspaceDir : undefined) ?? DEFAULT_SETTINGS.workspaceDir,
+    hasApiKey: hasStoredSecret()
+  });
+}
+
+function writePublicSettings(update: unknown): AppSettings {
+  const parsed = AppSettingsUpdateSchema.parse(update);
+  if (parsed.apiKey) {
+    writeSecret(parsed.apiKey);
+  }
+  const { apiKey: _apiKey, ...publicUpdate } = parsed;
+  const next = {
+    ...readPublicSettings(),
+    ...publicUpdate,
+    hasApiKey: hasStoredSecret()
+  };
+  const { hasApiKey: _hasApiKey, ...persisted } = next;
+  writeJsonFile(userDataPath(SETTINGS_FILE), persisted);
+  pendingHost = createHost();
+  return AppSettingsSchema.parse(next);
+}
+
+function sessionsDir(): string {
+  return userDataPath(SESSIONS_DIR);
+}
+
+function dedupeSessionRecords(records: SessionRecordDto[], pruneFiles = false): SessionRecordDto[] {
+  const sorted = [...records].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+  const kept = new Map<string, SessionRecordDto>();
+  const pruned: SessionRecordDto[] = [];
+  for (const session of sorted) {
+    if (kept.has(session.title)) {
+      pruned.push(session);
+    } else {
+      kept.set(session.title, session);
+    }
+  }
+  if (pruneFiles) {
+    for (const session of pruned) {
+      try {
+        unlinkSync(join(sessionsDir(), `${session.id}.json`));
+      } catch {
+        // Stale session cleanup is best-effort.
+      }
+    }
+  }
+  return Array.from(kept.values());
+}
+
+function readSessions(): SessionRecordDto[] {
+  try {
+    if (!existsSync(sessionsDir())) return [];
+    const records = readdirSync(sessionsDir())
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => readJsonFile<unknown>(join(sessionsDir(), name), null))
+      .map((item) => SessionRecordSchema.safeParse(item))
+      .filter((result): result is { success: true; data: SessionRecordDto } => result.success)
+      .map((result) => result.data);
+    return dedupeSessionRecords(records, true);
+  } catch {
+    return [];
+  }
+}
+
+function readSession(sessionId: string): SessionRecordDto | null {
+  const parsed = SessionRecordSchema.safeParse(readJsonFile<unknown>(join(sessionsDir(), `${sessionId}.json`), null));
+  return parsed.success ? parsed.data : null;
+}
+
+function writeSession(session: unknown): SessionRecordDto {
+  const parsed = SessionRecordSchema.parse(session);
+  for (const existing of readSessions()) {
+    if (existing.id !== parsed.id && existing.title === parsed.title) {
+      try {
+        unlinkSync(join(sessionsDir(), `${existing.id}.json`));
+      } catch {
+        // A concurrently removed stale session can be ignored.
+      }
+    }
+  }
+  writeJsonFile(join(sessionsDir(), `${parsed.id}.json`), parsed);
+  return parsed;
+}
+
+function taskRoot(): string | null {
+  return currentProjectDir ? join(currentProjectDir, BOBBY_DIR, 'tasks') : null;
+}
+
+function readTaskFile(taskId: string, fileName: string): unknown | null {
+  const root = taskRoot();
+  if (!root) return null;
+  return readJsonFile<unknown>(join(root, taskId, fileName), null);
+}
+
+function readTextTaskFile(taskId: string, fileName: string): string | null {
+  const root = taskRoot();
+  if (!root) return null;
+  try {
+    const path = join(root, taskId, fileName);
+    return existsSync(path) ? readFileSync(path, 'utf8') : null;
+  } catch {
+    return null;
+  }
+}
+
+function taskIds(): string[] {
+  const root = taskRoot();
+  try {
+    if (!root || !existsSync(root)) return [];
+    return readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+
+function taskSummary(taskId: string): TaskSummary | null {
+  const root = taskRoot();
+  if (!root) return null;
+  const taskDir = join(root, taskId);
+  const meta = readJsonFile<Record<string, unknown>>(join(taskDir, 'task.json'), {});
+  const fallbackTime = existsSync(taskDir) ? new Date(statSync(taskDir).mtimeMs).toISOString() : new Date().toISOString();
+  const summary = {
+    taskId,
+    userGoal: String(meta.userGoal ?? meta.goal ?? taskId),
+    state: String(meta.state ?? meta.status ?? 'unknown'),
+    taskType: String(meta.taskType ?? 'task'),
+    createdAt: String(meta.createdAt ?? fallbackTime),
+    updatedAt: String(meta.updatedAt ?? fallbackTime),
+    traceCount: Array.isArray(currentHost?.getTrace(taskId)) ? currentHost!.getTrace(taskId).length : 0,
+    hasContract: existsSync(join(taskDir, 'contract.json')),
+    hasPlan: existsSync(join(taskDir, 'plan.json')),
+    hasReport: existsSync(join(taskDir, 'report.md'))
+  };
+  const parsed = TaskSummarySchema.safeParse(summary);
+  return parsed.success ? parsed.data : null;
+}
+
+function taskDetail(taskId: string): TaskDetail | null {
+  const summary = taskSummary(taskId);
+  if (!summary) return null;
+  return TaskDetailSchema.parse({
+    summary,
+    contract: readTaskFile(taskId, 'contract.json'),
+    plan: readTaskFile(taskId, 'plan.json'),
+    report: readTextTaskFile(taskId, 'report.md'),
+    trace: currentHost?.getTrace(taskId) ?? [],
+    sessionIds: readSessions().filter((session) => session.taskId === taskId).map((session) => session.id)
+  });
+}
+
+function proposalsDir(): string | null {
+  return currentProjectDir ? join(currentProjectDir, BOBBY_DIR, 'proposals') : null;
+}
+
+function proposalPath(proposalId: string): string | null {
+  const root = proposalsDir();
+  if (!root) return null;
+  return join(root, `${proposalId}.patch`);
+}
+
+function readProposalSummary(path: string): ProposalSummary | null {
+  try {
+    const patch = readFileSync(path, 'utf8');
+    const id = path.split(/[\\/]/).pop()?.replace(/\.patch$/, '');
+    if (!id) return null;
+    return ProposalSummarySchema.parse({
+      proposalId: id,
+      proposalPath: path,
+      createdAt: new Date(statSync(path).mtimeMs).toISOString(),
+      bytes: Buffer.byteLength(patch),
+      lineCount: patch.split(/\r?\n/).length,
+      patch
+    });
+  } catch {
+    return null;
+  }
+}
+
+function listProposals(): ProposalSummary[] {
+  const root = proposalsDir();
+  try {
+    if (!root || !existsSync(root)) return [];
+    return readdirSync(root)
+      .filter((name) => name.endsWith('.patch'))
+      .map((name) => readProposalSummary(join(root, name)))
+      .filter((item): item is ProposalSummary => item !== null)
+      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+  } catch {
+    return [];
+  }
+}
+
+function fileHasText(path: string): boolean {
+  try {
+    return existsSync(path) && readFileSync(path, 'utf8').trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function resolveAutomationsPath() {
+  return join(homedir(), BOBBY_DIR, AUTOMATIONS_FILE);
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function addMinutes(iso: string, minutes: number): string {
+  return new Date(new Date(iso).getTime() + minutes * 60_000).toISOString();
+}
+
+function readAutomations(): AutomationRecord[] {
+  const filePath = resolveAutomationsPath();
+  try {
+    if (!existsSync(filePath)) {
+      return [];
+    }
+
+    const raw = readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((entry) => AutomationRecordSchema.safeParse(entry))
+      .filter((result): result is { success: true; data: AutomationRecord } => result.success)
+      .map((result) => result.data)
+      .sort((left, right) => new Date(left.nextRunAt).getTime() - new Date(right.nextRunAt).getTime());
+  } catch {
+    return [];
+  }
+}
+
+function writeAutomations(records: AutomationRecord[]): void {
+  const filePath = resolveAutomationsPath();
+  mkdirSync(dirname(filePath), { recursive: true });
+  writeFileSync(filePath, JSON.stringify(records, null, 2), 'utf8');
+}
+
+function upsertAutomation(nextAutomation: AutomationRecord): AutomationRecord {
+  const current = readAutomations();
+  const next = current.some((item) => item.id === nextAutomation.id)
+    ? current.map((item) => (item.id === nextAutomation.id ? nextAutomation : item))
+    : [...current, nextAutomation];
+  writeAutomations(next);
+  return nextAutomation;
+}
+
+function getAutomationById(id: string): AutomationRecord | null {
+  return readAutomations().find((item) => item.id === id) ?? null;
+}
+
+function createAutomation(input: unknown): AutomationRecord {
+  const parsed = AutomationCreateInputSchema.parse(input);
+  const createdAt = nowIso();
+  return {
+    id: `automation-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    title: parsed.title,
+    kind: parsed.kind,
+    prompt: parsed.prompt,
+    intervalMinutes: parsed.intervalMinutes,
+    enabled: true,
+    createdAt,
+    updatedAt: createdAt,
+    lastRunAt: null,
+    nextRunAt: addMinutes(createdAt, parsed.intervalMinutes)
+  };
+}
+
+async function runAutomation(automation: AutomationRecord): Promise<AutomationRecord> {
+  const updated: AutomationRecord = {
+    ...automation,
+    lastRunAt: nowIso(),
+    nextRunAt: addMinutes(nowIso(), automation.intervalMinutes),
+    updatedAt: nowIso()
+  };
+
+  upsertAutomation(updated);
+
+  const host = await (pendingHost ?? (pendingHost = createHost()));
+  if (!host) {
+    notifySystem(`Automation "${automation.title}" is ready, but Bobby is not configured yet.`);
+    return updated;
+  }
+
+  try {
+    await host.send({ type: 'startTask', input: automation.prompt });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('kernel:event', {
+        type: 'direct_answer',
+        taskId: `automation:${automation.id}`,
+        text: `Automation triggered: ${automation.title}`
+      });
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    notifySystem(`Automation "${automation.title}" failed: ${message}`);
+  }
+
+  return updated;
+}
+
+async function tickAutomations(): Promise<void> {
+  const records = readAutomations();
+  const now = Date.now();
+  for (const record of records) {
+    if (!record.enabled) {
+      continue;
+    }
+
+    if (new Date(record.nextRunAt).getTime() > now) {
+      continue;
+    }
+
+    await runAutomation(record);
+  }
+}
+
+function startAutomationTimer(): void {
+  if (automationTimer) {
+    return;
+  }
+
+  automationTimer = setInterval(() => {
+    void tickAutomations();
+  }, AUTOMATION_TICK_MS);
+}
+
+function stopAutomationTimer(): void {
+  if (automationTimer) {
+    clearInterval(automationTimer);
+    automationTimer = null;
+  }
+}
+
+function getSetupStatus(): OnboardingStatus {
+  const paths = resolveSetupPaths();
+  return {
+    ...paths,
+    hasKey: fileHasText(paths.keyPath),
+    hasCapabilities: fileHasText(paths.capabilitiesPath),
+    hasEnvKey: Boolean(process.env.DEEPSEEK_API_KEY?.trim())
+  };
+}
+
 const notifySystem = (message: string) => {
+  if (Notification.isSupported()) {
+    new Notification({ title: 'Bobby', body: message }).show();
+  }
+
   if (!mainWindow || mainWindow.isDestroyed()) {
     return;
   }
@@ -24,14 +551,23 @@ const notifySystem = (message: string) => {
 };
 
 const createWindow = () => {
+  const state = readWindowState();
   mainWindow = new BrowserWindow({
-    width: 960,
-    height: 640,
+    width: state.width,
+    height: state.height,
+    x: state.x,
+    y: state.y,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true
     }
   });
+
+  if (typeof mainWindow.on === 'function') {
+    mainWindow.on('close', () => {
+      if (mainWindow) writeWindowState(mainWindow);
+    });
+  }
 
   const devServerUrl = process.env.VITE_DEV_SERVER_URL;
   if (devServerUrl) {
@@ -41,10 +577,60 @@ const createWindow = () => {
   }
 };
 
+function setupDesktopIntegration(): void {
+  if (process.env.VITEST) {
+    return;
+  }
+
+  const openMainWindow = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createWindow();
+      return;
+    }
+    mainWindow.show();
+    mainWindow.focus();
+  };
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: 'Bobby',
+      submenu: [
+        { label: 'New Task', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('app:command', { type: 'new-task' }) },
+        { label: 'Focus Task', accelerator: 'CmdOrCtrl+L', click: openMainWindow },
+        { type: 'separator' },
+        { label: 'Quit', role: 'quit' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { label: 'Reload', role: 'reload' },
+        { label: 'Toggle Developer Tools', role: 'toggleDevTools' }
+      ]
+    }
+  ]));
+
+  if (!tray) {
+    tray = new Tray(nativeImage.createEmpty());
+    tray.setToolTip('Bobby');
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: 'Open Bobby', click: openMainWindow },
+      { label: 'New Task', click: () => mainWindow?.webContents.send('app:command', { type: 'new-task' }) },
+      { type: 'separator' },
+      { label: 'Quit', role: 'quit' }
+    ]));
+  }
+}
+
 const createHost = async () => {
   try {
-    const model = await makeDeepSeekClientFromBobbyConfig();
-    return new KernelHost(() => model, undefined, process.cwd(), true);
+    const settings = readPublicSettings();
+    const loaded = await loadDeepSeekConfig();
+    const model = makeDeepSeekClient(readSecret() ?? loaded.apiKey, loaded.report, settings.baseUrl);
+    const workspaceRoot = currentProjectDir ?? process.cwd();
+    const host = new KernelHost(() => model, undefined, workspaceRoot, true);
+    currentHost = host;
+    return host;
   } catch (err) {
     if (err instanceof Error) {
       hostInitError = err;
@@ -70,6 +656,142 @@ const bootstrap = async () => {
   });
 };
 
+ipcMain.handle('setup:status', async () => getSetupStatus());
+
+ipcMain.handle('setup:openQuickstart', async () => shell.openExternal(QUICKSTART_URL));
+
+ipcMain.handle('project:list', async () => readRecentProjects());
+
+ipcMain.handle('project:getCurrent', async () => currentProject);
+
+ipcMain.handle('project:open', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory']
+  });
+  if (result.canceled || !result.filePaths[0]) {
+    return null;
+  }
+  return rememberProject(result.filePaths[0]);
+});
+
+ipcMain.handle('project:select', async (_event, input) => {
+  const parsed = ProjectSelectResultSchema.pick({ project: true }).shape.project.pick({ path: true }).parse({
+    path: typeof input === 'object' && input !== null && 'projectDir' in input ? (input as { projectDir?: unknown }).projectDir : input
+  });
+  return rememberProject(parsed.path);
+});
+
+ipcMain.handle('settings:get', async () => readPublicSettings());
+
+ipcMain.handle('settings:set', async (_event, input) => writePublicSettings(input));
+
+ipcMain.handle('sessions:list', async () => readSessions());
+
+ipcMain.handle('sessions:read', async (_event, input) => {
+  const sessionId = typeof input === 'object' && input !== null && 'sessionId' in input ? String((input as { sessionId?: unknown }).sessionId) : '';
+  return sessionId ? readSession(sessionId) : null;
+});
+
+ipcMain.handle('sessions:save', async (_event, input) => writeSession(input));
+
+ipcMain.handle('tasks:list', async () => taskIds().map(taskSummary).filter((item): item is TaskSummary => item !== null));
+
+ipcMain.handle('tasks:read', async (_event, input) => {
+  const taskId = typeof input === 'object' && input !== null && 'taskId' in input ? String((input as { taskId?: unknown }).taskId) : '';
+  return taskId ? taskDetail(taskId) : null;
+});
+
+ipcMain.handle('proposals:list', async () => listProposals());
+
+ipcMain.handle('proposals:read', async (_event, input) => {
+  const proposalId = typeof input === 'object' && input !== null && 'proposalId' in input ? String((input as { proposalId?: unknown }).proposalId) : '';
+  const path = proposalId ? proposalPath(proposalId) : null;
+  return path ? readProposalSummary(path) : null;
+});
+
+ipcMain.handle('proposals:apply', async (_event, input) => {
+  const parsed = ProposalApplyInputSchema.parse(input);
+  const path = proposalPath(parsed.proposalId);
+  if (!path || !currentProjectDir || !existsSync(path)) {
+    return null;
+  }
+  applySubAgentProposal(path, parsed, currentProjectDir);
+  const summary = readProposalSummary(path);
+  unlinkSync(path);
+  return summary;
+});
+
+ipcMain.handle('proposals:discard', async (_event, input) => {
+  const parsed = ProposalDiscardInputSchema.parse(input);
+  const path = proposalPath(parsed.proposalId);
+  if (!path || !existsSync(path)) {
+    return false;
+  }
+  unlinkSync(path);
+  return true;
+});
+
+ipcMain.handle('automations:list', async () => readAutomations());
+
+ipcMain.handle('automations:create', async (_event, input) => {
+  const automation = createAutomation(input);
+  return upsertAutomation(automation);
+});
+
+ipcMain.handle('automations:update', async (_event, input) => {
+  const parsed = AutomationUpdateInputSchema.parse(input);
+  const existing = getAutomationById(parsed.id);
+  if (!existing) {
+    throw new Error('Automation not found');
+  }
+
+  const next: AutomationRecord = AutomationRecordSchema.parse({
+    ...existing,
+    ...parsed,
+    updatedAt: nowIso(),
+    nextRunAt:
+      parsed.intervalMinutes !== undefined
+        ? addMinutes(existing.lastRunAt ?? existing.createdAt, parsed.intervalMinutes)
+        : existing.nextRunAt
+  });
+
+  return upsertAutomation(next);
+});
+
+ipcMain.handle('automations:toggle', async (_event, input) => {
+  const parsed = AutomationToggleInputSchema.parse(input);
+  const existing = getAutomationById(parsed.id);
+  if (!existing) {
+    throw new Error('Automation not found');
+  }
+
+  const next = AutomationRecordSchema.parse({
+    ...existing,
+    enabled: !existing.enabled,
+    updatedAt: nowIso()
+  });
+
+  return upsertAutomation(next);
+});
+
+ipcMain.handle('automations:remove', async (_event, input) => {
+  const parsed = AutomationRemoveInputSchema.parse(input);
+  const records = readAutomations();
+  const next = records.filter((item) => item.id !== parsed.id);
+  writeAutomations(next);
+  return next.length !== records.length;
+});
+
+ipcMain.handle('automations:runNow', async (_event, input) => {
+  const parsed = AutomationToggleInputSchema.parse(input);
+  const existing = getAutomationById(parsed.id);
+  if (!existing) {
+    return null;
+  }
+
+  return runAutomation(existing);
+});
+
 ipcMain.handle('kernel:command', async (_event, cmd) => {
   const currentHost = await (pendingHost ?? (pendingHost = createHost()));
   if (!currentHost) {
@@ -80,6 +802,8 @@ ipcMain.handle('kernel:command', async (_event, cmd) => {
 
 app.whenReady().then(() => {
   createWindow();
+  setupDesktopIntegration();
+  startAutomationTimer();
   void bootstrap();
   void initAutoUpdate(notifySystem);
 
@@ -91,6 +815,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  stopAutomationTimer();
   if (process.platform !== 'darwin') {
     app.quit();
   }

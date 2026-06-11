@@ -1,5 +1,12 @@
 import { create } from 'zustand';
 import type { Evidence, KernelEvent, PlanStep } from '@bobby/shared';
+import {
+  ProjectListSchema,
+  ProjectMetaSchema,
+  SessionRecordSchema,
+  type ProjectMeta,
+  type SessionRecordDto
+} from '../ipc/contract';
 
 // ---- Chat block types ----
 
@@ -55,6 +62,13 @@ export type StatusBlock = {
   status: 'done' | 'failed' | 'blocked';
 };
 
+export type GateBlock = {
+  kind: 'gate';
+  id: string;
+  gateId: string;
+  reason: string;
+};
+
 export type ErrorBlock = {
   kind: 'error';
   id: string;
@@ -70,6 +84,7 @@ export type ChatBlock =
   | VerdictBlock
   | PlanBlock
   | StatusBlock
+  | GateBlock
   | ErrorBlock;
 
 // ---- Store types ----
@@ -87,8 +102,10 @@ export type ChatState = {
   costUsd: number;
   spendUsd: number;
   model: string | null;
-  sessions: { id: string; title: string; blocks: ChatBlock[]; createdAt: string }[];
+  sessions: SessionRecordDto[];
   activeSessionId: string | null;
+  currentProject: ProjectMeta | null;
+  recentProjects: ProjectMeta[];
 
   // Internal client  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   _client: any;
@@ -103,12 +120,107 @@ export type ChatState = {
   clearBlocks: () => void;
   newSession: () => void;
   switchSession: (id: string) => void;
+  loadProjectState: () => Promise<void>;
+  openProject: () => Promise<void>;
+  selectProject: (projectDir: string) => Promise<void>;
+  loadSessions: () => Promise<void>;
 };
 
 // ---- Helpers ----
 
 let nextId = 1;
 const uid = (): string => `b${nextId++}`;
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function sessionTitle(blocks: ChatBlock[]): string {
+  return blocks.find((b) => b.kind === 'user')?.text?.slice(0, 80) || 'New session';
+}
+
+function snapshotSession(state: ChatState, id = state.activeSessionId ?? uid()): SessionRecordDto {
+  const createdAt = state.sessions.find((session) => session.id === id)?.createdAt ?? nowIso();
+  return SessionRecordSchema.parse({
+    id,
+    title: sessionTitle(state.blocks),
+    blocks: state.blocks,
+    createdAt,
+    updatedAt: nowIso(),
+    projectDir: state.currentProject?.path ?? null,
+    taskId: state.currentTaskId,
+    status: state.status,
+    liveReasoning: state.liveReasoning,
+    liveAssistant: state.liveAssistant,
+    liveToolContent: state.liveToolContent,
+    currentPlan: state.currentPlan,
+    error: state.error,
+    costUsd: state.costUsd,
+    spendUsd: state.spendUsd,
+    model: state.model
+  });
+}
+
+function replaceSession(sessions: SessionRecordDto[], next: SessionRecordDto): SessionRecordDto[] {
+  const filtered = sessions.filter((session) => session.id !== next.id);
+  return [next, ...filtered].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+}
+
+function dedupeSessions(sessions: SessionRecordDto[]): SessionRecordDto[] {
+  const byTitle = new Map<string, SessionRecordDto>();
+  for (const session of sessions) {
+    const existing = byTitle.get(session.title);
+    if (!existing || new Date(session.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) {
+      byTitle.set(session.title, session);
+    }
+  }
+  return Array.from(byTitle.values()).sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+}
+
+function sameBlocks(left: ChatBlock[], right: unknown[]): boolean {
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return false;
+  }
+}
+
+function resetLiveState(session?: SessionRecordDto) {
+  return {
+    blocks: session ? [...(session.blocks as ChatBlock[])] : [],
+    liveReasoning: session?.liveReasoning ?? '',
+    liveAssistant: session?.liveAssistant ?? '',
+    liveToolContent: session?.liveToolContent ?? '',
+    busy: session?.status === 'running',
+    currentTaskId: session?.taskId ?? null,
+    currentPlan: session?.currentPlan ?? [],
+    status: session?.status ?? 'idle',
+    error: session?.error ?? null,
+    costUsd: session?.costUsd ?? 0,
+    spendUsd: session?.spendUsd ?? 0,
+    model: session?.model ?? null,
+    activeSessionId: session?.id ?? null
+  };
+}
+
+function stateFromSession(base: ChatState, session: SessionRecordDto): ChatState {
+  return {
+    ...base,
+    ...resetLiveState(session),
+    sessions: base.sessions,
+    currentProject: base.currentProject,
+    recentProjects: base.recentProjects,
+    _client: base._client
+  };
+}
+
+async function persistSession(session: SessionRecordDto): Promise<void> {
+  try {
+    await window.bobby?.saveSession?.(session);
+  } catch {
+    // Persistence is best-effort; renderer state remains authoritative for the current turn.
+  }
+}
 
 // ---- Event sink ----
 
@@ -185,6 +297,7 @@ export function reduceEvent(state: ChatState, event: KernelEvent): Partial<ChatS
       break;
     }
     case 'gate_request': {
+      partial.blocks = [...state.blocks, { kind: 'gate', id: uid(), gateId: event.gateId, reason: event.reason }];
       break;
     }
     case 'final_result': {
@@ -275,14 +388,28 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   model: null,
   sessions: [],
   activeSessionId: null,
+  currentProject: null,
+  recentProjects: [],
 
   _client: null as { startTask: (input: string) => Promise<unknown>; approveGate?: (gateId: string, decision: 'allow' | 'always' | 'deny') => Promise<unknown>; onEvent?: (cb: (e: unknown) => void) => () => void } | null,
   setClient: (client) => set({ _client: client as typeof client | null }),
 
   sendMessage: async (text: string) => {
     const block: UserBlock = { kind: 'user', id: uid(), text };
+    const nextActiveSessionId = get().activeSessionId ?? uid();
     set((s) => ({
-      blocks: [...s.blocks, block],
+      ...(s.busy && s.blocks.length > 0
+        ? {
+            sessions: replaceSession(s.sessions, snapshotSession(s)),
+            blocks: [block],
+            activeSessionId: uid(),
+            currentTaskId: null,
+            currentPlan: []
+          }
+        : {
+            blocks: [...s.blocks, block],
+            activeSessionId: s.activeSessionId ?? nextActiveSessionId
+          }),
       busy: true,
       status: 'running',
       error: null,
@@ -309,9 +436,28 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   handleEvent: (event: KernelEvent) => {
     const state = get();
+    const targetSession = state.currentTaskId !== event.taskId
+      ? state.sessions.find((session) => session.taskId === event.taskId)
+      : undefined;
+
+    if (targetSession) {
+      const sessionState = stateFromSession(state, targetSession);
+      const partial = reduceEvent(sessionState, event);
+      if (Object.keys(partial).length > 0) {
+        const nextSession = snapshotSession({ ...sessionState, ...partial }, targetSession.id);
+        set({ sessions: replaceSession(state.sessions, nextSession) });
+        void persistSession(nextSession);
+      }
+      return;
+    }
+
     const partial = reduceEvent(state, event);
     if (Object.keys(partial).length > 0) {
       set(partial);
+      const nextState = get();
+      if (nextState.blocks.length > 0) {
+        void persistSession(snapshotSession(nextState));
+      }
     }
   },
 
@@ -344,25 +490,57 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   newSession: () => {
     const s = get();
     if (s.blocks.length > 0) {
-      const title = s.blocks.find(b => b.kind === 'user')?.text?.slice(0, 50) || 'New session';
-      const session = { id: uid(), title, blocks: [...s.blocks], createdAt: new Date().toISOString() };
-      set({ sessions: [...s.sessions, session], blocks: [], liveReasoning: '', liveAssistant: '', liveToolContent: '', status: 'idle', busy: false, activeSessionId: null });
+      const session = snapshotSession(s);
+      void persistSession(session);
+      set({
+        sessions: replaceSession(s.sessions, session),
+        ...resetLiveState(undefined)
+      });
     }
   },
   switchSession: (id: string) => {
     const s = get();
-    // Save current
-    if (s.blocks.length > 0) {
-      const title = s.blocks.find(b => b.kind === 'user')?.text?.slice(0, 50) || 'Session';
-      const current = { id: s.activeSessionId || uid(), title, blocks: [...s.blocks], createdAt: new Date().toISOString() };
-      const existing = s.sessions.findIndex(x => x.id === current.id);
-      const updated = existing >= 0 ? s.sessions.map((x, i) => i === existing ? current : x) : [...s.sessions, current];
-      const target = updated.find(x => x.id === id);
-      set({ sessions: updated, blocks: target ? [...target.blocks] : [], liveReasoning: '', liveAssistant: '', liveToolContent: '', status: 'idle', busy: false, activeSessionId: id });
+    let sessions = s.sessions;
+    const target = sessions.find(x => x.id === id);
+    if (!target) return;
+    const visibleTitle = sessionTitle(s.blocks);
+    if (s.activeSessionId === id || sameBlocks(s.blocks, target.blocks) || (!s.activeSessionId && visibleTitle === target.title)) {
+      set({ sessions: dedupeSessions(sessions), ...resetLiveState(target) });
       return;
     }
-    const target = s.sessions.find(x => x.id === id);
-    if (target) set({ blocks: [...target.blocks], activeSessionId: id, liveReasoning: '', liveAssistant: '', liveToolContent: '', status: 'idle', busy: false });
+    if (s.blocks.length > 0) {
+      const current = snapshotSession(s);
+      sessions = replaceSession(s.sessions, current);
+      void persistSession(current);
+    }
+    set({ sessions: dedupeSessions(sessions), ...resetLiveState(target) });
   },
-  clearBlocks: () => set({ blocks: [], liveReasoning: '', liveAssistant: '', liveToolContent: '' })
+  clearBlocks: () => set({ blocks: [], liveReasoning: '', liveAssistant: '', liveToolContent: '' }),
+  loadProjectState: async () => {
+    if (typeof window === 'undefined' || !window.bobby) return;
+    const [project, projects] = await Promise.all([
+      window.bobby.getCurrentProject?.(),
+      window.bobby.listProjects?.()
+    ]);
+    set({
+      currentProject: ProjectMetaSchema.nullable().parse(project ?? null),
+      recentProjects: ProjectListSchema.parse(projects ?? [])
+    });
+  },
+  openProject: async () => {
+    if (typeof window === 'undefined' || !window.bobby?.openProject) return;
+    const result = await window.bobby.openProject();
+    if (!result) return;
+    set({ currentProject: result.project, recentProjects: result.recentProjects });
+  },
+  selectProject: async (projectDir: string) => {
+    if (typeof window === 'undefined' || !window.bobby?.selectProject) return;
+    const result = await window.bobby.selectProject(projectDir);
+    set({ currentProject: result.project, recentProjects: result.recentProjects });
+  },
+  loadSessions: async () => {
+    if (typeof window === 'undefined' || !window.bobby?.listSessions) return;
+    const parsed = SessionRecordSchema.array().safeParse(await window.bobby.listSessions());
+    if (parsed.success) set({ sessions: dedupeSessions(parsed.data) });
+  }
 }));

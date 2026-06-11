@@ -126,6 +126,15 @@ export class ExecTool implements Tool {
       throw new Error('ExecTool input args must be an array of strings');
     }
 
+    if (rawArgs === undefined && /\s/.test(rawCmd.trim())) {
+      const parsed = this.parseCommandString(rawCmd);
+      const mkdirDirectory = this.parseMkdirDirectory(parsed);
+      return {
+        ...parsed,
+        mkdirDirectory
+      };
+    }
+
     const sanitizedArgs = Array.isArray(rawArgs) ? rawArgs : [];
     if (!sanitizedArgs.every((arg) => typeof arg === 'string')) {
       throw new Error('ExecTool input args must be an array of strings');

@@ -1,24 +1,30 @@
-import pkg from 'electron-updater';
-const { autoUpdater } = pkg as any;
-
 export interface MinimalAutoUpdater {
   on(event: 'update-available' | 'update-downloaded', listener: () => void): void;
   checkForUpdatesAndNotify(): Promise<unknown>;
 }
 
+async function getDefaultAutoUpdater(): Promise<MinimalAutoUpdater> {
+  const pkg = await import('electron-updater');
+  return (pkg.default as { autoUpdater: MinimalAutoUpdater }).autoUpdater;
+}
+
 export function initAutoUpdate(
   notify: (message: string) => void,
-  updater: MinimalAutoUpdater = autoUpdater
+  updater?: MinimalAutoUpdater
 ): Promise<unknown> {
-  updater.on('update-available', () => {
-    notify('发现新版本，正在后台下载...');
-  });
-
-  updater.on('update-downloaded', () => {
-    notify('新版本已就绪，重启后生效。');
-  });
-
   return Promise.resolve()
-    .then(() => updater.checkForUpdatesAndNotify())
+    .then(async () => {
+      const resolvedUpdater = updater ?? await getDefaultAutoUpdater();
+
+      resolvedUpdater.on('update-available', () => {
+        notify('New version found. Downloading in the background...');
+      });
+
+      resolvedUpdater.on('update-downloaded', () => {
+        notify('New version is ready. Restart Bobby to apply it.');
+      });
+
+      return resolvedUpdater.checkForUpdatesAndNotify();
+    })
     .catch(() => {});
 }

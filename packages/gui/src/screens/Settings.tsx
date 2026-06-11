@@ -1,120 +1,137 @@
-import React, { useState, useEffect } from 'react';
-import { Key, Keyboard, Settings2 } from 'lucide-react';
+import React from 'react';
+import { Key, Loader2, Save, Settings2, ShieldCheck } from 'lucide-react';
+import { makeKernelClient, type AppSettings } from '../ipc/contract';
 
-function load(k: string, d: string) { try { return localStorage.getItem('bobby-' + k) ?? d; } catch { return d; } }
-function save(k: string, v: string) { try { localStorage.setItem('bobby-' + k, v); } catch {} }
+const DEFAULT_SETTINGS: AppSettings = {
+  modelStrategy: 'auto',
+  baseUrl: 'https://api.deepseek.com',
+  workspaceDir: '/',
+  budgetUsd: 10,
+  defaultPermission: 'L1',
+  strongSandbox: true,
+  hasApiKey: false
+};
+
+function client() {
+  return typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null;
+}
 
 export function Settings(): React.ReactElement {
-  const [tab, setTab] = useState<'general' | 'api' | 'shortcuts'>('general');
-  const [model, setModel] = useState(() => load('model', 'deepseek-chat'));
-  const [apiKey, setApiKey] = useState(() => load('api-key', ''));
-  const [baseUrl, setBaseUrl] = useState(() => load('base-url', 'https://api.deepseek.com'));
-  const [workspace, setWorkspace] = useState(() => load('workspace', '/'));
-  const [budget, setBudget] = useState(() => load('budget', '10'));
-  const [permission, setPermission] = useState(() => load('permission', 'L1'));
-  const [sandbox, setSandbox] = useState(() => load('sandbox', 'false') === 'true');
-  const [saved, setSaved] = useState(false);
+  const kernelClient = React.useMemo(client, []);
+  const [settings, setSettings] = React.useState<AppSettings>(DEFAULT_SETTINGS);
+  const [apiKey, setApiKey] = React.useState('');
+  const [loading, setLoading] = React.useState(Boolean(kernelClient?.getSettings));
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  useEffect(() => { save('model', model); save('api-key', apiKey); save('base-url', baseUrl); save('workspace', workspace); save('budget', budget); save('permission', permission); save('sandbox', String(sandbox)); }, [model, apiKey, baseUrl, workspace, budget, permission, sandbox]);
+  React.useEffect(() => {
+    let active = true;
+    if (!kernelClient?.getSettings) return;
+    setLoading(true);
+    void kernelClient.getSettings().then((value) => {
+      if (!active) return;
+      setSettings(value);
+      setLoading(false);
+    }).catch((nextError) => {
+      if (!active) return;
+      setError(nextError instanceof Error ? nextError.message : String(nextError));
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [kernelClient]);
 
-  const tabs = [
-    { id: 'general' as const, label: 'General', icon: Settings2 },
-    { id: 'api' as const, label: 'API', icon: Key },
-    { id: 'shortcuts' as const, label: 'Shortcuts', icon: Keyboard },
-  ];
+  async function save() {
+    if (!kernelClient?.setSettings) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const next = await kernelClient.setSettings({
+        modelStrategy: settings.modelStrategy,
+        baseUrl: settings.baseUrl,
+        workspaceDir: settings.workspaceDir,
+        budgetUsd: settings.budgetUsd,
+        defaultPermission: settings.defaultPermission,
+        strongSandbox: settings.strongSandbox,
+        apiKey: apiKey.trim() || undefined
+      });
+      setSettings(next);
+      setApiKey('');
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : String(nextError));
+    } finally {
+      setSaving(false);
+    }
+  }
 
-  const inputCls = "w-full rounded-xl border px-3 py-2 text-[13px] text-bobby-ink outline-none transition-colors focus:border-accent/50";
-  const labelCls = "text-[12px] font-medium text-bobby-muted mb-1 block";
-  const sectionCls = "mb-5";
-
-  const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 1500); };
+  const inputClass = 'w-full rounded-lg border px-3 py-2 text-[13px] text-bobby-ink outline-none';
 
   return (
     <div className="flex h-full flex-col bg-bobby-canvas">
-      <div className="flex items-center gap-1 border-b border-bobby-border-muted px-4 py-2">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition ${tab === t.id ? 'text-bobby-ink' : 'text-bobby-muted hover:text-bobby-ink'}`}
-            style={tab === t.id ? { background: 'var(--bobby-surface-hover)' } : {}}>
-            <t.icon className="w-3.5 h-3.5" />{t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-6 py-5 max-w-[560px]">
-        {tab === 'general' && (
-          <>
-            <div className={sectionCls}>
-              <label className={labelCls}>Model</label>
-              <select value={model} onChange={e => setModel(e.target.value)} className={inputCls} style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
-                <option value="deepseek-chat">DeepSeek Chat (V3)</option>
-                <option value="deepseek-reasoner">DeepSeek Reasoner (R1)</option>
-              </select>
-            </div>
-            <div className={sectionCls}>
-              <label className={labelCls}>Workspace Root</label>
-              <input value={workspace} onChange={e => setWorkspace(e.target.value)} className={inputCls} style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }} placeholder="/path/to/project" />
-            </div>
-            <div className={sectionCls}>
-              <label className={labelCls}>Budget Limit (USD)</label>
-              <input type="number" value={budget} onChange={e => setBudget(e.target.value)} className={inputCls} style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }} />
-            </div>
-            <div className={sectionCls}>
-              <label className={labelCls}>Default Permission Level</label>
-              <select value={permission} onChange={e => setPermission(e.target.value)} className={inputCls} style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
-                <option value="L0">L0 - Read only</option>
-                <option value="L1">L1 - Workspace write</option>
-                <option value="L2">L2 - Full access</option>
-                <option value="L3">L3 - Auto approve</option>
-                <option value="L4">L4 - Unrestricted</option>
-              </select>
-            </div>
-            <div className={sectionCls}>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={sandbox} onChange={e => setSandbox(e.target.checked)} className="rounded" />
-                <span className="text-[13px] text-bobby-ink">Strong Sandbox</span>
-              </label>
-            </div>
-          </>
-        )}
-
-        {tab === 'api' && (
-          <>
-            <div className={sectionCls}>
-              <label className={labelCls}>DeepSeek API Key</label>
-              <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} className={inputCls} style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }} placeholder="sk-..." />
-              <p className="text-[11px] text-bobby-faint mt-1">Stored in browser localStorage. In production, use ~/.bobby/key.</p>
-            </div>
-            <div className={sectionCls}>
-              <label className={labelCls}>Base URL</label>
-              <input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} className={inputCls} style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }} />
-            </div>
-          </>
-        )}
-
-        {tab === 'shortcuts' && (
-          <div className="space-y-3">
-            {[
-              ['Ctrl+K', 'Clear chat'],
-              ['Ctrl+N', 'New session'],
-              ['Ctrl+Enter', 'Send message'],
-              ['Escape', 'Cancel editing'],
-              ['Double-click', 'Edit message'],
-            ].map(([key, desc]) => (
-              <div key={key} className="flex items-center justify-between rounded-lg px-4 py-2.5" style={{ background: 'var(--bobby-surface-subtle)' }}>
-                <span className="text-[13px] text-bobby-ink">{desc}</span>
-                <kbd className="rounded-md px-2 py-0.5 text-[11px] font-mono font-medium" style={{ background: 'var(--bobby-kbd-bg)', color: 'var(--bobby-text-muted)', border: '1px solid var(--bobby-border)' }}>{key}</kbd>
-              </div>
-            ))}
+      <header className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: 'var(--bobby-border-muted)' }}>
+        <div className="flex items-center gap-2">
+          <Settings2 className="h-4 w-4 text-bobby-muted" />
+          <div>
+            <h2 className="text-[15px] font-semibold text-bobby-ink">Settings</h2>
+            <p className="text-[12px] text-bobby-muted">Main-process settings used by the next Bobby task.</p>
           </div>
-        )}
-      </div>
-
-      <div className="border-t border-bobby-border-muted px-6 py-3 flex items-center justify-between">
-        <span className="text-[11px] text-bobby-faint">Settings auto-saved to browser storage.</span>
-        <button onClick={handleSave} className="rounded-xl bg-accent px-4 py-2 text-[13px] font-medium text-white hover:brightness-110 transition">
-          {saved ? 'Saved!' : 'Save'}
+        </div>
+        <button type="button" onClick={() => void save()} disabled={saving || loading} className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-[13px] font-medium text-white disabled:opacity-50">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save
         </button>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        {error && <div className="mb-4 rounded-lg px-3 py-2 text-[12px]" style={{ background: 'var(--bobby-danger-soft)', color: 'var(--bobby-danger)' }}>{error}</div>}
+        <div className="grid max-w-[680px] gap-5">
+          <label className="grid gap-1.5">
+            <span className="text-[12px] font-medium text-bobby-muted">Model Strategy</span>
+            <select value={settings.modelStrategy} onChange={(event) => setSettings({ ...settings, modelStrategy: event.target.value as AppSettings['modelStrategy'] })} className={inputClass} style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
+              <option value="auto">Auto</option>
+              <option value="flash">Flash</option>
+              <option value="pro">Pro</option>
+              <option value="conservative">Conservative</option>
+            </select>
+          </label>
+          <label className="grid gap-1.5">
+            <span className="text-[12px] font-medium text-bobby-muted">Base URL</span>
+            <input value={settings.baseUrl} onChange={(event) => setSettings({ ...settings, baseUrl: event.target.value })} className={inputClass} style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }} />
+          </label>
+          <label className="grid gap-1.5">
+            <span className="text-[12px] font-medium text-bobby-muted">Workspace Directory</span>
+            <input value={settings.workspaceDir} onChange={(event) => setSettings({ ...settings, workspaceDir: event.target.value })} className={inputClass} style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }} />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="grid gap-1.5">
+              <span className="text-[12px] font-medium text-bobby-muted">Budget USD</span>
+              <input type="number" value={settings.budgetUsd} onChange={(event) => setSettings({ ...settings, budgetUsd: Number(event.target.value) })} className={inputClass} style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }} />
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-[12px] font-medium text-bobby-muted">Default Permission</span>
+              <select value={settings.defaultPermission} onChange={(event) => setSettings({ ...settings, defaultPermission: event.target.value as AppSettings['defaultPermission'] })} className={inputClass} style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
+                <option value="L0">L0</option>
+                <option value="L1">L1</option>
+                <option value="L2">L2</option>
+                <option value="L3">L3</option>
+                <option value="L4">L4</option>
+              </select>
+            </label>
+          </div>
+          <label className="flex items-center gap-2 text-[13px] text-bobby-ink">
+            <input type="checkbox" checked={settings.strongSandbox} onChange={(event) => setSettings({ ...settings, strongSandbox: event.target.checked })} />
+            Strong sandbox
+          </label>
+          <section className="rounded-lg border p-4" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
+            <div className="mb-3 flex items-center gap-2">
+              <Key className="h-4 w-4 text-bobby-muted" />
+              <h3 className="text-[13px] font-semibold text-bobby-ink">DeepSeek API Key</h3>
+              <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-bobby-muted">
+                <ShieldCheck className="h-3.5 w-3.5" /> {settings.hasApiKey ? 'stored in main process' : 'not stored'}
+              </span>
+            </div>
+            <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="Paste a new key to replace the stored key" className={inputClass} style={{ background: 'var(--bobby-bg-canvas)', borderColor: 'var(--bobby-border)' }} />
+          </section>
+        </div>
       </div>
     </div>
   );
