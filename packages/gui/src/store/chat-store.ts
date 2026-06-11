@@ -148,7 +148,12 @@ function sessionTitle(blocks: ChatBlock[]): string {
   return blocks.find((b) => b.kind === 'user')?.text?.slice(0, 80) || 'New session';
 }
 
-function makeBlankSession(id: string, projectDir: string | null, createdAt = nowIso()): SessionRecordDto {
+function makeBlankSession(
+  id: string,
+  projectDir: string | null,
+  createdAt = nowIso(),
+  mode: SessionMode = 'standard'
+): SessionRecordDto {
   return SessionRecordSchema.parse({
     id,
     title: 'New session',
@@ -166,7 +171,7 @@ function makeBlankSession(id: string, projectDir: string | null, createdAt = now
     costUsd: 0,
     spendUsd: 0,
     model: null,
-    mode: 'standard'
+    mode
   });
 }
 
@@ -741,7 +746,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const state = get();
     const active = activeThreadFromState(state);
     const threadId = uid();
-    const blank = makeBlankSession(threadId, state.currentProject?.path ?? active?.projectDir ?? null);
+    const blank = makeBlankSession(
+      threadId,
+      state.currentProject?.path ?? active?.projectDir ?? null,
+      nowIso(),
+      state.sessionMode
+    );
     const nextThreads = replaceThread(state.threads, blank);
     const nextSessions = active && active.blocks.length > 0 ? replaceSession(state.sessions, currentThreadSnapshot(state, active.id)) : state.sessions;
     set({

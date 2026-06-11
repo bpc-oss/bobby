@@ -410,6 +410,25 @@ describe('chat session store', () => {
     expect(useChatStore.getState().sessionMode).toBe('full');
   });
 
+  it('creates a new session using the active session mode', () => {
+    const active = session('active', 'Active task', [userBlock('u-active', 'Active task')]);
+    useChatStore.setState({
+      sessions: [active],
+      threads: { active },
+      activeSessionId: 'active',
+      blocks: active.blocks as ChatBlock[],
+      sessionMode: 'plan-only'
+    });
+
+    useChatStore.getState().newSession();
+
+    const state = useChatStore.getState();
+    expect(state.activeSessionId).not.toBe('active');
+    expect(state.activeSessionId).toBeDefined();
+    expect(state.threads[state.activeSessionId!]?.mode).toBe('plan-only');
+    expect(state.sessionMode).toBe('plan-only');
+  });
+
   it('resumes a historical session into a fresh thread with the same context', () => {
     const original = session('original', 'Original task', [userBlock('u-original', 'Original task')]);
     original.taskId = 'task-original';
