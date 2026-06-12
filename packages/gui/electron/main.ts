@@ -1139,7 +1139,7 @@ async function runAutomation(automation: AutomationRecord): Promise<AutomationRe
   const { observedEvents, getTaskId, unsubscribe } = captureFirstTaskEvents((listener) => host.subscribe(listener));
 
   try {
-    await host.send({ type: 'startTask', input: automation.prompt });
+    await host.send({ type: 'startTask', input: automation.prompt, mode: 'full' });
   } catch (error: unknown) {
     failedToRun = true;
     const message = error instanceof Error ? error.message : String(error);

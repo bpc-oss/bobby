@@ -1203,7 +1203,10 @@ describe('automation IPC handlers', () => {
     await vi.advanceTimersByTimeAsync(15_000);
 
     const hostResults = (KernelHostMock as unknown as { mock: { results: Array<{ value: { send: ReturnType<typeof vi.fn> } }> } }).mock.results.map((result) => result.value);
-    expect(hostResults.some((host) => host.send.mock.calls.some(([cmd]) => (cmd as { type?: string }).type === 'startTask'))).toBe(true);
+    expect(hostResults.some((host) => host.send.mock.calls.some(([cmd]) =>
+      (cmd as { type?: string; mode?: string }).type === 'startTask' &&
+      (cmd as { mode?: string }).mode === 'full'
+    ))).toBe(true);
 
     const taskDir = join(projectRoot, '.bobby', 'tasks', 'automation-task-1');
     expect(existsSync(join(taskDir, 'task.json'))).toBe(true);
