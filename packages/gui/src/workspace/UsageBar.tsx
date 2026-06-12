@@ -7,17 +7,12 @@ function fmtTok(value: number): string {
 }
 
 export function UsageBar({ usage }: { usage: Usage }): JSX.Element {
-  return (
-    <div className="costbar">
-      <span>
-        CACHE <b>{usage.cacheHitRate < 0 ? '——' : `${Math.round(usage.cacheHitRate * 100)}%`}</b>
-      </span>
-      <span>
-        IN {fmtTok(usage.inputTokens)} / OUT {fmtTok(usage.outputTokens)} TOK
-      </span>
-      <span>
-        SESSION ≈<b>¥{usage.cny.toFixed(2)}</b>
-      </span>
-    </div>
-  );
+  const cache = usage.cacheHitRate < 0 ? '—' : `${Math.round(usage.cacheHitRate * 100)}%`;
+  const tokens =
+    usage.inputTokens === 0 && usage.outputTokens === 0
+      ? '0 TOK'
+      : `IN ${fmtTok(usage.inputTokens)} / OUT ${fmtTok(usage.outputTokens)}`;
+  const text = `CACHE ${cache} · ${tokens} · ¥${usage.cny.toFixed(2)}`;
+
+  return <div className="costbar">{text}</div>;
 }

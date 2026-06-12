@@ -52,17 +52,15 @@ describe('Composer', () => {
 });
 
 describe('UsageBar', () => {
-  it('显示缓存命中率 / tokens / 人民币', () => {
+  it('显示精确的非零用量文案', () => {
     render(
       <UsageBar usage={{ inputTokens: 8100, outputTokens: 4200, cacheHitRate: 0.92, cny: 0.18 }} />
     );
-    expect(screen.getByText(/92%/)).toBeTruthy();
-    expect(screen.getByText(/8\.1K/)).toBeTruthy();
-    expect(screen.getByText(/¥0\.18/)).toBeTruthy();
+    expect(screen.getByText('CACHE 92% · IN 8.1K / OUT 4.2K · ¥0.18')).toBeTruthy();
   });
 
-  it('无数据时显示 ——', () => {
+  it('零态显示精确的 directive 文案', () => {
     render(<UsageBar usage={{ inputTokens: 0, outputTokens: 0, cacheHitRate: -1, cny: 0 }} />);
-    expect(screen.getByText('——')).toBeTruthy();
+    expect(screen.getByText('CACHE — · 0 TOK · ¥0.00')).toBeTruthy();
   });
 });
