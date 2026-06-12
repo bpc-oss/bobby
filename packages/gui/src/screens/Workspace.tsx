@@ -3,7 +3,7 @@ import type { GateDecision, KernelEvent } from '@bobby/shared';
 import { Check, ChevronDown, ChevronUp, GitBranch, Lightbulb, Mic, Plus, Route, Search, Send, ShieldCheck, Square } from 'lucide-react';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { useChatStore, type ChatBlock } from '../store/chat-store';
-import type { CapabilityReport, CommandRecordDto, GitStatusSummary, SessionMode } from '../ipc/contract';
+import type { CapabilityReport, CommandRecordDto, GitStatusSummary, McpServerRecordDto, SessionMode } from '../ipc/contract';
 
 type WorkspaceProps = {
   kernelClient?: {
@@ -17,6 +17,7 @@ type WorkspaceProps = {
     searchFiles?: (query: string) => Promise<Array<{ path: string; preview?: string | null }>>;
     saveAttachment?: (input: { sourcePath: string; fileName: string }) => Promise<{ path: string }>;
     listCommands?: () => Promise<CommandRecordDto[]>;
+    listMcpServers?: () => Promise<McpServerRecordDto[]>;
     onEvent: (callback: (event: KernelEvent) => void) => () => void;
   };
   theme?: 'light' | 'dark';
@@ -486,6 +487,7 @@ function EnvironmentPopover({
 function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: string) => void; busy: boolean; onAbort: () => void; kernelClient?: WorkspaceProps['kernelClient'] }) {
   const [input, setInput] = useState('');
   const [customCommands, setCustomCommands] = useState<CommandRecordDto[]>([]);
+  const [mcpServers, setMcpServers] = useState<McpServerRecordDto[]>([]);
   const [menuItems, setMenuItems] = useState<ComposerItem[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMode, setMenuMode] = useState<ComposerMode | null>(null);
@@ -530,6 +532,16 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
       setCustomCommands(await listCommands());
     } catch {
       setCustomCommands([]);
+    }
+  }, [kernelClient]);
+
+  const refreshMcpServers = useCallback(async () => {
+    const listMcpServers = kernelClient?.listMcpServers;
+    if (!listMcpServers) return;
+    try {
+      setMcpServers(await listMcpServers());
+    } catch {
+      setMcpServers([]);
     }
   }, [kernelClient]);
 
@@ -582,6 +594,32 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
       active = false;
     };
   }, [kernelClient]);
+
+  useEffect(() => {
+    let active = true;
+    const listMcpServers = kernelClient?.listMcpServers;
+    if (!listMcpServers) {
+      setMcpServers([]);
+      return;
+    }
+
+    void (async () => {
+      try {
+        const servers = await listMcpServers();
+        if (active) {
+          setMcpServers(servers);
+        }
+      } catch {
+        if (active) {
+          setMcpServers([]);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [kernelClient, refreshMcpServers]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -975,7 +1013,13 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     }
   ] as const;
 
-  const pluginLabels = ['Browser', 'Chrome', 'Computer', 'LaTeX'];
+  const pluginEntries = React.useMemo(() => {
+    return mcpServers.map((server) => ({
+      id: server.id,
+      name: server.name,
+      detail: server.health === 'healthy' ? 'Healthy' : server.health === 'disabled' ? 'Disabled' : server.health === 'error' ? 'Error' : 'Unknown'
+    }));
+  }, [mcpServers]);
 
   const togglePlanMode = useCallback(() => {
     setSessionMode(sessionMode === 'plan-only' ? 'standard' : 'plan-only');
@@ -1076,13 +1120,20 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
 
                 <div className="mt-2 rounded-xl border px-3 py-2" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
                   <div className="text-[12px] font-medium text-bobby-ink">{'\u63d2\u4ef6'}</div>
-                  <div className="mt-2 text-[11px] text-bobby-faint">{'4 \u4e2a\u5df2\u5b89\u88c5\u63d2\u4ef6'}</div>
+                  <div className="mt-2 text-[11px] text-bobby-faint">{`${pluginEntries.length} \u4e2a\u5df2\u5b89\u88c5\u63d2\u4ef6`}</div>
                   <div className="mt-2 space-y-1">
-                    {pluginLabels.map((label) => (
-                      <div key={label} className="rounded-lg px-2 py-1.5 text-[12px] text-bobby-muted">
-                        {label}
+                    {pluginEntries.length === 0 ? (
+                      <div className="rounded-lg px-2 py-1.5 text-[12px] text-bobby-faint">
+                        {'\u6682\u65e0\u5df2\u8fde\u63a5\u63d2\u4ef6'}
                       </div>
-                    ))}
+                    ) : (
+                      pluginEntries.map((plugin) => (
+                        <div key={plugin.id} className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-[12px] text-bobby-muted">
+                          <span className="truncate">{plugin.name}</span>
+                          <span className="shrink-0 text-[11px] text-bobby-faint">{plugin.detail}</span>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>

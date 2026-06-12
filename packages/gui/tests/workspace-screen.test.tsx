@@ -558,6 +558,48 @@ describe('workspace UI smoke', () => {
     expect(screen.getByText('插件')).toBeTruthy();
   });
 
+  it('loads installed MCP servers into the composer plugin menu', async () => {
+    const client = makeKernelClientMock();
+    client.listMcpServers.mockResolvedValueOnce([
+      {
+        id: 'filesystem',
+        name: 'Filesystem',
+        enabled: true,
+        transport: { kind: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'], cwd: 'E:\\ai-files\\Bobby' },
+        tools: [
+          { name: 'read_file', permissionTier: 'L2', description: 'Read a text file', evidenceType: 'command_output' }
+        ],
+        health: 'healthy',
+        lastCheckedAt: '2026-06-12T00:00:00.000Z',
+        lastError: null,
+        createdAt: '2026-06-12T00:00:00.000Z',
+        updatedAt: '2026-06-12T00:00:00.000Z'
+      },
+      {
+        id: 'browser',
+        name: 'Browser',
+        enabled: false,
+        transport: { kind: 'url', url: 'http://localhost:3010/mcp' },
+        tools: [
+          { name: 'open_page', permissionTier: 'L2', description: 'Open a page', evidenceType: 'command_output' }
+        ],
+        health: 'disabled',
+        lastCheckedAt: '2026-06-12T00:00:00.000Z',
+        lastError: null,
+        createdAt: '2026-06-12T00:00:00.000Z',
+        updatedAt: '2026-06-12T00:00:00.000Z'
+      }
+    ]);
+
+    render(<Workspace kernelClient={client} />);
+
+    fireEvent.click(screen.getByTitle('Add photos and files'));
+
+    expect(await screen.findByText('2 个已安装插件')).toBeTruthy();
+    expect(screen.getByText('Filesystem')).toBeTruthy();
+    expect(screen.getByText('Browser')).toBeTruthy();
+  });
+
   it('shows an environment popover with git, progress, browser, and sources', async () => {
     const client = makeKernelClientMock();
     useChatStore.setState({
