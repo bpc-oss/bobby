@@ -253,6 +253,31 @@ describe('SessionToolDock', () => {
     expect(readWorkspaceFile).toHaveBeenCalledWith('src/utils.ts');
   });
 
+  it('shows workspace tree failures as an error card', async () => {
+    window.bobby.listWorkspaceTree = vi.fn().mockRejectedValueOnce(new Error('disk offline'));
+
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Files/));
+
+    expect(await screen.findByText(/Failed to load workspace files: disk offline/)).toBeTruthy();
+  });
+
+  it('shows workspace file read failures as an error card', async () => {
+    window.bobby.readWorkspaceFile = vi.fn()
+      .mockResolvedValueOnce({ path: 'src/index.ts', content: 'export const entry = true;\n' })
+      .mockRejectedValueOnce(new Error('permission denied'));
+
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Files/));
+    expect(await screen.findByText('export const entry = true;')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('utils.ts'));
+
+    expect(await screen.findByText(/Failed to read workspace file: permission denied/)).toBeTruthy();
+  });
+
   it('runs real terminal commands through IPC and shows the output', async () => {
     render(<SessionToolDock />);
 

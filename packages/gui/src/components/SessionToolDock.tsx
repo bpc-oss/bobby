@@ -77,6 +77,10 @@ function Empty({ title }: { title: string }) {
   return <div className="px-4 py-8 text-center text-[12px] text-bobby-faint">{title}</div>;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function Row({ icon: Icon, title, meta, tone = 'default' }: { icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; title: string; meta?: string; tone?: 'default' | 'danger' | 'warning' | 'success' }) {
   const color = tone === 'danger' ? 'var(--bobby-danger)' : tone === 'warning' ? '#d97706' : tone === 'success' ? 'var(--bobby-success)' : 'var(--bobby-text-muted)';
   return (
@@ -582,14 +586,17 @@ function FilesPanel() {
   const [pathInput, setPathInput] = React.useState('');
   const [file, setFile] = React.useState<WorkspaceReadFileResult | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const refresh = React.useCallback(async () => {
     if (!client?.listWorkspaceTree) {
       setTree([]);
+      setError('Workspace file browser is unavailable.');
       return;
     }
 
     setLoading(true);
+    setError(null);
     try {
       const next = await client.listWorkspaceTree();
       setTree(next);
@@ -600,6 +607,10 @@ function FilesPanel() {
           setFile(client.readWorkspaceFile ? await client.readWorkspaceFile(firstFile.path) : null);
         }
       }
+    } catch (nextError) {
+      setTree([]);
+      setFile(null);
+      setError(`Failed to load workspace files: ${errorMessage(nextError)}`);
     } finally {
       setLoading(false);
     }
@@ -613,9 +624,16 @@ function FilesPanel() {
     setSelectedPath(path);
     if (!client?.readWorkspaceFile) {
       setFile(null);
+      setError('Workspace file reader is unavailable.');
       return;
     }
-    setFile(await client.readWorkspaceFile(path));
+    setError(null);
+    try {
+      setFile(await client.readWorkspaceFile(path));
+    } catch (nextError) {
+      setFile(null);
+      setError(`Failed to read workspace file: ${errorMessage(nextError)}`);
+    }
   }
 
   return (
@@ -627,6 +645,8 @@ function FilesPanel() {
         </div>
         <button type="button" onClick={() => void refresh()} className="rounded-md px-2 py-1 text-[11px] text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink">Refresh</button>
       </div>
+
+      {error && <div className="rounded-lg border px-3 py-2 text-[12px] text-bobby-danger" style={{ background: 'var(--bobby-danger-soft)', borderColor: 'var(--bobby-danger-soft)' }}>{error}</div>}
 
       <div className="rounded-lg border p-2.5" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
         <label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-bobby-faint">
