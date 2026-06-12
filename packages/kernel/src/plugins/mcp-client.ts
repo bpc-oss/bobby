@@ -33,6 +33,7 @@ export interface UrlMcpTransportConfig {
 export type McpTransportConfig = StdioMcpTransportConfig | UrlMcpTransportConfig;
 
 export type McpEvidenceType = 'command_output' | 'file_diff' | 'file_exists';
+const DEFAULT_MCP_REQUEST_TIMEOUT_MS = 5_000;
 
 export interface McpToolOptions {
   toolName?: string;
@@ -57,20 +58,34 @@ type JsonRpcResponse = {
 };
 
 async function probeHttpTransport(url: string, headers: Record<string, string> = {}): Promise<void> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: randomUUID(),
-      method: 'initialize',
-      params: {
-        protocolVersion: '2024-11-05',
-        clientInfo: { name: 'bobby', version: '0.1.0' },
-        capabilities: {}
-      }
-    })
-  });
+  const controller = new AbortController();
+  const timeoutMs = mcpRequestTimeoutMs();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      signal: controller.signal,
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: randomUUID(),
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          clientInfo: { name: 'bobby', version: '0.1.0' },
+          capabilities: {}
+        }
+      })
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`MCP HTTP probe timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     throw new Error(`MCP HTTP probe failed with ${response.status}`);
@@ -83,16 +98,30 @@ async function callHttpTransport(
   args: unknown,
   headers: Record<string, string> = {}
 ): Promise<McpResult> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: randomUUID(),
-      method: 'tools/call',
-      params: { name: tool, arguments: args }
-    })
-  });
+  const controller = new AbortController();
+  const timeoutMs = mcpRequestTimeoutMs();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      signal: controller.signal,
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: randomUUID(),
+        method: 'tools/call',
+        params: { name: tool, arguments: args }
+      })
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return { stdout: `MCP HTTP request timed out after ${timeoutMs}ms`, isError: true };
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     return { stdout: `HTTP ${response.status}`, isError: true, payload: { status: response.status } };
@@ -132,6 +161,11 @@ function dispatchJsonRpcLine(
   } else {
     overflow.push(line);
   }
+}
+
+function mcpRequestTimeoutMs(): number {
+  const raw = Number.parseInt(process.env.BOBBY_MCP_REQUEST_TIMEOUT_MS ?? '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_MCP_REQUEST_TIMEOUT_MS;
 }
 
 function createJsonRpcSender(child: ChildProcessWithoutNullStreams): (method: string, params?: unknown) => Promise<JsonRpcResponse> {
@@ -178,10 +212,25 @@ function createJsonRpcSender(child: ChildProcessWithoutNullStreams): (method: st
     const id = `${Date.now()}-${requestId += 1}`;
     const payload: JsonRpcRequest = { jsonrpc: '2.0', id, method, params };
     return new Promise<JsonRpcResponse>((resolve, reject) => {
-      pending.set(id, { resolve, reject });
+      const timeoutMs = mcpRequestTimeoutMs();
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`MCP stdio request "${method}" timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      pending.set(id, {
+        resolve: (response) => {
+          clearTimeout(timer);
+          resolve(response);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        }
+      });
       child.stdin.write(`${JSON.stringify(payload)}\n`, 'utf8', (error) => {
         if (error) {
           pending.delete(id);
+          clearTimeout(timer);
           reject(error);
         }
       });

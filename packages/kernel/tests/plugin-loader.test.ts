@@ -1,10 +1,14 @@
-import { expect, it } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 
 import { type Tool, ToolRegistry } from '../src/hands/tool';
 import type { BobbyPlugin } from '../src/plugins/plugin';
 import { loadPlugin } from '../src/plugins/loader';
-import { mcpToolToBobbyTool } from '../src/plugins/mcp-client';
+import { createMcpTransport, mcpToolToBobbyTool } from '../src/plugins/mcp-client';
 import type { McpTransport } from '../src/plugins/mcp-client';
+
+afterEach(() => {
+  delete process.env.BOBBY_MCP_REQUEST_TIMEOUT_MS;
+});
 
 const createPluginTool = (name: string): Tool => ({
   name,
@@ -156,4 +160,18 @@ it('includes patch-compatible file diff evidence when MCP returns file content',
       patch: '@@ -0,0 +1 @@\n+hello'
     }
   });
+});
+
+it('times out unresponsive stdio MCP requests', async () => {
+  process.env.BOBBY_MCP_REQUEST_TIMEOUT_MS = '50';
+  const transport = createMcpTransport({
+    kind: 'stdio',
+    command: process.execPath,
+    args: ['--input-type=module', '-e', 'setInterval(() => {}, 1000);']
+  });
+  if (!transport.probe) {
+    throw new Error('stdio MCP transport did not expose probe');
+  }
+
+  await expect(transport.probe()).rejects.toThrow(/timed out/);
 });

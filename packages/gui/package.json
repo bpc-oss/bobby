@@ -15,6 +15,7 @@
     "build": "vite build && tsup electron/main.ts --format esm --out-dir dist-electron --external electron && tsup electron/preload.ts --format cjs --out-dir dist-electron --external electron",
     "package": "pnpm build && node -e \"const fs=require('node:fs');const path=require('node:path');const {spawnSync}=require('node:child_process');const src=path.join(process.cwd(),'electron-builder.yml');const tmp=path.join(process.cwd(),'electron-builder.package.local.yml');let status=1;const clean=()=>{try{fs.unlinkSync(tmp);}catch{}};try{const lines=fs.readFileSync(src,'utf8').split(/\\r?\\n/);const out=[];let skipping=false;for(const line of lines){if(!skipping&&/^publish:\\s*$/.test(line)){skipping=true;continue;}if(skipping){if(line.length===0||/^[^\\s]/.test(line)){skipping=false;} else {continue;}}if(!skipping) out.push(line);}fs.writeFileSync(tmp,out.join('\\n'));const result=spawnSync(process.execPath,[require.resolve('electron-builder/out/cli/cli.js'),'--config',tmp,'--publish','never'],{stdio:'inherit'});status=result.status ?? 0;} finally {clean();}process.exit(status);\"",
     "package:publish": "pnpm build && electron-builder --config electron-builder.yml --publish onTag",
+    "smoke:electron": "node scripts/electron-smoke.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

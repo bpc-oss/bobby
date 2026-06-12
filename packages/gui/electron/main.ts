@@ -1348,6 +1348,115 @@ const notifySystem = (message: string, command?: NonNullable<typeof pendingAppCo
   });
 };
 
+async function smokeEval<T>(window: BrowserWindow, label: string, script: string, timeoutMs = 10_000): Promise<T> {
+  console.log(`BOBBY_ELECTRON_SMOKE_STEP ${label}`);
+  let timer: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      window.webContents.executeJavaScript(script),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`smoke step "${label}" timed out after ${timeoutMs}ms`)), timeoutMs);
+      })
+    ]) as T;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function runElectronSmoke(window: BrowserWindow): Promise<void> {
+  const smokeProjectDir = process.env.BOBBY_ELECTRON_SMOKE_PROJECT ?? process.cwd();
+  const result = {
+    title: await smokeEval<string>(window, 'title', 'document.title'),
+    hasBobbyBridge: await smokeEval<boolean>(window, 'bridge', 'Boolean(window.bobby)'),
+    methods: await smokeEval<string[]>(window, 'methods', 'window.bobby ? Object.keys(window.bobby).sort() : []'),
+    selectedProject: null as string | null,
+    treeCount: 0,
+    packageJsonBytes: 0,
+    terminalExitCode: null as number | null,
+    terminalStdout: '',
+    commandRoundTrip: false,
+    automationRoundTrip: false,
+    mcpServerCount: 0
+  };
+
+  if (!result.hasBobbyBridge) {
+    console.log(`BOBBY_ELECTRON_SMOKE ${JSON.stringify(result)}`);
+    app.exit(0);
+    return;
+  }
+
+  result.selectedProject = await smokeEval<string | null>(
+    window,
+    'selectProject',
+    `window.bobby.selectProject(${JSON.stringify(smokeProjectDir)}).then((selected) => selected?.project?.path ?? null)`
+  );
+  result.treeCount = await smokeEval<number>(
+    window,
+    'listWorkspaceTree',
+    'window.bobby.listWorkspaceTree().then((tree) => Array.isArray(tree) ? tree.length : 0)'
+  );
+  result.packageJsonBytes = await smokeEval<number>(
+    window,
+    'readWorkspaceFile',
+    "window.bobby.readWorkspaceFile('package.json').then((file) => file?.content?.length ?? 0)"
+  );
+  const terminal = await smokeEval<{ exitCode: number | null; stdout: string }>(
+    window,
+    'runTerminalCommand',
+    `window.bobby.runTerminalCommand({
+      command: 'node -e "process.stdout.write(' + "'bobby-electron-smoke'" + ')"',
+      confirmed: true,
+      timeoutMs: 5000
+    }).then((terminal) => {
+      const payload = terminal.evidence?.[0]?.payload ?? {};
+      return {
+        exitCode: terminal.result?.exitCode ?? null,
+        stdout: typeof payload.stdout === 'string' ? payload.stdout : ''
+      };
+    })`
+  );
+  result.terminalExitCode = terminal.exitCode;
+  result.terminalStdout = terminal.stdout;
+  result.commandRoundTrip = await smokeEval<boolean>(
+    window,
+    'commandsRoundTrip',
+    `window.bobby.upsertCommand({
+      name: 'electron-smoke',
+      description: 'Temporary Electron smoke command',
+      promptTemplate: 'Smoke {{input}}'
+    }).then(async (command) => {
+      const commands = await window.bobby.listCommands();
+      await window.bobby.removeCommand({ sourcePath: command.sourcePath });
+      return commands.some((item) => item.sourcePath === command.sourcePath);
+    })`
+  );
+  result.automationRoundTrip = await smokeEval<boolean>(
+    window,
+    'automationsRoundTrip',
+    `window.bobby.createAutomation({
+      title: 'Electron smoke automation',
+      kind: 'schedule',
+      prompt: 'No-op smoke automation.',
+      intervalMinutes: 9999
+    }).then(async (automation) => {
+      const automations = await window.bobby.listAutomations();
+      await window.bobby.removeAutomation({ id: automation.id });
+      return automations.some((item) => item.id === automation.id);
+    })`
+  );
+  result.mcpServerCount = await smokeEval<number>(
+    window,
+    'listMcpServers',
+    'window.bobby.listMcpServers().then((servers) => Array.isArray(servers) ? servers.length : 0)',
+    15_000
+  );
+
+  console.log(`BOBBY_ELECTRON_SMOKE ${JSON.stringify(result)}`);
+  app.exit(0);
+}
+
 const createWindow = () => {
   const state = readWindowState();
   mainWindow = new BrowserWindow({
@@ -1376,6 +1485,18 @@ const createWindow = () => {
 
   mainWindow.webContents.once('did-finish-load', () => {
     flushPendingAppCommand();
+    if (process.env.BOBBY_ELECTRON_SMOKE === '1') {
+      const smokeWindow = mainWindow;
+      if (!smokeWindow) {
+        console.error('BOBBY_ELECTRON_SMOKE_ERROR main window was not available');
+        app.exit(1);
+        return;
+      }
+      void runElectronSmoke(smokeWindow).catch((error: unknown) => {
+        console.error(`BOBBY_ELECTRON_SMOKE_ERROR ${error instanceof Error ? error.message : String(error)}`);
+        app.exit(1);
+      });
+    }
   });
 };
 

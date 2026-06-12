@@ -3,11 +3,12 @@ import { basename, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createMcpTransport, type McpTransportConfig } from '@bobby/kernel';
 import { afterEach, expect, it } from 'vitest';
-import { ensureDefaultMcpServers } from '../electron/mcp-manager';
+import { ensureDefaultMcpServers, probeMcpServer } from '../electron/mcp-manager';
 
 const cleanup: string[] = [];
 
 afterEach(() => {
+  delete process.env.BOBBY_MCP_REQUEST_TIMEOUT_MS;
   for (const path of cleanup.splice(0)) {
     rmSync(path, { recursive: true, force: true });
   }
@@ -48,4 +49,31 @@ it('keeps the built-in filesystem MCP server inside the workspace root', async (
 
   expect(existsSync(outsidePath)).toBe(true);
   expect(readFileSync(outsidePath, 'utf8')).toBe('outside');
+});
+
+it('marks unresponsive MCP probes as errors instead of hanging', async () => {
+  process.env.BOBBY_MCP_REQUEST_TIMEOUT_MS = '50';
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'bobby-mcp-timeout-workspace-'));
+  cleanup.push(workspaceRoot);
+
+  const result = await probeMcpServer({
+    id: 'hung-server',
+    name: 'Hung Server',
+    enabled: true,
+    transport: {
+      kind: 'stdio',
+      command: process.execPath,
+      args: ['--input-type=module', '-e', 'setInterval(() => {}, 1000);'],
+      env: { ELECTRON_RUN_AS_NODE: '1' }
+    },
+    tools: [],
+    health: 'unknown',
+    createdAt: '2026-06-12T00:00:00.000Z',
+    updatedAt: '2026-06-12T00:00:00.000Z',
+    lastCheckedAt: null,
+    lastError: null
+  }, workspaceRoot);
+
+  expect(result.health).toBe('error');
+  expect(result.lastError).toContain('timed out');
 });
