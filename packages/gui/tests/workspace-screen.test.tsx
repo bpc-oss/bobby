@@ -193,6 +193,55 @@ describe('workspace UI smoke', () => {
     expect(screen.queryByRole('button', { name: 'V3' })).toBeNull();
   });
 
+  it('renders active transcript blocks as a single task-flow column instead of chat bubbles', () => {
+    useChatStore.setState({
+      activeSessionId: 'thread-flow',
+      threads: {
+        'thread-flow': {
+          id: 'thread-flow',
+          title: 'Transcript task',
+          blocks: [
+            { kind: 'user', id: 'u-flow', text: 'Audit the transcript layout' },
+            { kind: 'reasoning', id: 'r-flow', text: 'Checking the current shell and transcript hierarchy.' },
+            { kind: 'tool', id: 't-flow', tool: 'review', status: 'done', content: 'workspace-screen.test.tsx' },
+            { kind: 'assistant', id: 'a-flow', text: 'The transcript now reads as a task flow.' }
+          ],
+          createdAt: '2026-06-12T00:03:00.000Z',
+          updatedAt: '2026-06-12T00:04:00.000Z',
+          projectDir: 'E:\\ai-files\\Bobby',
+          taskId: 'task-flow',
+          status: 'done',
+          liveReasoning: '',
+          liveAssistant: '',
+          liveToolContent: '',
+          currentPlan: [],
+          error: null,
+          costUsd: 0,
+          spendUsd: 0,
+          model: null
+        }
+      },
+      blocks: [
+        { kind: 'user', id: 'u-flow', text: 'Audit the transcript layout' },
+        { kind: 'reasoning', id: 'r-flow', text: 'Checking the current shell and transcript hierarchy.' },
+        { kind: 'tool', id: 't-flow', tool: 'review', status: 'done', content: 'workspace-screen.test.tsx' },
+        { kind: 'assistant', id: 'a-flow', text: 'The transcript now reads as a task flow.' }
+      ],
+      currentTaskId: 'task-flow',
+      status: 'done',
+      busy: false
+    });
+
+    render(<Workspace kernelClient={makeKernelClientMock()} />);
+
+    const transcript = screen.getByTestId('task-transcript');
+    expect(transcript.className).toContain('max-w-[760px]');
+    expect(screen.getByTestId('task-flow-user')).toBeTruthy();
+    expect(screen.getByTestId('task-flow-assistant')).toBeTruthy();
+    expect(within(screen.getByTestId('task-flow-user')).getByText('Request')).toBeTruthy();
+    expect(within(screen.getByTestId('task-flow-assistant')).getByText('Response')).toBeTruthy();
+  });
+
   it('switches the composer into plan-only mode and forwards that mode to startTask', async () => {
     const client = makeKernelClientMock();
     render(<Workspace kernelClient={client} />);

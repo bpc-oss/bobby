@@ -23,6 +23,27 @@ type WorkspaceProps = {
   onOpenPlugins?: () => void;
 };
 
+function TaskFlowSection({
+  label,
+  children,
+  testId
+}: {
+  label: string;
+  children: React.ReactNode;
+  testId?: string;
+}) {
+  return (
+    <section
+      data-testid={testId}
+      className="mb-4 rounded-[22px] border px-5 py-4"
+      style={{ background: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
+    >
+      <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-bobby-faint">{label}</div>
+      {children}
+    </section>
+  );
+}
+
 function UserBubble({ text }: { text: string }) {
   const busy = useChatStore((s) => s.busy);
   const [edit, setEdit] = useState(false);
@@ -44,11 +65,8 @@ function UserBubble({ text }: { text: string }) {
 
   if (edit) {
     return (
-      <div className="mb-5 flex flex-col items-end">
-        <div
-          className="w-full min-w-0 max-w-[82%] border border-accent/35 ring-1 ring-accent/15"
-          style={{ background: 'var(--bobby-surface-card)', borderRadius: 18, padding: '12px 16px' }}
-        >
+      <TaskFlowSection label="Request" testId="task-flow-user">
+        <div className="w-full min-w-0 border border-accent/35 ring-1 ring-accent/15" style={{ background: 'var(--bobby-surface-card)', borderRadius: 18, padding: '12px 16px' }}>
           <textarea
             ref={ref}
             value={draft}
@@ -77,40 +95,46 @@ function UserBubble({ text }: { text: string }) {
             </div>
           </div>
         </div>
-      </div>
+      </TaskFlowSection>
     );
   }
 
   return (
-    <div className="group relative mb-5 flex flex-col items-end">
-      <div
-        className="max-w-[82%] cursor-pointer"
-        style={{ background: 'var(--bobby-bubble-user)', color: 'var(--bobby-bubble-user-fg)', borderRadius: '18px 18px 6px 18px', padding: '10px 16px' }}
-        onDoubleClick={() => {
-          if (!busy) {
-            setDraft(text);
-            setEdit(true);
-          }
-        }}
-      >
-        <span className="whitespace-pre-wrap break-words text-[15px] font-medium leading-[1.58]">{text}</span>
-      </div>
-      <div className="mt-1 flex items-center opacity-0 transition-opacity group-hover:opacity-100">
-        <button
-          onClick={() => { setDraft(text); setEdit(true); }}
-          disabled={busy}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[12px] text-bobby-faint hover:bg-bobby-hover hover:text-bobby-ink disabled:opacity-40"
+    <TaskFlowSection label="Request" testId="task-flow-user">
+      <div className="group relative">
+        <div
+          className="w-full cursor-pointer rounded-[18px] border px-4 py-3"
+          style={{ background: 'rgba(255, 255, 255, 0.02)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
+          onDoubleClick={() => {
+            if (!busy) {
+              setDraft(text);
+              setEdit(true);
+            }
+          }}
         >
-          Edit
-        </button>
+          <span className="whitespace-pre-wrap break-words text-[15px] font-medium leading-[1.62] text-bobby-ink">{text}</span>
+        </div>
+        <div className="mt-2 flex items-center justify-end opacity-0 transition-opacity group-hover:opacity-100">
+          <button onClick={() => { setDraft(text); setEdit(true); }} disabled={busy} className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[12px] text-bobby-faint hover:bg-bobby-hover hover:text-bobby-ink disabled:opacity-40">
+            Edit
+          </button>
+        </div>
       </div>
-    </div>
+    </TaskFlowSection>
   );
 }
 
 function AssistantBubble({ text, streaming }: { text: string; streaming?: boolean }) {
   if (!text.trim()) return null;
-  return <div className="bobby-assistant-block mb-5"><div className="bobby-markdown px-1"><MarkdownRenderer content={text} streaming={streaming} /></div></div>;
+  return (
+    <TaskFlowSection label="Response" testId="task-flow-assistant">
+      <div className="bobby-assistant-block">
+        <div className="bobby-markdown px-1">
+          <MarkdownRenderer content={text} streaming={streaming} />
+        </div>
+      </div>
+    </TaskFlowSection>
+  );
 }
 
 function ReasoningBlock({ text }: { text: string }) {
@@ -1445,15 +1469,17 @@ export function Workspace({ kernelClient, onOpenPlugins }: WorkspaceProps) {
             </div>
           ) : null}
           {blocks.length === 0 && !busy && <SuggestionCards onPick={sendMessage} />}
-          {blocks.map((block) => <ChatRow key={block.id} block={block} />)}
-          {busy && (
-            <>
-              {liveReasoning && <ReasoningBlock text={liveReasoning} />}
-              {liveAssistant && <AssistantBubble text={liveAssistant} streaming />}
-            </>
-          )}
-          <style>{'@keyframes bobby-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}'}</style>
-          <div ref={bottomRef} />
+          <div data-testid="task-transcript" className="mx-auto max-w-[760px]">
+            {blocks.map((block) => <ChatRow key={block.id} block={block} />)}
+            {busy && (
+              <>
+                {liveReasoning && <ReasoningBlock text={liveReasoning} />}
+                {liveAssistant && <AssistantBubble text={liveAssistant} streaming />}
+              </>
+            )}
+            <style>{'@keyframes bobby-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}'}</style>
+            <div ref={bottomRef} />
+          </div>
         </div>
       </div>
       <Composer kernelClient={kernelClient} onSend={sendMessage} busy={busy} onAbort={abort} onOpenPlugins={onOpenPlugins} />
