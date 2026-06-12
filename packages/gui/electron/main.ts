@@ -435,28 +435,33 @@ function secretPath(): string {
 }
 
 function hasStoredSecret(): boolean {
-  return existsSync(secretPath()) || fileHasText(resolveSetupPaths().keyPath) || Boolean(process.env.DEEPSEEK_API_KEY?.trim());
+  return (
+    (safeStorage.isEncryptionAvailable() && existsSync(secretPath())) ||
+    fileHasText(resolveSetupPaths().keyPath) ||
+    Boolean(process.env.DEEPSEEK_API_KEY?.trim())
+  );
 }
 
 function writeSecret(secret: string): void {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Secure API key storage is unavailable');
+  }
+
   mkdirSync(dirname(secretPath()), { recursive: true });
-  const value = safeStorage.isEncryptionAvailable()
-    ? safeStorage.encryptString(secret).toString('base64')
-    : Buffer.from(secret, 'utf8').toString('base64');
+  const value = safeStorage.encryptString(secret).toString('base64');
   writeFileSync(secretPath(), value, 'utf8');
 }
 
 function readSecret(): string | null {
   const envKey = process.env.DEEPSEEK_API_KEY?.trim();
   if (envKey) return envKey;
+  if (!safeStorage.isEncryptionAvailable()) return null;
   try {
     if (!existsSync(secretPath())) return null;
     const raw = readFileSync(secretPath(), 'utf8').trim();
     if (!raw) return null;
     const buffer = Buffer.from(raw, 'base64');
-    return safeStorage.isEncryptionAvailable()
-      ? safeStorage.decryptString(buffer)
-      : buffer.toString('utf8');
+    return safeStorage.decryptString(buffer);
   } catch {
     return null;
   }

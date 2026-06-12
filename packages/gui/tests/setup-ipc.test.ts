@@ -370,6 +370,25 @@ describe('settings IPC handlers', () => {
     expect(JSON.stringify(publicSettings)).not.toContain('sk-real-secret');
   });
 
+  it('refuses to persist a new API key when secure storage is unavailable', async () => {
+    await loadMain();
+    safeStorageIsEncryptionAvailable.mockReturnValue(false);
+    const setSettings = handlers.get('settings:set');
+    if (!setSettings) throw new Error('settings handler not registered');
+
+    await expect(setSettings(undefined, {
+      baseUrl: 'https://api.deepseek.com',
+      modelStrategy: 'auto',
+      workspaceDir: 'E:\\ai-files\\Bobby',
+      budgetUsd: 10,
+      defaultPermission: 'L1',
+      strongSandbox: true,
+      apiKey: 'sk-should-not-hit-disk'
+    })).rejects.toThrow(/Secure API key storage is unavailable/);
+
+    expect(existsSync(join(tempHome, 'deepseek.key'))).toBe(false);
+  });
+
   it('rebuilds the kernel host from settings baseUrl and stored secret', async () => {
     await loadMain();
     const setSettings = handlers.get('settings:set');
