@@ -217,3 +217,120 @@
   font-family: var(--font-brand);
   font-weight: 700;
 }
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--hairline);
+  background: linear-gradient(180deg, var(--glass-2), transparent);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-family: var(--font-brand);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 3px;
+}
+
+.brand i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 12px var(--teal-glow), 0 0 4px var(--teal);
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--glass-2);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.pill:hover {
+  border-color: var(--hairline-2);
+  color: var(--text);
+}
+
+.pill.palette {
+  margin-left: auto;
+  width: 300px;
+  color: var(--dim);
+}
+
+.pill.palette kbd {
+  margin-left: auto;
+  padding: 1px 5px;
+  border: 1px solid var(--hairline-2);
+  border-radius: 4px;
+  color: var(--dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.icon-btn {
+  border: none;
+  background: none;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 14px;
+  transition: color 0.2s;
+}
+
+.icon-btn:hover {
+  color: var(--text);
+}
+
+.win-ctl {
+  display: flex;
+  gap: 14px;
+  margin-left: 6px;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--hairline);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.led {
+  color: var(--teal);
+  text-shadow: 0 0 8px var(--teal-glow);
+}
+
+.ctx-meter {
+  display: inline-flex;
+  width: 64px;
+  height: 6px;
+  margin: 0 6px;
+  border-radius: 999px;
+  background: var(--glass-2);
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.ctx-meter i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--teal), var(--blue));
+}
