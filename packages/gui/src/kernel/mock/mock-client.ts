@@ -34,7 +34,8 @@ export class MockKernelClient implements KernelClient {
     return meta;
   }
 
-  async startTask(sessionId: string, _input: string): Promise<void> {
+  async startTask(sessionId: string, input: string): Promise<void> {
+    void input;
     const script = this.scripts.get(sessionId);
     if (!script || script.listOnly) {
       return;

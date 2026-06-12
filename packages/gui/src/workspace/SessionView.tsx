@@ -13,6 +13,28 @@ const EMPTY_TIMELINE = [] as const;
 const EMPTY_PLAN = [] as const;
 const EMPTY_USAGE = emptyUsage();
 
+function SessionHeader({
+  title,
+  branch,
+  summaryOpen,
+  onToggle
+}: {
+  title: string;
+  branch?: string;
+  summaryOpen: boolean;
+  onToggle: () => void;
+}): JSX.Element {
+  return (
+    <div className="ws-top">
+      <span className="ws-title">{title}</span>
+      {branch && <span className="git-chip">⎇ {branch}</span>}
+      <button className={`summary-toggle ${summaryOpen ? 'open' : ''}`} onClick={onToggle}>
+        ▻ 摘要
+      </button>
+    </div>
+  );
+}
+
 export function SessionView({ sessionId }: { sessionId: string }): JSX.Element {
   const session = useSessionStore((state) => state.sessions[sessionId]);
   const timeline = useSessionStore((state) => state.timelines[sessionId]);
@@ -35,13 +57,12 @@ export function SessionView({ sessionId }: { sessionId: string }): JSX.Element {
 
   return (
     <div className="session-view">
-      <div className="ws-top">
-        <span className="ws-title">{session?.title ?? 'New Chat'}</span>
-        {session?.branch && <span className="git-chip">⎇ {session.branch}</span>}
-        <button className={`summary-toggle ${summaryOpen ? 'open' : ''}`} onClick={toggleSummary}>
-          ▾ 摘要
-        </button>
-      </div>
+      <SessionHeader
+        title={session?.title ?? 'New Chat'}
+        branch={session?.branch}
+        summaryOpen={summaryOpen}
+        onToggle={toggleSummary}
+      />
       <SummaryBar steps={plan ?? EMPTY_PLAN} currentStepId={currentStepId} />
       <div className="stream">
         {(timeline ?? EMPTY_TIMELINE).map((item, index) => (

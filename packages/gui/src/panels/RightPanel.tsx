@@ -2,6 +2,7 @@ import React from 'react';
 
 import type { RightTab } from '../store/ui-store';
 import { useUiStore } from '../store/ui-store';
+import { ReviewPanel } from './ReviewPanel';
 
 const TABS: Array<{ tab: RightTab; label: string }> = [
   { tab: 'review', label: '◈ 审查' },
@@ -12,7 +13,7 @@ const TABS: Array<{ tab: RightTab; label: string }> = [
 
 function TabBody({ tab }: { tab: RightTab }): JSX.Element {
   if (tab === 'review') {
-    return <div className="rp-empty">暂无变更与证据，待会话产出 file_diff 与证据后显示。</div>;
+    return <ReviewPanel />;
   }
 
   if (tab === 'terminal') {

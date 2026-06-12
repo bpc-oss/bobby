@@ -23,6 +23,63 @@ interface SessionState {
   applyGuiEvent: (event: GuiEvent) => void;
 }
 
+function mergeSessions(state: SessionState, list: SessionMeta[]) {
+  return {
+    sessions: {
+      ...state.sessions,
+      ...Object.fromEntries(list.map((meta) => [meta.id, meta]))
+    },
+    statuses: {
+      ...state.statuses,
+      ...Object.fromEntries(list.map((meta) => [meta.id, meta.status]))
+    }
+  };
+}
+
+function appendTimeline(state: SessionState, sessionId: string, event: KernelEvent) {
+  const nextItem: TimelineItem = { kind: 'kernel', event };
+  return {
+    ...state.timelines,
+    [sessionId]: [...(state.timelines[sessionId] ?? []), nextItem]
+  };
+}
+
+function applyKernelEvent(
+  state: SessionState,
+  sessionId: string,
+  kernelEvent: KernelEvent
+): Partial<SessionState> {
+  const next: Partial<SessionState> = {
+    timelines: appendTimeline(state, sessionId, kernelEvent)
+  };
+
+  if (kernelEvent.type === 'plan_ready') {
+    next.plans = { ...state.plans, [sessionId]: kernelEvent.steps };
+  }
+
+  if (kernelEvent.type === 'step_started') {
+    next.currentStepIds = { ...state.currentStepIds, [sessionId]: kernelEvent.stepId };
+  }
+
+  if (kernelEvent.type === 'gate_request') {
+    next.pendingGates = {
+      ...state.pendingGates,
+      [sessionId]: { gateId: kernelEvent.gateId, reason: kernelEvent.reason }
+    };
+    next.statuses = { ...state.statuses, [sessionId]: 'gate' };
+  }
+
+  if (kernelEvent.type === 'final_result') {
+    next.pendingGates = { ...state.pendingGates, [sessionId]: undefined };
+    next.statuses = {
+      ...state.statuses,
+      [sessionId]: kernelEvent.status === 'done' ? 'done' : 'failed'
+    };
+  }
+
+  return next;
+}
+
 export const useSessionStore = create<SessionState>()((set) => ({
   sessions: {},
   timelines: {},
@@ -33,17 +90,7 @@ export const useSessionStore = create<SessionState>()((set) => ({
   statuses: {},
   activeSessionId: undefined,
 
-  setSessions: (list) =>
-    set((state) => ({
-      sessions: {
-        ...state.sessions,
-        ...Object.fromEntries(list.map((meta) => [meta.id, meta]))
-      },
-      statuses: {
-        ...state.statuses,
-        ...Object.fromEntries(list.map((meta) => [meta.id, meta.status]))
-      }
-    })),
+  setSessions: (list) => set((state) => mergeSessions(state, list)),
 
   setActiveSession: (id) => set({ activeSessionId: id }),
 
@@ -59,10 +106,7 @@ export const useSessionStore = create<SessionState>()((set) => ({
   applyGuiEvent: (event) =>
     set((state) => {
       if (event.kind === 'session_meta') {
-        return {
-          sessions: { ...state.sessions, [event.session.id]: event.session },
-          statuses: { ...state.statuses, [event.session.id]: event.session.status }
-        };
+        return mergeSessions(state, [event.session]);
       }
 
       if (event.kind === 'usage') {
@@ -75,39 +119,6 @@ export const useSessionStore = create<SessionState>()((set) => ({
         };
       }
 
-      const { sessionId } = event;
-      const kernelEvent = event.event;
-      const next: Partial<SessionState> = {
-        timelines: {
-          ...state.timelines,
-          [sessionId]: [...(state.timelines[sessionId] ?? []), { kind: 'kernel', event: kernelEvent }]
-        }
-      };
-
-      if (kernelEvent.type === 'plan_ready') {
-        next.plans = { ...state.plans, [sessionId]: kernelEvent.steps };
-      }
-
-      if (kernelEvent.type === 'step_started') {
-        next.currentStepIds = { ...state.currentStepIds, [sessionId]: kernelEvent.stepId };
-      }
-
-      if (kernelEvent.type === 'gate_request') {
-        next.pendingGates = {
-          ...state.pendingGates,
-          [sessionId]: { gateId: kernelEvent.gateId, reason: kernelEvent.reason }
-        };
-        next.statuses = { ...state.statuses, [sessionId]: 'gate' };
-      }
-
-      if (kernelEvent.type === 'final_result') {
-        next.pendingGates = { ...state.pendingGates, [sessionId]: undefined };
-        next.statuses = {
-          ...state.statuses,
-          [sessionId]: kernelEvent.status === 'done' ? 'done' : 'failed'
-        };
-      }
-
-      return next;
+      return applyKernelEvent(state, event.sessionId, event.event);
     })
 }));

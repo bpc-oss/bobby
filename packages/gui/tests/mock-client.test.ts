@@ -1,3 +1,4 @@
+/* eslint-disable max-lines-per-function */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { GuiEvent } from '../src/kernel/client';

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines-per-function */
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useSessionStore } from '../src/store/session-store';
