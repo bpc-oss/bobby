@@ -32,6 +32,7 @@ type WindowWithBobby = Window & typeof globalThis & {
     listCommands: () => Promise<unknown[]>;
     upsertCommand: (input: unknown) => Promise<unknown>;
     removeCommand: (input: unknown) => Promise<boolean>;
+    saveAttachment: (input: unknown) => Promise<unknown>;
     listAutomations: () => Promise<unknown[]>;
     createAutomation: (input: unknown) => Promise<unknown>;
     updateAutomation: (input: unknown) => Promise<unknown>;
@@ -70,6 +71,7 @@ function installBobby(send = vi.fn().mockResolvedValue(undefined), onEvent = vi.
     listCommands: vi.fn().mockResolvedValue([]),
     upsertCommand: vi.fn().mockResolvedValue(undefined),
     removeCommand: vi.fn().mockResolvedValue(true),
+    saveAttachment: vi.fn().mockResolvedValue({ path: '.bobby/uploads/clip.png' }),
     listAutomations: vi.fn().mockResolvedValue([]),
     createAutomation: vi.fn().mockResolvedValue(undefined),
     updateAutomation: vi.fn().mockResolvedValue(undefined),
@@ -162,6 +164,7 @@ async function expectSetupMethodsToBeExposed(): Promise<void> {
     listCommands: vi.fn().mockResolvedValue([]),
     upsertCommand: vi.fn().mockResolvedValue(undefined),
     removeCommand: vi.fn().mockResolvedValue(true),
+    saveAttachment: vi.fn().mockResolvedValue({ path: '.bobby/uploads/clip.png' }),
     listAutomations: vi.fn().mockResolvedValue([]),
     createAutomation: vi.fn().mockResolvedValue(undefined),
     updateAutomation: vi.fn().mockResolvedValue(undefined),
@@ -266,6 +269,22 @@ async function expectCommandMethodsToDispatchCommands(): Promise<void> {
   expect(host.bobby.removeCommand).toHaveBeenCalledWith({ sourcePath: 'E:\\ai-files\\Bobby\\.bobby\\commands\\summarize.md' });
 }
 
+async function expectWorkspaceAttachmentMethodsToDispatchCommands(): Promise<void> {
+  installBobby();
+
+  const client = makeKernelClient();
+  await client.saveAttachment({
+    sourcePath: 'C:\\temp\\clip.png',
+    fileName: 'clip.png'
+  });
+
+  const host = window as WindowWithBobby;
+  expect(host.bobby.saveAttachment).toHaveBeenCalledWith({
+    sourcePath: 'C:\\temp\\clip.png',
+    fileName: 'clip.png'
+  });
+}
+
 describe('makeKernelClient IPC contract', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -277,6 +296,7 @@ describe('makeKernelClient IPC contract', () => {
   it('mcp methods should dispatch commands', expectMcpMethodsToDispatchCommands);
   it('agent methods should dispatch commands', expectSubAgentMethodsToDispatchCommands);
   it('command methods should dispatch commands', expectCommandMethodsToDispatchCommands);
+  it('workspace attachment methods should dispatch commands', expectWorkspaceAttachmentMethodsToDispatchCommands);
   it('onEvent should subscribe and return unsubscribe', expectOnEventToSubscribeAndReturnUnsubscribe);
   it('setup methods should delegate to window.bobby', expectSetupMethodsToBeExposed);
 });

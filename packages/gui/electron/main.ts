@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -57,6 +57,8 @@ import {
   TaskReadInputSchema,
   WorkspaceReadFileInputSchema,
   WorkspaceReadFileResultSchema,
+  WorkspaceSaveAttachmentInputSchema,
+  WorkspaceSaveAttachmentResultSchema,
   WorkspaceTreeNodeSchema,
   WorkspaceFileSearchEntrySchema,
   TaskDetailSchema,
@@ -384,6 +386,34 @@ function readWorkspaceTextFile(workspaceRoot: string, relativePath: string): Wor
   } catch {
     return null;
   }
+}
+
+const IMAGE_ATTACHMENT_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
+
+function sanitizeAttachmentFileName(fileName: string, sourcePath: string): string {
+  const base = basename(fileName || sourcePath).replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+/, '');
+  const fallback = basename(sourcePath).replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+/, '') || 'image.png';
+  return base || fallback;
+}
+
+function saveWorkspaceAttachment(workspaceRoot: string, sourcePath: string, fileName: string): { path: string } {
+  const absoluteSource = resolve(sourcePath);
+  if (!existsSync(absoluteSource) || !statSync(absoluteSource).isFile()) {
+    throw new Error('Attachment source file was not found');
+  }
+
+  const safeName = sanitizeAttachmentFileName(fileName, sourcePath);
+  const extension = safeName.includes('.') ? safeName.slice(safeName.lastIndexOf('.')).toLowerCase() : '';
+  if (!IMAGE_ATTACHMENT_EXTENSIONS.has(extension)) {
+    throw new Error('Attachment must be a supported image file');
+  }
+
+  const uploadRoot = join(workspaceRoot, BOBBY_DIR, 'uploads');
+  mkdirSync(uploadRoot, { recursive: true });
+  const targetName = `${Date.now()}-${safeName}`;
+  const targetPath = join(uploadRoot, targetName);
+  copyFileSync(absoluteSource, targetPath);
+  return { path: relative(workspaceRoot, targetPath).split(sep).join('/') };
 }
 
 function startPreviewServer(input: unknown) {
@@ -1548,6 +1578,11 @@ ipcMain.handle('workspace:searchFiles', async (_event, input) => {
   const query = typeof input === 'object' && input !== null && 'query' in input ? String((input as { query?: unknown }).query ?? '') : '';
   const parsed = WorkspaceFileSearchEntrySchema.array().safeParse(searchWorkspaceFiles(currentWorkspaceRoot(), query));
   return parsed.success ? parsed.data : [];
+});
+
+ipcMain.handle('workspace:saveAttachment', async (_event, input) => {
+  const parsed = WorkspaceSaveAttachmentInputSchema.parse(input);
+  return WorkspaceSaveAttachmentResultSchema.parse(saveWorkspaceAttachment(currentWorkspaceRoot(), parsed.sourcePath, parsed.fileName));
 });
 
 ipcMain.handle('workspace:listTree', async () => {

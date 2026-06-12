@@ -12,6 +12,7 @@ type WorkspaceProps = {
     restoreSnapshot?: (snapshotId?: string) => Promise<unknown>;
     getCapabilityReport?: () => Promise<CapabilityReport | null>;
     searchFiles?: (query: string) => Promise<Array<{ path: string; preview?: string | null }>>;
+    saveAttachment?: (input: { sourcePath: string; fileName: string }) => Promise<{ path: string }>;
     listCommands?: () => Promise<CommandRecordDto[]>;
     onEvent: (callback: (event: KernelEvent) => void) => () => void;
   };
@@ -606,6 +607,43 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     openSuggestions(input, event.currentTarget.selectionStart ?? input.length);
   }, [input, openSuggestions]);
 
+  const insertImageReference = useCallback(async (image: File & { path?: string }, sourcePath: string) => {
+    let referencePath = sourcePath;
+    let saved = false;
+    let saveError = '';
+    try {
+      const result = await kernelClient?.saveAttachment?.({ sourcePath, fileName: image.name });
+      if (result?.path) {
+        referencePath = result.path;
+        saved = true;
+      }
+    } catch (error) {
+      saveError = error instanceof Error ? error.message : String(error);
+    }
+
+    if (saved) {
+      setNotice(
+        visionSupported
+          ? 'Vision is enabled; Bobby saved the image to the workspace and will send it as multimodal input.'
+          : 'Vision is not enabled; Bobby saved the image to the workspace and inserted a path reference instead.'
+      );
+    } else if (saveError) {
+      setNotice(`Image save failed, so Bobby inserted the original path reference: ${saveError}`);
+    } else {
+      setNotice(
+        visionSupported
+          ? 'Vision is enabled; Bobby will send workspace image references as multimodal input.'
+          : 'Vision is not enabled in this build, so Bobby inserted a local file path reference instead.'
+      );
+    }
+
+    const insertion = `![${image.name}](${referencePath})`;
+    const cursor = ref.current?.selectionStart ?? input.length;
+    const nextValue = `${input.slice(0, cursor)}${insertion}${input.slice(ref.current?.selectionEnd ?? cursor)}`;
+    setInput(nextValue);
+    pendingSelection.current = { start: cursor + insertion.length, end: cursor + insertion.length };
+  }, [input, kernelClient, visionSupported]);
+
   const onPaste = useCallback((event: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.clipboardData.files ?? []);
     const image = files.find((file) => file.type.startsWith('image/')) ?? null;
@@ -618,17 +656,8 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     }
 
     event.preventDefault();
-    setNotice(
-      visionSupported
-        ? 'Vision is enabled; Bobby will send workspace image references as multimodal input.'
-        : 'Vision is not enabled in this build, so Bobby inserted a local file path reference instead.'
-    );
-    const insertion = `![${image.name}](${path})`;
-    const cursor = ref.current?.selectionStart ?? input.length;
-    const nextValue = `${input.slice(0, cursor)}${insertion}${input.slice(ref.current?.selectionEnd ?? cursor)}`;
-    setInput(nextValue);
-    pendingSelection.current = { start: cursor + insertion.length, end: cursor + insertion.length };
-  }, [input, visionSupported]);
+    void insertImageReference(image, path);
+  }, [insertImageReference]);
 
   const onDrop = useCallback((event: React.DragEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.dataTransfer.files ?? []);
@@ -642,17 +671,8 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     }
 
     event.preventDefault();
-    setNotice(
-      visionSupported
-        ? 'Vision is enabled; Bobby will send workspace image references as multimodal input.'
-        : 'Vision is not enabled in this build, so Bobby inserted a local file path reference instead.'
-    );
-    const insertion = `![${image.name}](${path})`;
-    const cursor = ref.current?.selectionStart ?? input.length;
-    const nextValue = `${input.slice(0, cursor)}${insertion}${input.slice(ref.current?.selectionEnd ?? cursor)}`;
-    setInput(nextValue);
-    pendingSelection.current = { start: cursor + insertion.length, end: cursor + insertion.length };
-  }, [input, visionSupported]);
+    void insertImageReference(image, path);
+  }, [insertImageReference]);
 
   return (
     <div style={{ background: 'var(--bobby-bg-canvas)' }}>

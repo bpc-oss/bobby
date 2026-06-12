@@ -269,6 +269,17 @@ export const WorkspaceReadFileResultSchema = z.object({
 });
 export type WorkspaceReadFileResult = z.infer<typeof WorkspaceReadFileResultSchema>;
 
+export const WorkspaceSaveAttachmentInputSchema = z.object({
+  sourcePath: z.string().min(1),
+  fileName: z.string().min(1)
+});
+export type WorkspaceSaveAttachmentInput = z.infer<typeof WorkspaceSaveAttachmentInputSchema>;
+
+export const WorkspaceSaveAttachmentResultSchema = z.object({
+  path: z.string().min(1)
+});
+export type WorkspaceSaveAttachmentResult = z.infer<typeof WorkspaceSaveAttachmentResultSchema>;
+
 export const TerminalRunInputSchema = z.object({
   command: z.string().min(1),
   timeoutMs: z.number().int().positive().optional(),
@@ -446,6 +457,7 @@ export function makeKernelClient() {
     removeCommand: (input: CommandRemoveInput) => window.bobby.removeCommand!(input),
     listSnapshots: () => window.bobby.listSnapshots!(),
     searchFiles: (query: string) => window.bobby.searchFiles!(query),
+    saveAttachment: (input: WorkspaceSaveAttachmentInput) => window.bobby.saveAttachment!(input),
     listWorkspaceTree: () => window.bobby.listWorkspaceTree!(),
     readWorkspaceFile: (path: string) => window.bobby.readWorkspaceFile!(path),
     runTerminalCommand: (input: TerminalRunInput) => window.bobby.runTerminalCommand!(input) as Promise<TerminalRunResult>,

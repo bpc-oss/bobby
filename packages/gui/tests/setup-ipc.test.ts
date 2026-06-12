@@ -1213,6 +1213,46 @@ describe('project IPC handlers', () => {
     const outsideFile = await readFileHandler(undefined, { path: '../outside.txt' });
     expect(outsideFile).toBeNull();
   });
+
+  it('saves image attachments into the workspace uploads directory', async () => {
+    await loadMain();
+    const selectProject = handlers.get('project:select');
+    const saveAttachmentHandler = handlers.get('workspace:saveAttachment');
+    if (!selectProject || !saveAttachmentHandler) throw new Error('workspace attachment handler not registered');
+
+    const projectRoot = mkdtempSync(join(tempHome, 'workspace-attach-'));
+    const sourceRoot = mkdtempSync(join(tempHome, 'source-attach-'));
+    const sourcePath = join(sourceRoot, 'clip.png');
+    writeFileSync(sourcePath, 'image-bytes', 'utf8');
+
+    await selectProject(undefined, { projectDir: projectRoot });
+    const saved = await saveAttachmentHandler(undefined, {
+      sourcePath,
+      fileName: '../clip.png'
+    }) as { path: string };
+
+    expect(saved.path).toMatch(/^\.bobby\/uploads\/\d+-clip\.png$/);
+    expect(readFileSync(join(projectRoot, saved.path), 'utf8')).toBe('image-bytes');
+  });
+
+  it('rejects unsupported attachment extensions before copying', async () => {
+    await loadMain();
+    const selectProject = handlers.get('project:select');
+    const saveAttachmentHandler = handlers.get('workspace:saveAttachment');
+    if (!selectProject || !saveAttachmentHandler) throw new Error('workspace attachment handler not registered');
+
+    const projectRoot = mkdtempSync(join(tempHome, 'workspace-attach-reject-'));
+    const sourcePath = join(tempHome, 'notes.txt');
+    writeFileSync(sourcePath, 'not an image', 'utf8');
+
+    await selectProject(undefined, { projectDir: projectRoot });
+    await expect(saveAttachmentHandler(undefined, {
+      sourcePath,
+      fileName: 'notes.txt'
+    })).rejects.toThrow(/supported image/i);
+
+    expect(existsSync(join(projectRoot, '.bobby', 'uploads'))).toBe(false);
+  });
 });
 
 describe('desktop integration', () => {

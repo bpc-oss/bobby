@@ -29,6 +29,8 @@ import type {
   TerminalRunInput,
   TerminalRunResult,
   WorkspaceReadFileResult,
+  WorkspaceSaveAttachmentInput,
+  WorkspaceSaveAttachmentResult,
   WorkspaceTreeNode,
   SubAgentDispatchInput,
   SubAgentDispatchRecordDto,
@@ -75,6 +77,7 @@ declare global {
       gitCommit?: (input: GitCommitInput) => Promise<GitCommitResult>;
       listSnapshots?: () => Promise<SnapshotListEntry[]>;
       searchFiles?: (query: string) => Promise<WorkspaceFileSearchEntry[]>;
+      saveAttachment?: (input: WorkspaceSaveAttachmentInput) => Promise<WorkspaceSaveAttachmentResult>;
       listWorkspaceTree?: () => Promise<WorkspaceTreeNode[]>;
       readWorkspaceFile?: (path: string) => Promise<WorkspaceReadFileResult | null>;
       runTerminalCommand?: (input: TerminalRunInput) => Promise<TerminalRunResult>;

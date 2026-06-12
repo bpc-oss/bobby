@@ -8,14 +8,16 @@ import { useChatStore } from '../src/store/chat-store';
 import { EvidencePanel } from '../src/components/EvidencePanel';
 import { App } from '../src/main';
 import { Workspace } from '../src/screens/Workspace';
-import type { SessionRecordDto } from '../src/ipc/contract';
+import type { CapabilityReport, SessionRecordDto } from '../src/ipc/contract';
 
 type KernelClientMock = {
   startTask: ReturnType<typeof vi.fn>;
   approveGate: ReturnType<typeof vi.fn>;
   restoreSnapshot: ReturnType<typeof vi.fn>;
   searchFiles: ReturnType<typeof vi.fn>;
+  saveAttachment: ReturnType<typeof vi.fn>;
   listCommands: ReturnType<typeof vi.fn>;
+  getCapabilityReport?: ReturnType<typeof vi.fn>;
   onEvent: (callback: (event: KernelEvent) => void) => () => void;
 };
 
@@ -29,6 +31,7 @@ function makeKernelClientMock(): KernelClientMock {
     approveGate: vi.fn().mockResolvedValue(undefined),
     restoreSnapshot: vi.fn().mockResolvedValue(undefined),
     searchFiles: vi.fn().mockResolvedValue([]),
+    saveAttachment: vi.fn().mockResolvedValue({ path: '.bobby/uploads/saved.png' }),
     listCommands: vi.fn().mockResolvedValue([]),
     onEvent: noopOnEvent
   };
@@ -316,8 +319,9 @@ describe('workspace UI smoke', () => {
     });
   });
 
-  it('inserts a local file path reference when an image is pasted into the composer', () => {
+  it('saves a pasted image into the workspace before inserting a path reference', async () => {
     const client = makeKernelClientMock();
+    client.saveAttachment.mockResolvedValueOnce({ path: '.bobby/uploads/clip.png' });
     render(<Workspace kernelClient={client} />);
 
     const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
@@ -326,12 +330,16 @@ describe('workspace UI smoke', () => {
 
     fireEvent.paste(input, { clipboardData: { files: [image] } });
 
-    expect(input.value).toContain('![clip.png](C:\\temp\\clip.png)');
-    expect(screen.getByText(/Vision is not enabled in this build/)).toBeTruthy();
+    await vi.waitFor(() => {
+      expect(client.saveAttachment).toHaveBeenCalledWith({ sourcePath: 'C:\\temp\\clip.png', fileName: 'clip.png' });
+      expect(input.value).toContain('![clip.png](.bobby/uploads/clip.png)');
+    });
+    expect(screen.getByText(/saved the image to the workspace and inserted a path reference/)).toBeTruthy();
   });
 
-  it('inserts a local file path reference when an image is dropped into the composer', () => {
+  it('saves a dropped image into the workspace before inserting a path reference', async () => {
     const client = makeKernelClientMock();
+    client.saveAttachment.mockResolvedValueOnce({ path: '.bobby/uploads/drop.png' });
     render(<Workspace kernelClient={client} />);
 
     const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
@@ -340,13 +348,17 @@ describe('workspace UI smoke', () => {
 
     fireEvent.drop(input, { dataTransfer: { files: [image] } });
 
-    expect(input.value).toContain('![drop.png](C:\\temp\\drop.png)');
-    expect(screen.getByText(/Vision is not enabled in this build/)).toBeTruthy();
+    await vi.waitFor(() => {
+      expect(client.saveAttachment).toHaveBeenCalledWith({ sourcePath: 'C:\\temp\\drop.png', fileName: 'drop.png' });
+      expect(input.value).toContain('![drop.png](.bobby/uploads/drop.png)');
+    });
+    expect(screen.getByText(/saved the image to the workspace and inserted a path reference/)).toBeTruthy();
   });
 
   it('shows the vision-capable notice when the capability report says vision is available', async () => {
-    const client = makeKernelClientMock() as KernelClientMock & { getCapabilityReport: ReturnType<typeof vi.fn> };
-    let resolveCapabilityReport!: (value: Parameters<NonNullable<typeof client.getCapabilityReport>>[0]) => void;
+    const client = makeKernelClientMock();
+    client.saveAttachment.mockResolvedValueOnce({ path: '.bobby/uploads/vision.png' });
+    let resolveCapabilityReport!: (value: CapabilityReport) => void;
     client.getCapabilityReport = vi.fn().mockImplementation(() => new Promise((resolve) => {
       resolveCapabilityReport = resolve;
     }));
@@ -375,8 +387,10 @@ describe('workspace UI smoke', () => {
 
     fireEvent.paste(input, { clipboardData: { files: [image] } });
 
-    expect(input.value).toContain('![vision.png](C:\\temp\\vision.png)');
-    expect(await screen.findByText(/Vision is enabled; Bobby will send workspace image references as multimodal input/)).toBeTruthy();
+    await vi.waitFor(() => {
+      expect(input.value).toContain('![vision.png](.bobby/uploads/vision.png)');
+    });
+    expect(await screen.findByText(/Vision is enabled; Bobby saved the image to the workspace and will send it as multimodal input/)).toBeTruthy();
   });
 
   it('refreshes custom slash commands after the command registry changes', async () => {
