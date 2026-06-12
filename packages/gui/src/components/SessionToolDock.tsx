@@ -98,7 +98,7 @@ function MissionPanel() {
   const gates = blocks.filter((block) => block.kind === 'gate').length;
   const evidence = blocks.filter((block) => block.kind === 'evidence').length;
   const tools = blocks.filter((block) => block.kind === 'tool').length;
-  const final = blocks.findLast((block) => block.kind === 'status');
+  const final = blocks.slice().reverse().find((block: ChatBlock) => block.kind === 'status');
   const finalStatus = final ? blockText(final) : status === 'done' ? 'Awaiting final status event' : 'Not accepted yet';
   return (
     <div className="space-y-3">

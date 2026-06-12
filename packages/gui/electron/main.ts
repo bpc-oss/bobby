@@ -47,12 +47,14 @@ import {
   McpServerRemoveInputSchema,
   McpServerToggleInputSchema,
   McpServerUpsertInputSchema,
+  SessionReadInputSchema,
   SessionRecordSchema,
   SnapshotListEntrySchema,
   TerminalRunInputSchema,
   SubAgentDispatchInputSchema,
   SubAgentRemoveInputSchema,
   SubAgentUpsertInputSchema,
+  TaskReadInputSchema,
   WorkspaceReadFileInputSchema,
   WorkspaceReadFileResultSchema,
   WorkspaceTreeNodeSchema,
@@ -66,6 +68,7 @@ import {
   type ProjectSelectResult,
   type ProposalSummary,
   type SessionRecordDto,
+  type SubAgentDispatchRecordDto,
   type SubAgentRecordDto,
   type TaskDetail,
   type TaskSummary,
@@ -1460,8 +1463,8 @@ ipcMain.handle('deepseek:capabilities', async () => getCapabilityReport());
 ipcMain.handle('sessions:list', async () => readSessions());
 
 ipcMain.handle('sessions:read', async (_event, input) => {
-  const sessionId = typeof input === 'object' && input !== null && 'sessionId' in input ? String((input as { sessionId?: unknown }).sessionId) : '';
-  return sessionId ? readSession(sessionId) : null;
+  const parsed = SessionReadInputSchema.safeParse(input);
+  return parsed.success ? readSession(parsed.data.sessionId) : null;
 });
 
 ipcMain.handle('sessions:save', async (_event, input) => writeSession(input));
@@ -1469,8 +1472,8 @@ ipcMain.handle('sessions:save', async (_event, input) => writeSession(input));
 ipcMain.handle('tasks:list', async () => taskIds().map(taskSummary).filter((item): item is TaskSummary => item !== null));
 
 ipcMain.handle('tasks:read', async (_event, input) => {
-  const taskId = typeof input === 'object' && input !== null && 'taskId' in input ? String((input as { taskId?: unknown }).taskId) : '';
-  return taskId ? taskDetail(taskId) : null;
+  const parsed = TaskReadInputSchema.safeParse(input);
+  return parsed.success ? taskDetail(parsed.data.taskId) : null;
 });
 
 ipcMain.handle('commands:list', async () => listCommands(currentWorkspaceRoot()));

@@ -110,14 +110,16 @@ export const PlanStepRecordSchema = z.object({
 });
 export type PlanStepRecord = z.infer<typeof PlanStepRecordSchema>;
 
+export const FileBackedIdSchema = z.string().min(1).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
+
 export const SessionRecordSchema = z.object({
-  id: z.string().min(1),
+  id: FileBackedIdSchema,
   title: z.string().min(1),
   blocks: z.array(z.unknown()),
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
   projectDir: z.string().nullable(),
-  taskId: z.string().nullable(),
+  taskId: FileBackedIdSchema.nullable(),
   mode: z.enum(['plan-only', 'standard', 'enhanced', 'full']).optional(),
   status: z.enum(['idle', 'running', 'done', 'failed', 'blocked']),
   liveReasoning: z.string(),
@@ -131,8 +133,13 @@ export const SessionRecordSchema = z.object({
 });
 export type SessionRecordDto = z.infer<typeof SessionRecordSchema>;
 
+export const SessionReadInputSchema = z.object({
+  sessionId: FileBackedIdSchema
+});
+export type SessionReadInput = z.infer<typeof SessionReadInputSchema>;
+
 export const TaskSummarySchema = z.object({
-  taskId: z.string().min(1),
+  taskId: FileBackedIdSchema,
   userGoal: z.string().min(1),
   state: z.string().min(1),
   taskType: z.string().min(1),
@@ -151,9 +158,14 @@ export const TaskDetailSchema = z.object({
   plan: z.array(PlanStepRecordSchema).nullable(),
   report: z.string().nullable(),
   trace: z.array(z.unknown()),
-  sessionIds: z.array(z.string())
+  sessionIds: z.array(FileBackedIdSchema)
 });
 export type TaskDetail = z.infer<typeof TaskDetailSchema>;
+
+export const TaskReadInputSchema = z.object({
+  taskId: FileBackedIdSchema
+});
+export type TaskReadInput = z.infer<typeof TaskReadInputSchema>;
 
 export const CommandRecordSchema = z.object({
   sourcePath: z.string().min(1),
@@ -183,7 +195,7 @@ export const ProposalSummarySchema = z.object({
 });
 export type ProposalSummary = z.infer<typeof ProposalSummarySchema>;
 
-const ProposalIdSchema = z.string().min(1).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
+const ProposalIdSchema = FileBackedIdSchema;
 
 export const ProposalApplyInputSchema = z.object({
   proposalId: ProposalIdSchema,

@@ -122,12 +122,12 @@ function parseJsonRpcLine(line: string): JsonRpcResponse | null {
 
 function dispatchJsonRpcLine(
   line: string,
-  pending: Map<string, (response: JsonRpcResponse) => void>,
+  pending: Map<string, { resolve: (response: JsonRpcResponse) => void; reject: (error: Error) => void }>,
   overflow: string[]
 ): void {
   const parsed = parseJsonRpcLine(line);
   if (parsed?.id && pending.has(parsed.id)) {
-    pending.get(parsed.id)?.(parsed);
+    pending.get(parsed.id)?.resolve(parsed);
     pending.delete(parsed.id);
   } else {
     overflow.push(line);
@@ -137,8 +137,15 @@ function dispatchJsonRpcLine(
 function createJsonRpcSender(child: ChildProcessWithoutNullStreams): (method: string, params?: unknown) => Promise<JsonRpcResponse> {
   let buffer = '';
   let requestId = 0;
-  const pending = new Map<string, (response: JsonRpcResponse) => void>();
+  const pending = new Map<string, { resolve: (response: JsonRpcResponse) => void; reject: (error: Error) => void }>();
   const responseQueue: string[] = [];
+
+  const failPending = (error: Error): void => {
+    for (const [id, entry] of pending) {
+      entry.reject(error);
+      pending.delete(id);
+    }
+  };
 
   const readNextLine = (): string | undefined => {
     const index = buffer.indexOf('\n');
@@ -162,21 +169,38 @@ function createJsonRpcSender(child: ChildProcessWithoutNullStreams): (method: st
   });
 
   child.stderr.on('data', () => undefined);
+  child.once('error', (error) => failPending(error));
+  child.once('exit', (code, signal) => {
+    failPending(new Error(`MCP stdio process exited before responding (code ${code ?? 'null'}, signal ${signal ?? 'null'})`));
+  });
 
   return async (method: string, params?: unknown): Promise<JsonRpcResponse> => {
     const id = `${Date.now()}-${requestId += 1}`;
     const payload: JsonRpcRequest = { jsonrpc: '2.0', id, method, params };
     return new Promise<JsonRpcResponse>((resolve, reject) => {
-      pending.set(id, resolve);
+      pending.set(id, { resolve, reject });
       child.stdin.write(`${JSON.stringify(payload)}\n`, 'utf8', (error) => {
         if (error) {
           pending.delete(id);
           reject(error);
         }
       });
-      child.once('error', reject);
     });
   };
+}
+
+async function waitForChildExit(child: ChildProcessWithoutNullStreams, timeoutMs = 1_000): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }
 
 async function runStdioSession<T>(
@@ -194,6 +218,7 @@ async function runStdioSession<T>(
     return await session(child, send);
   } finally {
     child.kill();
+    await waitForChildExit(child);
   }
 }
 

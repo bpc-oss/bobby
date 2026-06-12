@@ -23,7 +23,7 @@ const MCP_SERVERS_FILE = 'mcp-servers.json';
 
 const DEMO_FILESYSTEM_SERVER_SOURCE = String.raw`import { createInterface } from 'node:readline';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 
 const tools = [
   { name: 'read_file', description: 'Read a text file', permissionTier: 'L2' },
@@ -33,7 +33,7 @@ const tools = [
 ];
 
 const send = (message) => {
-  process.stdout.write(JSON.stringify(message) + '\\n');
+  process.stdout.write(JSON.stringify(message) + '\n');
 };
 
 const respond = (id, result) => {
@@ -46,20 +46,29 @@ const respondError = (id, message) => {
 
 const readBody = (params) => (params && typeof params === 'object' ? params : {});
 
+function resolveWorkspacePath(targetPath = '.') {
+  const root = resolve(process.cwd());
+  const path = resolve(root, targetPath);
+  const relativeToRoot = relative(root, path);
+  if (relativeToRoot === '..' || relativeToRoot.startsWith('..' + sep) || isAbsolute(relativeToRoot)) {
+    throw new Error('MCP filesystem path must stay inside workspace');
+  }
+  return path;
+}
+
 async function handleToolCall(name, params) {
   const input = readBody(params?.arguments);
-  const cwd = process.cwd();
 
   if (name === 'read_file') {
     if (typeof input.path !== 'string') throw new Error('path is required');
-    const path = resolve(cwd, input.path);
+    const path = resolveWorkspacePath(input.path);
     const content = await readFile(path, 'utf8');
     return { stdout: content, isError: false, payload: { path, content } };
   }
 
   if (name === 'write_file') {
     if (typeof input.path !== 'string') throw new Error('path is required');
-    const path = resolve(cwd, input.path);
+    const path = resolveWorkspacePath(input.path);
     const content = String(input.content ?? '');
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, content, 'utf8');
@@ -67,14 +76,14 @@ async function handleToolCall(name, params) {
   }
 
   if (name === 'list_directory') {
-    const path = resolve(cwd, typeof input.path === 'string' ? input.path : '.');
+    const path = resolveWorkspacePath(typeof input.path === 'string' ? input.path : '.');
     const entries = await readdir(path);
     return { stdout: JSON.stringify(entries), isError: false, payload: { path, entries } };
   }
 
   if (name === 'stat_path') {
     if (typeof input.path !== 'string') throw new Error('path is required');
-    const path = resolve(cwd, input.path);
+    const path = resolveWorkspacePath(input.path);
     try {
       const info = await stat(path);
       return { stdout: JSON.stringify({ exists: true, isDirectory: info.isDirectory() }), isError: false, payload: { path, exists: true, isDirectory: info.isDirectory() } };

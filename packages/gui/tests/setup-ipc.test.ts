@@ -1024,6 +1024,44 @@ describe('session IPC handlers', () => {
     expect(detail.summary.taskId).toBe('session-task-1');
     expect(detail.sessionIds).toEqual(['session-1']);
   });
+
+  it('keeps session and task ids from traversing persisted file roots', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'bobby-id-boundary-'));
+    const escapedTaskDir = join(projectRoot, '.bobby', 'escape-task');
+    mkdirSync(escapedTaskDir, { recursive: true });
+    writeFileSync(
+      join(escapedTaskDir, 'task.json'),
+      JSON.stringify({
+        userGoal: 'Escaped task',
+        state: 'done',
+        taskType: 'task',
+        createdAt: '2026-06-11T00:00:00.000Z',
+        updatedAt: '2026-06-11T01:00:00.000Z'
+      }),
+      'utf8'
+    );
+
+    await loadMain([], projectRoot);
+    const selectProject = handlers.get('project:select');
+    const readSession = handlers.get('sessions:read');
+    const saveSession = handlers.get('sessions:save');
+    const readTask = handlers.get('tasks:read');
+    if (!selectProject || !readSession || !saveSession || !readTask) throw new Error('session/task handlers not registered');
+
+    await selectProject(undefined, { projectDir: projectRoot });
+    const escapedSession = session('escaped-session', '2026-06-11T01:00:00.000Z');
+    const escapedSessionPath = join(tempHome, 'escaped-session.json');
+    writeFileSync(escapedSessionPath, JSON.stringify(escapedSession, null, 2), 'utf8');
+    const escapedSessionJson = readFileSync(escapedSessionPath, 'utf8');
+
+    await expect(readSession(undefined, { sessionId: '../escaped-session' })).resolves.toBeNull();
+    await expect(saveSession(undefined, {
+      ...session('../escaped-session', '2026-06-11T02:00:00.000Z'),
+      blocks: []
+    })).rejects.toThrow();
+    expect(readFileSync(escapedSessionPath, 'utf8')).toBe(escapedSessionJson);
+    await expect(readTask(undefined, { taskId: '../escape-task' })).resolves.toBeNull();
+  });
 });
 
 describe('preview IPC handlers', () => {
