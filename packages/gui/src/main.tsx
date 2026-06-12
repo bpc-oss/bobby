@@ -13,6 +13,7 @@ import './lib/theme.css';
 import './modes/modes.css';
 import './panels/panels.css';
 import './shell/shell.css';
+import './workspace/workspace.css';
 import { History } from './screens/History';
 import { Plugins } from './screens/Plugins';
 import { Settings } from './screens/Settings';

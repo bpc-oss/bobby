@@ -1,0 +1,159 @@
+.session-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ws-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 10px;
+}
+
+.ws-title {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.git-chip {
+  padding: 4px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-chip);
+  background: var(--glass-2);
+  color: var(--blue);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.summary-toggle {
+  margin-left: auto;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--glass-2);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.summary-toggle.open {
+  color: var(--teal);
+}
+
+.summary {
+  display: none;
+  margin: 0 16px 10px;
+  padding: 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  background: var(--glass-2);
+}
+
+.summary.open {
+  display: block;
+}
+
+.step {
+  display: flex;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.step.cur {
+  color: var(--text);
+}
+
+.sn {
+  color: var(--teal);
+}
+
+.stream {
+  flex: 1;
+  overflow: auto;
+  padding: 0 16px;
+}
+
+.composer-wrap {
+  padding: 0 16px 16px;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  background: var(--glass-2);
+}
+
+.input {
+  min-height: 80px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  outline: none;
+  resize: vertical;
+}
+
+.input::placeholder {
+  color: var(--dim);
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.chip {
+  padding: 4px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-chip);
+  background: var(--glass);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.chip.mono {
+  font-family: var(--font-mono);
+}
+
+.chip.model {
+  color: var(--text);
+}
+
+.send {
+  margin-left: auto;
+  border: 1px solid var(--hairline-2);
+  border-radius: 8px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+}
+
+.send:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.costbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 8px 4px 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
