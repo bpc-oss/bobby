@@ -30,6 +30,7 @@ function session(id: string, title: string, blocks: ChatBlock[]): SessionRecordD
 }
 
 beforeEach(() => {
+  localStorage.clear();
   (window as unknown as { bobby?: { saveSession: ReturnType<typeof vi.fn> } }).bobby = {
     saveSession: vi.fn().mockResolvedValue(undefined)
   };
@@ -46,13 +47,17 @@ beforeEach(() => {
     costUsd: 0,
     spendUsd: 0,
     model: null,
+    sessionMode: 'standard',
     threads: {},
     taskThreadIds: {},
     pendingThreadIds: [],
     sessions: [],
     activeSessionId: null,
     currentProject: null,
-    recentProjects: []
+    recentProjects: [],
+    previewTarget: null,
+    composerInsertion: null,
+    _client: null
   });
 });
 
@@ -216,6 +221,57 @@ describe('chat session store', () => {
       path: 'E:\\projects\\alpha',
       lastOpenedAt: expect.any(String)
     });
+  });
+
+  it('falls back to the most recent persisted session when the saved last active session is stale', async () => {
+    const older = session('older', 'Older task', [userBlock('u-older', 'Older task')]);
+    older.updatedAt = '2026-06-11T00:00:00.000Z';
+    older.taskId = 'task-older';
+    older.mode = 'plan-only';
+    older.projectDir = 'E:\\projects\\older';
+
+    const latest = session('latest', 'Latest task', [userBlock('u-latest', 'Latest task')]);
+    latest.updatedAt = '2026-06-11T02:00:00.000Z';
+    latest.taskId = 'task-latest';
+    latest.mode = 'full';
+    latest.projectDir = 'E:\\projects\\latest';
+
+    localStorage.setItem('bobby-last-active-session', 'missing-session');
+    (window as unknown as { bobby: { listSessions: ReturnType<typeof vi.fn> } }).bobby.listSessions = vi.fn().mockResolvedValue([older, latest]);
+
+    await useChatStore.getState().loadSessions();
+
+    const state = useChatStore.getState();
+    expect(state.activeSessionId).toBe('latest');
+    expect(state.currentTaskId).toBe('task-latest');
+    expect(state.sessionMode).toBe('full');
+    expect(state.blocks).toEqual(latest.blocks);
+    expect(state.currentProject).toEqual({
+      name: 'latest',
+      path: 'E:\\projects\\latest',
+      lastOpenedAt: expect.any(String)
+    });
+  });
+
+  it('restores the most recent persisted session when no last active session key is present', async () => {
+    const older = session('older', 'Older task', [userBlock('u-older', 'Older task')]);
+    older.updatedAt = '2026-06-11T00:00:00.000Z';
+    older.taskId = 'task-older';
+
+    const latest = session('latest', 'Latest task', [userBlock('u-latest', 'Latest task')]);
+    latest.updatedAt = '2026-06-11T02:00:00.000Z';
+    latest.taskId = 'task-latest';
+    latest.mode = 'plan-only';
+
+    (window as unknown as { bobby: { listSessions: ReturnType<typeof vi.fn> } }).bobby.listSessions = vi.fn().mockResolvedValue([older, latest]);
+
+    await useChatStore.getState().loadSessions();
+
+    const state = useChatStore.getState();
+    expect(state.activeSessionId).toBe('latest');
+    expect(state.currentTaskId).toBe('task-latest');
+    expect(state.sessionMode).toBe('plan-only');
+    expect(state.blocks).toEqual(latest.blocks);
   });
 
   it('routes background task events into their own session without polluting the visible session', () => {

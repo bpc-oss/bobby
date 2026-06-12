@@ -875,26 +875,24 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       set(state);
 
       const lastActiveSessionId = readLastActiveSessionId();
-      if (lastActiveSessionId) {
-        const target = sessions.find((session) => session.id === lastActiveSessionId);
-        if (target) {
-          const nextProject = target.projectDir
-            ? {
-                name: target.projectDir.split(/[\\/]/).filter(Boolean).at(-1) ?? target.projectDir,
-                path: target.projectDir,
-                lastOpenedAt: nowIso()
-              }
-            : get().currentProject;
-          set({
-            ...resetThreadState(target),
-            sessions: state.sessions,
-            threads: state.threads,
-            taskThreadIds: state.taskThreadIds,
-            currentProject: nextProject,
-            recentProjects: get().recentProjects,
-            _client: get()._client
-          });
-        }
+      const target = (lastActiveSessionId ? sessions.find((session) => session.id === lastActiveSessionId) : null) ?? sessions[0];
+      if (target) {
+        const nextProject = target.projectDir
+          ? {
+              name: target.projectDir.split(/[\\/]/).filter(Boolean).at(-1) ?? target.projectDir,
+              path: target.projectDir,
+              lastOpenedAt: nowIso()
+            }
+          : get().currentProject;
+        set({
+          ...resetThreadState(target),
+          sessions: state.sessions,
+          threads: state.threads,
+          taskThreadIds: state.taskThreadIds,
+          currentProject: nextProject,
+          recentProjects: get().recentProjects,
+          _client: get()._client
+        });
       }
     }
   }
