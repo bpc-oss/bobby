@@ -1334,6 +1334,35 @@ describe('automation IPC handlers', () => {
     expect(await list()).toEqual([]);
   });
 
+  it('rejects persisted automation ids that could escape task artifact roots', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'automation-boundary-'));
+    mkdirSync(join(projectRoot, '.bobby'), { recursive: true });
+    await loadMain([
+      {
+        id: '../escape-task',
+        title: 'Unsafe persisted automation',
+        kind: 'schedule',
+        prompt: 'Do not write outside tasks.',
+        intervalMinutes: 15,
+        enabled: true,
+        createdAt: '2026-06-11T00:00:00.000Z',
+        updatedAt: '2026-06-11T00:00:00.000Z',
+        lastRunAt: null,
+        nextRunAt: '2026-06-11T00:00:00.000Z'
+      } as AutomationRecord
+    ], projectRoot);
+
+    const list = handlers.get('automations:list');
+    const runNow = handlers.get('automations:runNow');
+    if (!list || !runNow) {
+      throw new Error('automation handlers not registered');
+    }
+
+    expect(await list()).toEqual([]);
+    await expect(runNow(undefined, { id: '../escape-task' })).rejects.toThrow();
+    expect(existsSync(join(projectRoot, '.bobby', 'escape-task'))).toBe(false);
+  });
+
   it('surfaces run-now failures through visible error and notification hooks', async () => {
     const projectRoot = mkdtempSync(join(tmpdir(), 'automation-failure-'));
     mkdirSync(join(projectRoot, '.bobby'), { recursive: true });

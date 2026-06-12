@@ -30,8 +30,10 @@ export type OnboardingStatus = z.infer<typeof OnboardingStatusSchema>;
 export const AutomationKindSchema = z.enum(['reminder', 'monitor', 'follow-up', 'wake', 'schedule']);
 export type AutomationKind = z.infer<typeof AutomationKindSchema>;
 
+export const FileBackedIdSchema = z.string().min(1).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
+
 export const AutomationRecordSchema = z.object({
-  id: z.string().min(1),
+  id: FileBackedIdSchema,
   title: z.string().min(1),
   kind: AutomationKindSchema,
   prompt: z.string().min(1),
@@ -53,7 +55,7 @@ export const AutomationCreateInputSchema = z.object({
 export type AutomationCreateInput = z.infer<typeof AutomationCreateInputSchema>;
 
 export const AutomationUpdateInputSchema = z.object({
-  id: z.string().min(1),
+  id: FileBackedIdSchema,
   title: z.string().min(1).optional(),
   kind: AutomationKindSchema.optional(),
   prompt: z.string().min(1).optional(),
@@ -63,12 +65,12 @@ export const AutomationUpdateInputSchema = z.object({
 export type AutomationUpdateInput = z.infer<typeof AutomationUpdateInputSchema>;
 
 export const AutomationToggleInputSchema = z.object({
-  id: z.string().min(1)
+  id: FileBackedIdSchema
 });
 export type AutomationToggleInput = z.infer<typeof AutomationToggleInputSchema>;
 
 export const AutomationRemoveInputSchema = z.object({
-  id: z.string().min(1)
+  id: FileBackedIdSchema
 });
 export type AutomationRemoveInput = z.infer<typeof AutomationRemoveInputSchema>;
 
@@ -109,8 +111,6 @@ export const PlanStepRecordSchema = z.object({
   dependsOn: z.array(z.string())
 });
 export type PlanStepRecord = z.infer<typeof PlanStepRecordSchema>;
-
-export const FileBackedIdSchema = z.string().min(1).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
 
 export const SessionRecordSchema = z.object({
   id: FileBackedIdSchema,
