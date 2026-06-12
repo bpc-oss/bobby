@@ -691,15 +691,18 @@ function FilesPanel() {
     try {
       const next = await client.listWorkspaceTree();
       setTree(next);
-      if (!selectedPath) {
-        const firstFile = findFirstFile(next);
-        if (firstFile) {
-          setSelectedPath(firstFile.path);
-          setFile(client.readWorkspaceFile ? await client.readWorkspaceFile(firstFile.path) : null);
+      if (selectedPath) {
+        const nextSelected = findNodeByPath(next, selectedPath);
+        if (!nextSelected) {
+          setSelectedPath(null);
+          setFile(null);
+        } else if (client.readWorkspaceFile) {
+          setFile(await client.readWorkspaceFile(selectedPath));
         }
       }
     } catch (nextError) {
       setTree([]);
+      setSelectedPath(null);
       setFile(null);
       setError(`Failed to load workspace files: ${errorMessage(nextError)}`);
     } finally {
@@ -742,7 +745,7 @@ function FilesPanel() {
       <div className="rounded-lg border p-2.5" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
         <label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-bobby-faint">
           <FolderOpen className="h-3.5 w-3.5" />
-          Open path
+          Open file
         </label>
         <div className="flex gap-2">
           <input
@@ -799,7 +802,7 @@ function FilesPanel() {
               <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-md bg-bobby-surface-subtle px-3 py-2 text-[12px] leading-5 text-bobby-ink">{file.content}</pre>
             </>
           ) : (
-            <Empty title="Select a file to inspect its text content." />
+            <Empty title="Select a file from the workspace tree to preview it." />
           )}
         </div>
       </div>
@@ -807,10 +810,10 @@ function FilesPanel() {
   );
 }
 
-function findFirstFile(nodes: WorkspaceTreeNode[]): WorkspaceTreeNode | null {
+function findNodeByPath(nodes: WorkspaceTreeNode[], targetPath: string): WorkspaceTreeNode | null {
   for (const node of nodes) {
-    if (node.kind === 'file') return node;
-    const nested = node.children ? findFirstFile(node.children) : null;
+    if (node.path === targetPath) return node;
+    const nested = node.children ? findNodeByPath(node.children, targetPath) : null;
     if (nested) return nested;
   }
   return null;

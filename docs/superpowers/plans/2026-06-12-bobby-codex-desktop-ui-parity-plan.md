@@ -1,417 +1,687 @@
-# Bobby Codex Desktop UI Follow-up Implementation Plan
+# Bobby Codex Desktop UI Parity Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> 状态：执行中  
+> 日期：2026-06-12  
+> 分支：`codex/bobby-cli-parity`  
+> 目标：把 Bobby GUI 从“功能接近”推进到“桌面工作台形态和交互模型接近 Codex Desktop”。
 
-**Goal:** Close the remaining Bobby GUI gap against the provided Codex Desktop screenshots by converging the shell layout, left navigation, task transcript, composer, environment popover, right dock tools, automations, and visual system into one coherent desktop workbench.
+## 1. 本计划的输入依据
 
-**Architecture:** Rework the GUI around Codex-style shell primitives instead of layering more one-off widgets onto the current dashboard. Keep all business authority in typed store and IPC layers, and treat the renderer as a composition layer that renders project/task state, tool state, and review state without inventing new backend rules.
+本计划只以以下两类依据为准：
 
-**Tech Stack:** Electron, React, TypeScript, Vite, Zustand (`chat-store`, `app-store`), Vitest, typed IPC/Zod contracts, existing Bobby kernel host APIs.
+1. 仓库内已有指令与约束  
+   - `docs/superpowers/plans/2026-06-11-bobby-desktop-parity-directive.md`
+   - `docs/superpowers/plans/2026-06-04-bobby-execution-protocol.md`
+2. 2026-06-12 提供的 Codex Desktop 截图
 
----
+本文件不再讨论“是否要做”，只定义“还差什么、按什么顺序做、做到什么算过”。
 
-## 1. Why This Follow-up Plan Exists
+## 2. 目标定义
 
-The current GUI is functionally better than before, but the user is correct: it still does not read like Codex Desktop.
+不是把 Bobby 改成“长得像聊天页”，而是改成一个完整的桌面编码工作台：
 
-The screenshots show that the parity gap is now primarily in:
+- 左侧是稳定的全局导航和项目/任务树
+- 中间是当前任务的主工作区
+- 底部是控制台式 composer
+- 右侧是固定工具入口和按需展开的 dock
+- 右上是环境信息卡，承载 git、分支、进度、浏览器、来源
+- 空状态和活跃任务状态共享同一套 shell，而不是两套页面
 
-- shell hierarchy
-- spatial information architecture
-- project/task navigation density
-- centered task transcript composition
-- composer-as-console behavior
-- context surfaces like environment and branch state
-- right-dock cohesion
-- final visual system
+## 3. 从截图抽出的目标界面模型
 
-This plan is the authoritative next-phase UI program for the Bobby GUI branch after the already landed P7-P11 slices.
+### 3.1 顶层窗口层
 
-## 2. Screenshot-Derived Product Model
+- 原生菜单栏保留
+- 主体是三栏工作台，而不是单页 dashboard
+- 中央工作区有明显的“画布感”，左右两侧是稳定辅助区
 
-The provided screenshots define the target product model:
+### 3.2 左侧一级导航
 
-1. Left icon rail for top-level app areas.
-2. Separate left project/task navigator under that rail.
-3. Center column for the active task transcript.
-4. Floating environment card in the top-right of the center workspace.
-5. Persistent right tool launcher and dock panels.
-6. Large bottom composer that behaves like a task control console, not a plain chat box.
-7. Empty-state mode that still preserves shell context, dock shortcuts, and project selection.
+截图表现出的一级导航模型：
 
-If a future GUI change does not strengthen one of those seven areas, it is probably not helping parity.
+- `新对话/快速对话`
+- `搜索`
+- `插件`
+- `自动化`
+- `设置`
 
-## 3. Current Bobby Baseline
+要求：
 
-These areas are already materially implemented and should be treated as baseline, not greenfield:
+- 一级导航是“应用区切换”，不是“功能卡片列表”
+- 图标、文字、激活态、间距统一
+- 切换页面时右侧 dock 和整体 shell 不闪断
 
-- `P7` terminal panel
-- `P8` browser panel
-- `P9` review/diff/apply/commit dock
-- `P10` global search page
-- `P11` plugin menu to plugins page inventory sync
+### 3.3 左侧二级导航：项目与任务
 
-These slices are useful, but they currently live inside a shell that still feels like a Bobby-specific dashboard instead of a Codex-style workbench.
+截图表现出的二级导航模型：
 
-## 4. File Map And Ownership
+- 有“项目”分组
+- 项目下能直接看到任务条目
+- 任务条目可显示当前活动状态
+- 项目列表可滚动，任务密度高
 
-The remaining work should concentrate in these files first:
+要求：
 
-### Shell and routing
+- 项目是一级实体，任务是项目下属实体
+- 每个任务的状态必须来自该任务自己的线程/运行态
+- 不能再使用会串线的全局 busy 标记替代 per-task 状态
 
-- Modify: `packages/gui/src/main.tsx`
-- Modify: `packages/gui/src/components/Sidebar.tsx`
-- Modify: `packages/gui/src/screens/Workspace.tsx`
-- Modify: `packages/gui/src/components/SessionToolDock.tsx`
-- Modify: `packages/gui/src/app.css`
-- Modify: `packages/gui/src/styles/tokens.css`
+### 3.4 中央工作区
 
-### State and behavior
+截图表现出的中央区模型：
 
-- Modify: `packages/gui/src/store/chat-store.ts`
-- Modify: `packages/gui/src/store/app-store.ts`
-- Modify: `packages/gui/src/ipc/contract.ts`
+- 空状态时，大标题和 composer 居中，但 shell 不消失
+- 有任务时，中间是 transcript，不是普通聊天卡片堆叠
+- 顶部标题显示当前任务名
+- 工具输出、推理状态、结果、错误都在同一条任务流中
 
-### Existing screens that need shell-level integration
+要求：
 
-- Modify: `packages/gui/src/screens/Search.tsx`
-- Modify: `packages/gui/src/screens/PluginMarketplace.tsx`
-- Modify: `packages/gui/src/screens/ScheduleTasks.tsx`
-- Modify: `packages/gui/src/screens/History.tsx`
-- Modify: `packages/gui/src/screens/ProjectHome.tsx`
+- transcript 层级明确：用户消息、assistant 消息、reasoning、工具、状态卡、错误卡
+- 消息区宽度、留白、行宽接近工作台阅读模式
+- “正在思考/已运行 N 条命令/审查”等状态要自然挂在任务流上
 
-### Tests that must carry parity acceptance
+### 3.5 底部 composer
 
-- Modify: `packages/gui/tests/workspace-screen.test.tsx`
-- Modify: `packages/gui/tests/chat-store.test.ts`
-- Modify: `packages/gui/tests/session-tool-dock.test.tsx`
-- Modify: `packages/gui/tests/plugins.test.tsx`
-- Modify: `packages/gui/tests/automations.test.tsx`
-- Modify: `packages/gui/tests/history.test.tsx`
-- Modify: `packages/gui/tests/smoke.test.ts`
+截图表现出的 composer 模型：
 
-## 5. Authoritative Gap Matrix
+- 不是单纯输入框，而是“控制台”
+- 左侧 `+` 菜单里有：
+  - 添加照片和文件
+  - 创建
+  - 计划模式
+  - 追求目标
+  - 插件
+- 主输入区上方/下方存在上下文控制行
+- 可见权限级别、目标开关、模型档位、语音/发送按钮
+- 项目、执行目标、分支上下文集成在 composer 附近
 
-| Screenshot surface | Current Bobby state | Required follow-up |
-|---|---|---|
-| Left icon rail | Exists, but still reads as a feature menu rather than a Codex rail | Tighten density, labels, grouping, and active-state behavior |
-| Project/task tree | Exists, but not yet visually or behaviorally aligned with Codex | Make it denser, more scrollable, and more obviously project-first |
-| Center transcript | Functionally present, visually still too Bobby-specific | Reframe as task transcript with stronger header/body/composer separation |
-| Empty state | Present, but still not fully Codex-like | Preserve shell, project, dock, and centered prompt hierarchy |
-| Composer | Broadly capable, but still not a unified control console | Normalize menu structure, context row, permissions, model, target, and branch affordances |
-| Environment card | Present, but still partial and visually rough | Unify branch, dirty counts, progress, browser target, sources, and actions |
-| Right dock launcher | Present, but still more utilitarian than Codex | Make the launcher labels, shortcuts, and panel states feel first-class |
-| Files panel | Functional but not parity-grade | Make split tree/preview flow match the screenshot model |
-| Automations | Has core CRUD/run-now flow, but weak shell integration | Add explicit history/jump/result flow and make it a shell citizen |
-| Visual system | Improved, but inconsistent | Finish dark workbench style and spacing rules across all panels |
+要求：
 
-## 6. Non-Negotiable Guardrails
+- composer 必须形成三层结构：
+  - 输入层
+  - 控制层
+  - 上下文层
+- 空状态和任务状态使用同一组件合同
+- 插件入口不能只是跳页，还要保留“已安装插件/可调用插件”的上下文感觉
 
-1. Apply, rewind, and automation must still obey the completion gate.
-2. Evidence visibility cannot regress.
-3. Secrets remain out of renderer state; renderer sees `hasApiKey`, not raw key material.
-4. Renderer may coordinate view state only; core logic stays in IPC/store/kernel layers.
-5. New IPC must stay Zod-backed.
-6. Every accepted slice must end in commit and push.
-7. No fake parity controls. If a control exists, it must work or be explicitly unavailable.
+### 3.6 右上环境信息卡
 
-## 7. Delivery Order
+截图表现出的环境卡模型：
 
-The remaining parity program should execute in this order:
+- 标题：环境信息
+- git 变更统计：新增/删除
+- 运行环境：本地
+- 分支选择器，当前分支可切换
+- `提交或推送`
+- `创建拉取请求`
+- 进度 checklist
+- 浏览器目标
+- 来源
 
-1. Shell cohesion and left-side hierarchy
-2. Center transcript and empty-state cleanup
-3. Composer console completion
-4. Environment popover completion
-5. Files panel parity
-6. Automations shell integration
-7. Desktop persistence and shortcuts polish
-8. Final visual-system pass and screenshot audit
+要求：
 
-This order matters because the visual/layout problems are structural. Polishing inner panels first would create churn.
+- 这是当前任务的总上下文卡，不是纯 git 卡
+- 分支切换器需要可展开搜索/选择
+- `提交或推送`、`创建拉取请求` 要么真能工作，要么明确禁用且说明原因
+- checklist 必须和当前任务/计划状态联动
 
-## 8. Implementation Batches
+### 3.7 右侧工具入口与 dock
 
-### Task 1: Shell Hierarchy Refactor
+截图表现出的右侧工具模型：
 
-**Files:**
-- Modify: `packages/gui/src/main.tsx`
-- Modify: `packages/gui/src/components/Sidebar.tsx`
-- Modify: `packages/gui/src/screens/Workspace.tsx`
-- Modify: `packages/gui/src/components/SessionToolDock.tsx`
-- Test: `packages/gui/tests/workspace-screen.test.tsx`
-- Test: `packages/gui/tests/session-tool-dock.test.tsx`
+- 固定快捷入口：
+  - 审查
+  - 终端
+  - 浏览器
+  - 文件
+- 有快捷键标签
+- 点击后出现真正可用的面板，不是占位
 
-- [ ] Split the shell mentally and structurally into:
-  - activity rail
-  - project/task navigator
-  - main workspace
-  - right dock
-- [ ] Remove remaining dashboard-style framing that makes the workspace look like one flat page.
-- [ ] Ensure the right dock remains visible and usable in both empty and active task states.
-- [ ] Keep current page routing in `main.tsx`, but make `chat` render as a composed workbench instead of sidebar + generic content.
-- [ ] Add focused tests for:
-  - empty-state shell still renders left nav and right dock
-  - active task state still renders all shell regions
-  - switching pages does not destroy dock state unexpectedly
-- [ ] Run:
-  - `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx session-tool-dock.test.tsx`
+要求：
 
-**Acceptance:**
-- Bobby reads as a three-region desktop workbench at first glance.
-- Empty-state and active-task modes share the same shell.
-- Dock shortcuts remain visible in both modes.
+- 右侧入口是“稳定存在的工作台部件”
+- dock 开闭、当前 tab、内容状态要可持续
+- 不同页面下仍然能作为全局工具存在
 
-### Task 2: Left Navigation Parity
+### 3.8 文件面板
 
-**Files:**
-- Modify: `packages/gui/src/components/Sidebar.tsx`
-- Modify: `packages/gui/src/store/chat-store.ts`
-- Test: `packages/gui/tests/chat-store.test.ts`
-- Test: `packages/gui/tests/workspace-screen.test.tsx`
+截图表现出的文件面板模型：
 
-- [ ] Tighten the left rail grouping so the top-level entries match the screenshot intent:
-  - new chat
-  - search
-  - plugins
-  - automations
-  - settings
-- [ ] Rework the project/task navigator density so project folders and nested tasks are visually distinct.
-- [ ] Ensure per-task status is always derived from the owning thread rather than a global busy flag.
-- [ ] Add or extend tests for:
-  - project grouping after `loadSessions`
-  - two tasks under one project keep separate statuses
-  - selecting one running task does not corrupt another task
-- [ ] Run:
-  - `pnpm --filter @bobby/gui test -- chat-store.test.ts workspace-screen.test.tsx`
+- 左侧文件树
+- 右侧预览区
+- 初始为空预览，不自动打开第一个文件
+- 顶部有文件过滤输入框
+- 目录可展开折叠
+- 选中文件后再预览
 
-**Acceptance:**
-- Left side feels project-first.
-- Tasks are clearly nested under projects.
-- Running, failed, blocked, and done states stay thread-local.
+要求：
 
-### Task 3: Center Transcript And Empty-State Parity
+- 默认空预览
+- 文件树和预览区视觉分栏明确
+- 选中文件后可插入引用回 composer
+- 读取失败要显示错误卡，不能静默失败
 
-**Files:**
-- Modify: `packages/gui/src/screens/Workspace.tsx`
-- Modify: `packages/gui/src/components/MarkdownRenderer.tsx`
-- Test: `packages/gui/tests/workspace-screen.test.tsx`
+### 3.9 视觉系统
 
-- [ ] Simplify the center column framing so the transcript becomes the dominant focal area.
-- [ ] Reduce non-parity header clutter in empty state.
-- [ ] Keep the large centered prompt and suggestion cards, but make them subordinate to the real Codex-like shell framing.
-- [ ] Tighten transcript block spacing for:
-  - user turns
-  - assistant turns
+截图表现出的视觉方向：
+
+- 近黑背景
+- 面板是轻微抬起的深灰层
+- 圆角偏大
+- 边框很细
+- 文本层级鲜明
+- 列表密度高，但不拥挤
+
+要求：
+
+- 统一 tokens，不允许继续一处一处临时补色值
+- 全局 spacing、radius、border、hover、focus、active 态统一
+
+## 4. 当前 Bobby 已有基础
+
+以下能力不是本轮从零开始：
+
+- 左侧导航与项目列表已有雏形
+- 中央 transcript 已能展示任务过程
+- 右侧 dock 已有 `review / terminal / browser / files`
+- 搜索页、插件页、自动化页已存在
+- 环境卡已有部分信息
+- 文件面板已能列树、预览、插入引用
+
+当前问题不是“有没有功能”，而是：
+
+- 壳层结构还不像 Codex Desktop
+- 组件之间仍像拼接物，而不是统一工作台
+- 交互密度、空状态、状态归属和视觉一致性仍有明显差距
+
+## 5. 后续开发总原则
+
+1. 先壳层，后局部面板。  
+   不先做结构，局部 polish 会反复返工。
+2. 先行为正确，再做视觉对齐。  
+   占位按钮和假控件会制造错误预期。
+3. 每个 slice 都要带测试和验收。  
+   不接受“UI 看起来差不多”。
+4. 只在 renderer 放视图编排，不把业务规则塞进 UI。  
+   线程、任务、计划、git、工具能力仍以 store/IP C/kernel 为准。
+5. 每个验收通过的 slice 立即 `commit + push`。  
+   不再积压大批未推送改动。
+
+## 6. 模块化工单拆解
+
+### W1. Shell 骨架重构
+
+目标：让 Bobby 第一眼就是三栏工作台。
+
+范围文件：
+
+- `packages/gui/src/main.tsx`
+- `packages/gui/src/components/Sidebar.tsx`
+- `packages/gui/src/screens/Workspace.tsx`
+- `packages/gui/src/components/SessionToolDock.tsx`
+- `packages/gui/src/app.css`
+- `packages/gui/src/styles/tokens.css`
+
+实施项：
+
+- 固定 shell 四区：
+  - 左一级导航
+  - 左项目/任务区
+  - 中央工作区
+  - 右工具区
+- 清除仍然像 dashboard 的包裹容器和多余标题块
+- 空状态和任务状态共用同一 shell
+- 右侧工具入口在空状态和任务状态都保留
+
+自动化验收：
+
+- `workspace-screen.test.tsx`
+- `session-tool-dock.test.tsx`
+
+人工验收：
+
+- 打开 GUI，未选任务时仍能看到左右两侧稳定框架
+- 进入任务后壳层不重排成另一套页面
+
+### W2. 左侧一级导航与项目树对齐
+
+目标：把左侧从“页面目录”变成“应用区 + 项目树”。
+
+范围文件：
+
+- `packages/gui/src/components/Sidebar.tsx`
+- `packages/gui/src/store/chat-store.ts`
+- `packages/gui/src/store/app-store.ts`
+- `packages/gui/tests/chat-store.test.ts`
+- `packages/gui/tests/workspace-screen.test.tsx`
+
+实施项：
+
+- 一级导航按截图收敛为：
+  - 新对话
+  - 搜索
+  - 插件
+  - 自动化
+  - 设置
+- 项目列表下沉为独立区域
+- 项目条目支持折叠/展开
+- 项目下任务条目高密度展示
+- 任务状态改为严格 per-task 派生
+- 长项目名和长任务名支持截断与 hover 完整展示
+
+自动化验收：
+
+- `loadSessions` 后项目分组正确
+- 同项目两个任务并行时状态不串线
+- 选中任务切换不污染其他任务状态
+
+人工验收：
+
+- 左侧列表能直观看到 `Bobby` 项目和其下任务
+- 滚动时项目区和一级导航层次仍清晰
+
+### W3. 中央 transcript 重构
+
+目标：让中央区读起来像任务流，而不是聊天页。
+
+范围文件：
+
+- `packages/gui/src/screens/Workspace.tsx`
+- `packages/gui/src/components/MarkdownRenderer.tsx`
+- `packages/gui/src/app.css`
+- `packages/gui/tests/workspace-screen.test.tsx`
+
+实施项：
+
+- 当前任务标题固定在主工作区顶部
+- transcript 的层级和间距重新整理：
+  - 用户请求
+  - 助手回复
   - reasoning
-  - tools
-  - evidence
-  - status/error cards
-- [ ] Add tests for:
-  - empty-state centered prompt remains visible
-  - transcript stays visible while reasoning and assistant streaming update
-  - final result stays attached to the active thread only
-- [ ] Run:
-  - `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx`
+  - 工具结果
+  - 状态卡
+  - 错误卡
+- “已运行 N 条命令”“正在思考”“审查”等状态保留在任务流上下文
+- 限制最大阅读宽度，避免全文铺满
 
-**Acceptance:**
-- The center column reads like an active task stream, not a generic chat page.
-- Empty state is centered and restrained.
-- Evidence stays visible throughout live execution.
+自动化验收：
 
-### Task 4: Composer Console Completion
+- 空状态标题和 composer 居中但壳层不消失
+- 任务执行中 transcript 可持续显示
+- streaming、reasoning、final result 只更新当前线程
 
-**Files:**
-- Modify: `packages/gui/src/screens/Workspace.tsx`
-- Modify: `packages/gui/src/store/chat-store.ts`
-- Modify: `packages/gui/src/ipc/contract.ts`
-- Test: `packages/gui/tests/workspace-screen.test.tsx`
+人工验收：
 
-- [ ] Normalize the composer as one console with three layers:
-  - input box
-  - control/menu row
-  - context row
-- [ ] Keep the plus menu as the entry point for:
-  - add files/images
-  - create
-  - plan mode
-  - goal tracking
-  - plugins
-- [ ] Tighten the context row so project, execution target, and branch/project context read like Codex controls rather than ad hoc pills.
-- [ ] Audit current labels and menu affordances for consistency between empty state and active task state.
-- [ ] Add tests for:
-  - plus menu sections render in the expected order
-  - project picker remains searchable
-  - plugin menu still opens the Plugins page
-  - plan/goal controls remain visible in empty and active states
-- [ ] Run:
-  - `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx plugins.test.tsx`
+- 当前任务名、执行过程、结果能一眼串起来
 
-**Acceptance:**
-- Composer feels like a control console, not just an input widget.
-- Empty and active task states share one consistent composer contract.
-- Existing file, command, and plugin entry points continue to work.
+### W4. Composer 控制台化
 
-### Task 5: Environment Popover Completion
+目标：把底部输入区做成真正的任务控制台。
 
-**Files:**
-- Modify: `packages/gui/src/screens/Workspace.tsx`
-- Modify: `packages/gui/src/ipc/contract.ts`
-- Test: `packages/gui/tests/workspace-screen.test.tsx`
+范围文件：
 
-- [ ] Finish the floating environment card so it reliably shows:
-  - added/deleted counts
-  - branch and branch switcher
-  - commit/push and PR actions
-  - active progress steps
-  - browser target
-  - sources
-- [ ] Remove placeholder-feeling controls and replace them with honest actions or read-only states.
-- [ ] Make branch selection feel like an inline popover, matching the screenshot pattern.
-- [ ] Add tests for:
-  - git counts render from real summary data
-  - branch list opens and highlights the current branch
-  - progress steps reflect the active thread plan
-- [ ] Run:
-  - `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx`
+- `packages/gui/src/screens/Workspace.tsx`
+- `packages/gui/src/store/chat-store.ts`
+- `packages/gui/src/ipc/contract.ts`
+- `packages/gui/tests/workspace-screen.test.tsx`
+- `packages/gui/tests/plugins.test.tsx`
 
-**Acceptance:**
-- The environment card becomes the unified context surface for git, progress, browser, and sources.
-- Current branch and dirty state are immediately visible.
+实施项：
 
-### Task 6: Files Panel Parity
+- 重构 composer 为三层：
+  - 主输入框
+  - 操作控制行
+  - 项目/目标/执行上下文行
+- `+` 菜单按截图顺序组织
+- 保留并统一：
+  - 添加照片和文件
+  - 创建
+  - 计划模式
+  - 追求目标
+  - 插件
+- 明确展示：
+  - 权限级别
+  - 目标开关
+  - 模型档位
+  - 语音/发送
+- 项目选择器、执行目标、本地模式、分支上下文统一排布
 
-**Files:**
-- Modify: `packages/gui/src/components/SessionToolDock.tsx`
-- Modify: `packages/gui/src/ipc/contract.ts`
-- Test: `packages/gui/tests/session-tool-dock.test.tsx`
-- Test: `packages/gui/tests/workspace-screen.test.tsx`
+自动化验收：
 
-- [ ] Rework the files dock into a clearer split tree/preview layout.
-- [ ] Make the empty preview state explicitly tell the user to select a file from the workspace tree.
-- [ ] Tighten tree filtering, selection focus, and folder expansion behavior to better match the screenshot flow.
-- [ ] Ensure file insertion back into the composer still works from the dock.
-- [ ] Add tests for:
-  - file tree filter narrows results
-  - selecting a file updates the preview pane
-  - empty preview state renders before selection
-- [ ] Run:
-  - `pnpm --filter @bobby/gui test -- session-tool-dock.test.tsx workspace-screen.test.tsx`
+- plus 菜单顺序稳定
+- 项目 picker 支持搜索
+- 插件菜单仍能进入插件页
+- 计划模式/目标控制在空状态和任务状态都可见
 
-**Acceptance:**
-- Files panel reads like a real right-side workspace tool, not a utility drawer.
-- Tree and preview panes are clearly separated.
+人工验收：
 
-### Task 7: Automations Shell Integration
+- composer 不再像独立组件，而像工作台底部控制台
 
-**Files:**
-- Modify: `packages/gui/src/screens/ScheduleTasks.tsx`
-- Modify: `packages/gui/src/screens/History.tsx`
-- Modify: `packages/gui/src/main.tsx`
-- Test: `packages/gui/tests/automations.test.tsx`
-- Test: `packages/gui/tests/history.test.tsx`
+### W5. 环境信息卡完成度
 
-- [ ] Add an explicit jump path from automations into history/task results.
-- [ ] Make the automations page expose result visibility instead of only CRUD/run-now controls.
-- [ ] Ensure notification and history routing agree on where automation output lives.
-- [ ] Add tests for:
-  - run-now failure still surfaces as error card
-  - clicking the automation result/history action opens the expected page
-  - resumed history entry can return to the owning task
-- [ ] Run:
-  - `pnpm --filter @bobby/gui test -- automations.test.tsx history.test.tsx`
+目标：把环境卡变成统一上下文卡。
 
-**Acceptance:**
-- Automations become part of the shell workflow, not an isolated settings page.
-- Automation output has a visible path back into history/task context.
+范围文件：
 
-### Task 8: Desktop Persistence And Visual System
+- `packages/gui/src/screens/Workspace.tsx`
+- `packages/gui/src/ipc/contract.ts`
+- `packages/gui/tests/workspace-screen.test.tsx`
 
-**Files:**
-- Modify: `packages/gui/src/store/app-store.ts`
-- Modify: `packages/gui/src/store/chat-store.ts`
-- Modify: `packages/gui/src/styles/tokens.css`
-- Modify: `packages/gui/src/app.css`
-- Test: `packages/gui/tests/app-store.test.ts`
-- Test: `packages/gui/tests/smoke.test.ts`
+实施项：
 
-- [ ] Persist the remaining high-value shell state:
-  - active project
-  - active task
-  - open dock tab
-  - dock open/closed
-  - left/right widths if introduced
-- [ ] Finish the dark workbench visual pass:
-  - near-black background
-  - softer elevated surfaces
-  - thin borders
-  - larger composer/popover rounding
-  - compact list rows
-  - consistent focus/active colors
-- [ ] Verify keyboard shortcuts still behave around the composer.
-- [ ] Add tests for:
-  - restored dock state
-  - restored active task/project where applicable
-  - smoke-visible shell regions after reload
-- [ ] Run:
-  - `pnpm --filter @bobby/gui test -- app-store.test.ts smoke.test.ts`
+- 稳定显示：
+  - 新增/删除统计
+  - 本地环境标签
+  - 当前分支
+  - 分支切换器
+  - 提交或推送
+  - 创建拉取请求
+  - 进度 checklist
+  - 浏览器目标
+  - 来源
+- 分支切换器支持搜索和当前分支高亮
+- `提交或推送` 直接联动 review/diff 工作流
+- `创建拉取请求` 在未接线前保持显式禁用，不伪装可用
+- checklist 来自真实计划状态
 
-**Acceptance:**
-- Bobby reopens into a coherent previous workspace state.
-- The whole app feels visually like one system instead of mixed generations of UI.
+自动化验收：
 
-## 9. Cross-Batch Verification Rules
+- git 统计来自真实 summary
+- 当前分支高亮正确
+- 点击 `提交或推送` 有明确行为
+- `创建拉取请求` 的禁用态和原因可见
 
-After each accepted batch:
+人工验收：
 
-- [ ] Run the narrowest relevant GUI tests first.
-- [ ] Run `pnpm --filter @bobby/gui test`.
-- [ ] Run `pnpm --filter @bobby/gui smoke:electron` for shell/composer/dock/IPC changes.
-- [ ] Commit immediately.
-- [ ] Push immediately.
+- 右上卡片能独立回答“我现在在哪个分支、改了多少、下一步是什么”
 
-For milestone completion:
+### W6. 右侧工具入口与 dock 一体化
 
-- [ ] Run `pnpm -r test`
-- [ ] Run `pnpm build`
+目标：让右侧不是工具抽屉，而是长期驻留的工作区。
 
-## 10. Final Screenshot Parity Audit
+范围文件：
 
-The final manual audit must validate all of the following against the screenshot set:
+- `packages/gui/src/components/SessionToolDock.tsx`
+- `packages/gui/src/store/app-store.ts`
+- `packages/gui/src/screens/Workspace.tsx`
+- `packages/gui/tests/session-tool-dock.test.tsx`
+- `packages/gui/tests/workspace-screen.test.tsx`
 
-- [ ] Left icon rail and project/task navigator feel like one coherent navigation system.
-- [ ] Empty state keeps left rail, project list, composer, and right shortcuts visible.
-- [ ] The center column keeps task transcript density and hierarchy.
-- [ ] Environment popover exposes git, branch, progress, browser, and sources in one surface.
-- [ ] Files panel behaves as split tree + preview.
-- [ ] Right tool shortcuts remain visible and useful during active task work.
-- [ ] Composer menus and context row match the screenshot structure closely enough that the difference is polish-level, not architecture-level.
+实施项：
 
-## 11. Final Acceptance Script
+- 固定入口：
+  - 审查
+  - 终端
+  - 浏览器
+  - 文件
+- 入口文案、快捷键、选中态统一
+- dock 当前 tab 保持
+- 页面切换后 dock 状态可恢复
+- review、terminal、browser、files 各自空状态和错误状态统一
 
-- [ ] Open a project.
-- [ ] Start two tasks under the same project.
-- [ ] Confirm the left navigator shows both tasks with separate statuses.
-- [ ] Use global search and jump back into one task.
-- [ ] Open the files dock and insert a file reference.
-- [ ] Use the plugin menu and open the Plugins page.
-- [ ] Open the environment popover and inspect branch and git counts.
-- [ ] Open terminal, browser, review, and files from the right dock.
-- [ ] Trigger one automation and jump to its resulting history/task surface.
-- [ ] Restart the app and confirm meaningful shell state is restored.
-- [ ] Run `pnpm -r test`.
-- [ ] Run `pnpm --filter @bobby/gui smoke:electron`.
+自动化验收：
 
-## 12. Recommended First Execution Slice
+- 切换 tab 不丢当前状态
+- 页面跳转不异常关闭 dock
+- 空状态下也能打开各工具
 
-Start with **Task 1: Shell Hierarchy Refactor** and **Task 2: Left Navigation Parity** together, because the screenshots show the biggest mismatch on the left side and overall shell composition.
+人工验收：
 
-Do not start with more inner-panel work until the shell stops looking structurally different from Codex Desktop.
+- 右侧入口在任何时刻都像“系统工具栏”
 
-Plan complete and saved to `docs/superpowers/plans/2026-06-12-bobby-codex-desktop-ui-parity-plan.md`. Two execution options:
+### W7. 文件面板精修
 
-**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
+目标：文件面板按截图行为收口。
 
-**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
+范围文件：
 
-Which approach?
+- `packages/gui/src/components/SessionToolDock.tsx`
+- `packages/gui/src/ipc/contract.ts`
+- `packages/gui/tests/session-tool-dock.test.tsx`
+
+实施项：
+
+- 默认空预览
+- 左树右预览固定布局
+- 文件筛选输入稳定可用
+- 目录展开/折叠视觉清晰
+- 选中高亮统一
+- 读取失败展示错误卡
+- 插入引用继续回写 composer
+
+自动化验收：
+
+- 初始显示 `Open file` 空状态
+- 选择文件后才出现预览
+- 筛选结果能缩小树内容
+- 读取失败走错误卡
+- 插入引用成功写回共享 composer 状态
+
+人工验收：
+
+- 文件树浏览体验接近截图，不再自动打开第一个文件
+
+### W8. 搜索、插件、自动化纳入统一 shell
+
+目标：其他页面不再像“跳出工作台”的独立页面。
+
+范围文件：
+
+- `packages/gui/src/screens/Search.tsx`
+- `packages/gui/src/screens/PluginMarketplace.tsx`
+- `packages/gui/src/screens/ScheduleTasks.tsx`
+- `packages/gui/src/screens/History.tsx`
+- `packages/gui/src/main.tsx`
+- `packages/gui/tests/plugins.test.tsx`
+- `packages/gui/tests/automations.test.tsx`
+- `packages/gui/tests/history.test.tsx`
+
+实施项：
+
+- 搜索页保留同一 shell
+- 插件页和 composer 中的插件入口语义一致
+- 自动化页增强“结果可见性”
+- 自动化到历史/任务结果页有明确跳转路径
+- 历史记录返回任务上下文路径清楚
+
+自动化验收：
+
+- 插件菜单可正确跳转插件页
+- 自动化结果入口能跳到历史或任务
+- 通知点击和历史点击的目标一致
+
+人工验收：
+
+- 从主工作区切到搜索/插件/自动化，不觉得跳出了应用结构
+
+### W9. 持久化与会话恢复
+
+目标：桌面应用重启后回到有意义的上下文。
+
+范围文件：
+
+- `packages/gui/src/store/app-store.ts`
+- `packages/gui/src/store/chat-store.ts`
+- `packages/gui/tests/app-store.test.ts`
+- `packages/gui/tests/smoke.test.ts`
+
+实施项：
+
+- 持久化：
+  - 当前项目
+  - 当前任务
+  - dock 开关
+  - 当前 dock tab
+  - 可能引入的左右栏宽度
+- 恢复后不要出现状态错配
+
+自动化验收：
+
+- 重载后恢复当前项目和任务
+- dock tab 恢复正确
+- shell 关键区域恢复可见
+
+人工验收：
+
+- 重启 Bobby 后仍然能回到之前的工作位
+
+### W10. 最终视觉系统和响应式收口
+
+目标：把“看起来不统一”的最后差距收掉。
+
+范围文件：
+
+- `packages/gui/src/styles/tokens.css`
+- `packages/gui/src/app.css`
+- `packages/gui/src/screens/Workspace.tsx`
+- `packages/gui/src/components/Sidebar.tsx`
+- `packages/gui/src/components/SessionToolDock.tsx`
+- `packages/gui/tests/smoke.test.ts`
+
+实施项：
+
+- 统一色板、圆角、边框、阴影、字体层级
+- 统一 hover/focus/active 态
+- 控制紧凑列表和正文阅读区的节奏差异
+- 保证常见桌面宽度下不破版
+
+自动化验收：
+
+- smoke 通过
+- 关键区域 DOM 仍存在
+
+人工验收：
+
+- 对照截图时，差距变成“细节”和“品牌”层面，而不是结构层面
+
+## 7. 推荐执行顺序
+
+严格按以下顺序推进：
+
+1. `W1 Shell 骨架重构`
+2. `W2 左侧一级导航与项目树对齐`
+3. `W3 中央 transcript 重构`
+4. `W4 Composer 控制台化`
+5. `W5 环境信息卡完成度`
+6. `W6 右侧工具入口与 dock 一体化`
+7. `W7 文件面板精修`
+8. `W8 搜索、插件、自动化纳入统一 shell`
+9. `W9 持久化与会话恢复`
+10. `W10 最终视觉系统和响应式收口`
+
+说明：
+
+- `W5` 和 `W7` 当前已有部分在做，但仍从属于上述主顺序。
+- 若某 slice 需要先补 store/IP C 契约，可在本 slice 内前置，不单独拆散顺序。
+
+## 8. 当前正在进行的子项
+
+截至 2026-06-12 当前工作区，已进入但未完成的内容：
+
+- 环境卡里新增了 `提交或推送` 和 `创建拉取请求` 的显式控件接线方向
+- 文件面板已改为“默认空预览”的目标行为
+- 对应测试已经开始按新行为改写，但仍有 focused test 未收绿
+
+因此，下一个直接执行点应为：
+
+1. 先收口 `W7 文件面板精修` 的 focused tests
+2. 再把 `W5 环境信息卡完成度` 这轮实现收干净
+3. 随后进入更上层的 `W1-W4` 结构收敛
+
+原因：
+
+- 当前工作区已经有这两个模块的在制改动，先收口能减少返工和冲突
+
+## 9. 每个 slice 的固定执行纪律
+
+每个 slice 必须遵守：
+
+1. 先补或调整测试，先看到失败或缺口
+2. 再改实现
+3. 跑 focused tests
+4. 跑 `pnpm --filter @bobby/gui test`
+5. 若涉及 shell/composer/dock/IPC，再跑 `pnpm --filter @bobby/gui smoke:electron`
+6. 测试全绿后立刻 `commit + push`
+7. 在 handoff 中记录：
+   - 目标
+   - 变更文件
+   - 验证命令
+   - 未完成项
+
+## 10. 自动化验收矩阵
+
+### 必跑 focused suites
+
+- `packages/gui/tests/workspace-screen.test.tsx`
+- `packages/gui/tests/session-tool-dock.test.tsx`
+- `packages/gui/tests/chat-store.test.ts`
+- `packages/gui/tests/plugins.test.tsx`
+- `packages/gui/tests/automations.test.tsx`
+- `packages/gui/tests/history.test.tsx`
+- `packages/gui/tests/app-store.test.ts`
+- `packages/gui/tests/smoke.test.ts`
+
+### 阶段验收命令
+
+每个 GUI slice：
+
+```powershell
+pnpm --filter @bobby/gui test
+```
+
+涉及 shell/composer/dock/IPC：
+
+```powershell
+pnpm --filter @bobby/gui smoke:electron
+```
+
+里程碑验收：
+
+```powershell
+pnpm -r test
+pnpm build
+```
+
+## 11. 人工验收脚本
+
+最终必须按以下脚本走通：
+
+1. 打开项目
+2. 在同一项目下启动两个任务
+3. 确认左侧项目树中两个任务状态互不串线
+4. 在中央任务流里看到 reasoning、工具输出和最终结果
+5. 打开文件面板，选中文件，再插入引用
+6. 打开环境卡，检查分支、git 统计、progress checklist
+7. 打开右侧 `审查 / 终端 / 浏览器 / 文件`
+8. 从 composer 打开插件菜单并进入插件页
+9. 运行一个自动化任务并跳到结果历史
+10. 重启应用并恢复到原上下文
+11. 跑完整测试和 smoke
+
+## 12. 完成定义
+
+以下条件同时满足，才算本计划完成：
+
+- 结构上，Bobby GUI 已是稳定三栏工作台
+- 空状态和活跃任务状态使用同一 shell
+- 左侧项目/任务树具备 Codex Desktop 的阅读方式
+- 中央 transcript、底部 composer、右上环境卡、右侧 dock 四个核心区都完成收口
+- 文件面板行为和截图一致
+- 搜索、插件、自动化页纳入统一 shell
+- 持久化和恢复可用
+- `pnpm -r test` 全绿
+- `pnpm build` 通过
+- `pnpm --filter @bobby/gui smoke:electron` 通过
+- 人工验收脚本逐项通过
+
+## 13. 非目标
+
+本计划暂不单独扩展以下能力，除非上游指令另行要求：
+
+- 新模型能力扩展
+- 非桌面版特有的全新信息架构
+- 与截图无关的功能性大改版
+- 重新定义 Bobby 的产品品牌视觉方向
+
+本文件是后续 GUI parity 开发的唯一落盘计划，后续执行只在此文件上推进，不再把主计划留在对话里。

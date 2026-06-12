@@ -845,6 +845,30 @@ describe('workspace UI smoke', () => {
     });
   });
 
+  it('routes the environment commit or push action into the review dock and keeps pull request creation explicitly unavailable', async () => {
+    useChatStore.setState({
+      blocks: [
+        { kind: 'user', id: 'u-1', text: 'Review @src/index.ts and inspect proposal.patch' }
+      ],
+      currentPlan: [{ id: 'step-1', desc: 'Inspect shell parity', satisfiesAcIds: ['AC1'], dependsOn: [] }],
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      },
+      previewTarget: 'http://localhost:5174'
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText('环境信息')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Commit or push' }));
+    expect((await screen.findByTestId('dock-active-tab')).textContent).toContain('Review');
+
+    const prButton = screen.getByRole('button', { name: 'Create pull request' }) as HTMLButtonElement;
+    expect(prButton.disabled).toBe(true);
+  });
+
   it('opens the composer project picker and shows recent projects', () => {
     useChatStore.setState({
       currentProject: {

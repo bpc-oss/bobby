@@ -287,6 +287,13 @@ function collectEnvironmentSources(blocks: ChatBlock[]): string[] {
   return Array.from(seen).slice(0, 6);
 }
 
+function openReviewDockFromEnvironment(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.dispatchEvent(new CustomEvent('bobby:navigate', { detail: { page: 'chat', dockTab: 'review' } }));
+}
+
 function EnvironmentPopover({
   kernelClient,
   blocks,
@@ -394,6 +401,25 @@ function EnvironmentPopover({
           <div className="mt-1 flex items-center gap-2 text-[16px] font-semibold">
             <span style={{ color: 'var(--bobby-success)' }}>{`+${positiveCount}`}</span>
             <span style={{ color: 'var(--bobby-danger)' }}>{`-${negativeCount}`}</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            <button
+              type="button"
+              onClick={openReviewDockFromEnvironment}
+              className="block w-full rounded-xl px-3 py-2 text-left text-[12px] font-medium text-bobby-ink transition hover:bg-bobby-hover"
+              style={{ background: 'rgba(255, 255, 255, 0.04)' }}
+            >
+              Commit or push
+            </button>
+            <button
+              type="button"
+              disabled
+              className="block w-full cursor-not-allowed rounded-xl px-3 py-2 text-left text-[12px] font-medium text-bobby-faint disabled:opacity-60"
+              style={{ background: 'rgba(255, 255, 255, 0.03)' }}
+              title="Pull request creation is not wired yet."
+            >
+              Create pull request
+            </button>
           </div>
         </section>
 

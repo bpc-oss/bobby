@@ -248,11 +248,12 @@ describe('SessionToolDock', () => {
     expect(window.bobby.listProposals).toHaveBeenCalled();
   });
 
-  it('loads workspace files from disk and previews the selected file', async () => {
+  it('loads workspace files from disk and keeps the preview empty until a file is selected', async () => {
     render(<SessionToolDock />);
 
     fireEvent.click(screen.getByTitle(/Files/));
-    expect(await screen.findByText('export const entry = true;')).toBeTruthy();
+    expect(await screen.findByText('Open file')).toBeTruthy();
+    expect(screen.getByText('Select a file from the workspace tree to preview it.')).toBeTruthy();
 
     fireEvent.click(screen.getByText('utils.ts'));
     expect(await screen.findByText('export const answer = 42;')).toBeTruthy();
@@ -273,13 +274,12 @@ describe('SessionToolDock', () => {
 
   it('shows workspace file read failures as an error card', async () => {
     window.bobby.readWorkspaceFile = vi.fn()
-      .mockResolvedValueOnce({ path: 'src/index.ts', content: 'export const entry = true;\n' })
       .mockRejectedValueOnce(new Error('permission denied'));
 
     render(<SessionToolDock />);
 
     fireEvent.click(screen.getByTitle(/Files/));
-    expect(await screen.findByText('export const entry = true;')).toBeTruthy();
+    expect(await screen.findByText('Open file')).toBeTruthy();
 
     fireEvent.click(screen.getByText('utils.ts'));
 
@@ -303,7 +303,7 @@ describe('SessionToolDock', () => {
     render(<SessionToolDock />);
 
     fireEvent.click(screen.getByTitle(/Files/));
-    expect(await screen.findByText('export const entry = true;')).toBeTruthy();
+    expect(await screen.findByText('Open file')).toBeTruthy();
     fireEvent.click(screen.getByText('utils.ts'));
     expect(await screen.findByText('export const answer = 42;')).toBeTruthy();
     fireEvent.click(screen.getByText('Insert reference'));
