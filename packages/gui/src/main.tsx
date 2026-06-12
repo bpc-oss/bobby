@@ -14,10 +14,11 @@ import { Commands } from './screens/Commands';
 import { ScheduleTasks } from './screens/ScheduleTasks';
 import { ProjectHome } from './screens/ProjectHome';
 import { History } from './screens/History';
+import { SearchScreen } from './screens/Search';
 import type { OnboardingStatus } from './ipc/contract';
 import './styles/tokens.css';
 
-type AppPage = 'chat' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'settings';
+type AppPage = 'chat' | 'search' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'settings';
 type AppCommand = { type: 'new-task' } | { type: 'open-page'; page: AppPage; sessionId?: string };
 type AppNavigateEvent = CustomEvent<{ page?: AppPage; sessionId?: string; dockTab?: DockTab }>;
 
@@ -249,6 +250,28 @@ export function App() {
     resumeSession(sessionId);
     setPage('chat');
   }} />;
+  else if (page === 'search') content = (
+    <SearchScreen
+      client={client ?? undefined}
+      onSelectProject={(path) => {
+        void selectProject(path);
+        setPage('chat');
+      }}
+      onSelectSession={(sessionId) => {
+        resumeSession(sessionId);
+        setPage('chat');
+      }}
+      onOpenFile={(path) => {
+        useChatStore.getState().setComposerInsertion(`@${path}`);
+        setPage('chat');
+        setDockTabRequest({ id: 'files', nonce: Date.now() });
+      }}
+      onInsertCommand={(name) => {
+        useChatStore.getState().setComposerInsertion(`/${name} `);
+        setPage('chat');
+      }}
+    />
+  );
   else if (page === 'plugins') content = <PluginMarketplace />;
   else if (page === 'agents') content = <Agents />;
   else if (page === 'commands') content = <Commands />;

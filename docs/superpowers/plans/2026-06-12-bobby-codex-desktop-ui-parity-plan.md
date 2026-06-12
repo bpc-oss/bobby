@@ -17,6 +17,28 @@ Bobby's current GUI has made functional progress, but its product shape is still
 
 This plan converts the screenshot observations into concrete implementation workstreams and acceptance gates for Bobby.
 
+## 0.1 Current Delivery Snapshot
+
+As of 2026-06-12, the following parity slices have already landed in the GUI branch and should be treated as completed baseline work, not future scope:
+
+- `P7: Terminal Panel`
+- `P8: Browser Panel`
+- `P9: Review, Diff, Apply, And Commit`
+
+These completed slices do not close the parity program. The remaining structural gap is still significant in left navigation, shell hierarchy, composer integration, global search, plugin surface, automation surface, and final visual-system alignment.
+
+## 0.2 Required Execution Order From This Point
+
+To avoid further one-off GUI edits, the remaining work should be executed in the following order:
+
+1. `P10 Global Search`
+2. `P11 Plugins And MCP Workbench`
+3. `P12 Automations`
+4. `P13 Shortcuts And Window State`
+5. `P14 Visual System`
+
+This order assumes `P7` to `P9` remain stable and that no new shell refactor is started unless it directly supports one of the remaining workstreams above.
+
 ## 1. Reference Screenshot Observations
 
 The user provided seven Codex Desktop screenshots on 2026-06-12. The screenshots should be treated as the visual and interaction reference for this plan.
@@ -517,6 +539,12 @@ Acceptance:
 ### P10: Global Search
 
 Goal: Add Codex-style search across projects, files, sessions, commands, and tools.
+
+Status:
+
+- Completed on 2026-06-12.
+- Implemented with a left-rail search entry, grouped global results for projects/files/tasks/commands/tools, keyboard navigation, project switching, session resume, file-to-dock routing, and command insertion back into the composer.
+- Verified with focused GUI tests, full GUI package tests, and Electron smoke.
 
 Scope:
 

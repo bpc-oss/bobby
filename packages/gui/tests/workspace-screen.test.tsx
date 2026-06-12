@@ -14,9 +14,14 @@ type KernelClientMock = {
   startTask: ReturnType<typeof vi.fn>;
   approveGate: ReturnType<typeof vi.fn>;
   restoreSnapshot: ReturnType<typeof vi.fn>;
+  listProjects: ReturnType<typeof vi.fn>;
+  listSessions: ReturnType<typeof vi.fn>;
+  listTasks: ReturnType<typeof vi.fn>;
   searchFiles: ReturnType<typeof vi.fn>;
   saveAttachment: ReturnType<typeof vi.fn>;
   listCommands: ReturnType<typeof vi.fn>;
+  listMcpServers: ReturnType<typeof vi.fn>;
+  listSubAgents: ReturnType<typeof vi.fn>;
   getGitStatusSummary: ReturnType<typeof vi.fn>;
   switchGitBranch: ReturnType<typeof vi.fn>;
   gitCommit: ReturnType<typeof vi.fn>;
@@ -33,9 +38,16 @@ function makeKernelClientMock(): KernelClientMock {
     startTask: vi.fn().mockResolvedValue(undefined),
     approveGate: vi.fn().mockResolvedValue(undefined),
     restoreSnapshot: vi.fn().mockResolvedValue(undefined),
+    listProjects: vi.fn().mockResolvedValue([
+      { name: 'Bobby', path: 'E:\\ai-files\\Bobby', lastOpenedAt: '2026-06-12T00:00:00.000Z' }
+    ]),
+    listSessions: vi.fn().mockResolvedValue([]),
+    listTasks: vi.fn().mockResolvedValue([]),
     searchFiles: vi.fn().mockResolvedValue([]),
     saveAttachment: vi.fn().mockResolvedValue({ path: '.bobby/uploads/saved.png' }),
     listCommands: vi.fn().mockResolvedValue([]),
+    listMcpServers: vi.fn().mockResolvedValue([]),
+    listSubAgents: vi.fn().mockResolvedValue([]),
     getGitStatusSummary: vi.fn().mockResolvedValue({
       isRepo: true,
       branch: 'feature/env-card',
@@ -57,6 +69,7 @@ function makeKernelClientMock(): KernelClientMock {
 }
 
 beforeEach(() => {
+  window.localStorage.setItem('bobby-onboarding-complete', 'true');
   useChatStore.setState({
     blocks: [],
     liveReasoning: '',
@@ -87,6 +100,8 @@ describe('workspace UI smoke', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    (window as unknown as { bobby?: unknown }).bobby = undefined;
+    window.localStorage.clear();
   });
 
   it('renders evidence file_exists as plain-language entry', () => {
@@ -317,7 +332,172 @@ describe('workspace UI smoke', () => {
     expect(screen.getAllByText('Second task').length).toBeGreaterThan(0);
     expect(screen.getAllByText('running').length).toBeGreaterThan(0);
     expect(screen.getByText('New Chat')).toBeTruthy();
+    expect(screen.getByText('Search')).toBeTruthy();
     expect(screen.getByText('Plugins')).toBeTruthy();
+  });
+
+  it('opens global search from the rail and switches projects from the results', async () => {
+    const selectProject = vi.fn().mockResolvedValue(undefined);
+    useChatStore.setState({
+      selectProject,
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      },
+      recentProjects: [
+        { name: 'Bobby', path: 'E:\\ai-files\\Bobby', lastOpenedAt: '2026-06-12T00:00:00.000Z' },
+        { name: 'AI XIAOSHUO', path: 'E:\\ai-files\\AI-XIAOSHUO', lastOpenedAt: '2026-06-11T00:00:00.000Z' }
+      ]
+    });
+
+    render(<App />);
+
+    fireEvent.click(screen.getByText('Search'));
+    fireEvent.change(screen.getByPlaceholderText('Search everything'), { target: { value: 'ai' } });
+
+    expect(await screen.findByTestId('search-result-project-E-ai-files-AI-XIAOSHUO')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('search-result-project-E-ai-files-AI-XIAOSHUO'));
+
+    await vi.waitFor(() => {
+      expect(selectProject).toHaveBeenCalledWith('E:\\ai-files\\AI-XIAOSHUO');
+    });
+  });
+
+  it('switches task sessions, opens files dock, and inserts commands from global search', async () => {
+    const resumeSession = vi.fn();
+    (window as unknown as {
+      bobby: Record<string, unknown>;
+    }).bobby = {
+      send: vi.fn().mockResolvedValue(undefined),
+      onEvent: vi.fn().mockReturnValue(() => undefined),
+      getSetupStatus: vi.fn().mockResolvedValue({
+        homeDir: 'C:\\Users\\Administrator',
+        bobbyDir: 'C:\\Users\\Administrator\\.bobby',
+        keyPath: 'C:\\Users\\Administrator\\.bobby\\key',
+        capabilitiesPath: 'C:\\Users\\Administrator\\.bobby\\capabilities.json',
+        hasKey: true,
+        hasCapabilities: true,
+        hasEnvKey: false
+      }),
+      getCurrentProject: vi.fn().mockResolvedValue({
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      }),
+      listProjects: vi.fn().mockResolvedValue([
+        { name: 'Bobby', path: 'E:\\ai-files\\Bobby', lastOpenedAt: '2026-06-12T00:00:00.000Z' }
+      ]),
+      listSessions: vi.fn().mockResolvedValue([
+        {
+          id: 'thread-1',
+          title: 'Investigate shell parity',
+          blocks: [{ kind: 'user', id: 'u-1', text: 'Investigate shell parity' }],
+          createdAt: '2026-06-11T00:00:00.000Z',
+          updatedAt: '2026-06-11T00:04:00.000Z',
+          projectDir: 'E:\\ai-files\\Bobby',
+          taskId: 'task-1',
+          status: 'running',
+          liveReasoning: '',
+          liveAssistant: '',
+          liveToolContent: '',
+          currentPlan: [],
+          error: null,
+          costUsd: 0,
+          spendUsd: 0,
+          model: null
+        }
+      ]),
+      listTasks: vi.fn().mockResolvedValue([
+        { taskId: 'task-1', userGoal: 'Investigate shell parity', state: 'running', traceCount: 2, hasContract: true, hasPlan: true, hasReport: false }
+      ]),
+      searchFiles: vi.fn().mockResolvedValue([
+        { path: 'src/screens/Workspace.tsx', preview: 'Workspace search result' }
+      ]),
+      listCommands: vi.fn().mockResolvedValue([
+        {
+          sourcePath: 'E:\\ai-files\\Bobby\\.bobby\\commands\\summarize.md',
+          name: 'summarize',
+          description: 'Summarize the current task',
+          promptTemplate: 'Summarize this task:\n{{input}}'
+        }
+      ]),
+      listMcpServers: vi.fn().mockResolvedValue([
+        { id: 'filesystem', name: 'Filesystem', command: 'npx', args: ['-y'], env: {}, enabled: true, notes: null }
+      ]),
+      listSubAgents: vi.fn().mockResolvedValue([
+        { sourcePath: 'E:\\ai-files\\Bobby\\.bobby\\agents\\reviewer.md', name: 'Reviewer', description: 'Review code changes', prompt: 'review', enabled: true }
+      ])
+    };
+    useChatStore.setState({
+      resumeSession,
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      },
+      threads: {
+        'thread-1': {
+          id: 'thread-1',
+          title: 'Investigate shell parity',
+          blocks: [{ kind: 'user', id: 'u-1', text: 'Investigate shell parity' }],
+          createdAt: '2026-06-11T00:00:00.000Z',
+          updatedAt: '2026-06-11T00:04:00.000Z',
+          projectDir: 'E:\\ai-files\\Bobby',
+          taskId: 'task-1',
+          status: 'running',
+          liveReasoning: '',
+          liveAssistant: '',
+          liveToolContent: '',
+          currentPlan: [],
+          error: null,
+          costUsd: 0,
+          spendUsd: 0,
+          model: null
+        }
+      },
+      sessions: [{
+        id: 'thread-1',
+        title: 'Investigate shell parity',
+        blocks: [{ kind: 'user', id: 'u-1', text: 'Investigate shell parity' }],
+        createdAt: '2026-06-11T00:00:00.000Z',
+        updatedAt: '2026-06-11T00:04:00.000Z',
+        projectDir: 'E:\\ai-files\\Bobby',
+        taskId: 'task-1',
+        status: 'running',
+        liveReasoning: '',
+        liveAssistant: '',
+        liveToolContent: '',
+        currentPlan: [],
+        error: null,
+        costUsd: 0,
+        spendUsd: 0,
+        model: null
+      }]
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByTitle('Search'));
+    fireEvent.change(screen.getByPlaceholderText('Search everything'), { target: { value: 'invest' } });
+
+    expect(await screen.findByTestId('search-result-session-thread-1')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('search-result-session-thread-1'));
+    expect(resumeSession).toHaveBeenCalledWith('thread-1');
+
+    fireEvent.click(await screen.findByTitle('Search'));
+    fireEvent.change(screen.getByPlaceholderText('Search everything'), { target: { value: 'workspace' } });
+    fireEvent.click(await screen.findByTestId('search-result-file-src-screens-Workspace-tsx'));
+    expect((await screen.findByTestId('dock-active-tab')).textContent).toContain('Files');
+
+    fireEvent.click(await screen.findByTitle('Search'));
+    fireEvent.change(screen.getByPlaceholderText('Search everything'), { target: { value: 'sum' } });
+    fireEvent.click(await screen.findByTestId('search-result-command-summarize'));
+
+    await vi.waitFor(() => {
+      const composer = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
+      expect(composer.value).toContain('/summarize');
+    });
   });
 
   it('starts from brainstorming mission guidance instead of write/code modules', () => {

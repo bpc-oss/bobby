@@ -15,10 +15,10 @@ import {
 import { useChatStore } from '../store/chat-store';
 
 type SidebarProps = {
-  page: 'chat' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'settings';
+  page: 'chat' | 'search' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'settings';
   theme: 'light' | 'dark';
   onThemeChange: (theme: 'light' | 'dark') => void;
-  onPage: (page: 'chat' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'settings') => void;
+  onPage: (page: 'chat' | 'search' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'settings') => void;
   onNewSession: () => void;
 };
 
@@ -192,8 +192,8 @@ export function Sidebar({ page, theme, onThemeChange, onPage, onNewSession }: Si
       key: 'search',
       label: 'Search',
       icon: Search,
-      active: false,
-      disabled: true
+      active: page === 'search',
+      onClick: () => onPage('search')
     },
     {
       key: 'plugins',
