@@ -32,6 +32,8 @@ async function buildRepoWithCommit(): Promise<string> {
 
   writeFileSync(join(repoRoot, 'target.txt'), 'before', 'utf8');
   runGit(repoRoot, ['init', '-q']);
+  runGit(repoRoot, ['config', 'user.email', 'bobby-tests@example.com']);
+  runGit(repoRoot, ['config', 'user.name', 'Bobby Tests']);
   runGit(repoRoot, ['add', 'target.txt']);
   runGit(repoRoot, ['commit', '-m', 'base', '-q']);
   return repoRoot;
