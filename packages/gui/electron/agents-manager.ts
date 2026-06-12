@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { loadSubAgents, type SubAgentDescriptor } from '@bobby/kernel';
 import type {
@@ -85,9 +85,20 @@ function resolveAgentsDir(workspaceRoot: string): string {
   return join(resolve(workspaceRoot), AGENTS_DIR);
 }
 
+function resolveWithinAgentsDir(workspaceRoot: string, targetPath: string): string {
+  const root = resolveAgentsDir(workspaceRoot);
+  const absolute = resolve(root, targetPath);
+  const relativeToRoot = relative(root, absolute);
+  if (relativeToRoot === '..' || relativeToRoot.startsWith(`..${sep}`) || isAbsolute(relativeToRoot)) {
+    throw new Error('Subagent path must stay inside .bobby/agents');
+  }
+
+  return absolute;
+}
+
 export function resolveAgentPath(workspaceRoot: string, sourcePath?: string, name?: string): string {
   if (sourcePath) {
-    return resolve(workspaceRoot, sourcePath);
+    return resolveWithinAgentsDir(workspaceRoot, sourcePath);
   }
 
   const fileName = `${slugify(name ?? 'agent')}.md`;
@@ -207,7 +218,7 @@ export function upsertSubAgent(workspaceRoot: string, input: SubAgentUpsertInput
 }
 
 export function removeSubAgent(workspaceRoot: string, input: SubAgentRemoveInput): boolean {
-  const sourcePath = resolve(workspaceRoot, input.sourcePath);
+  const sourcePath = resolveWithinAgentsDir(workspaceRoot, input.sourcePath);
   if (!existsSync(sourcePath)) {
     return false;
   }

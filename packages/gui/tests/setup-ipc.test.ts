@@ -628,6 +628,36 @@ describe('agent IPC handlers', () => {
 
     expect(await remove(undefined, { sourcePath: created.sourcePath })).toBe(true);
   });
+
+  it('keeps subagent upsert, dispatch, and remove paths inside .bobby/agents', async () => {
+    await loadMain();
+    const projectRoot = mkdtempSync(join(tempHome, 'agents-boundary-project-'));
+    mkdirSync(join(projectRoot, '.bobby', 'agents'), { recursive: true });
+    const outsideAgent = join(projectRoot, 'agent.md');
+    writeFileSync(outsideAgent, 'do not delete', 'utf8');
+
+    const selectProject = handlers.get('project:select');
+    const upsert = handlers.get('agents:upsert');
+    const dispatch = handlers.get('agents:dispatch');
+    const remove = handlers.get('agents:remove');
+    if (!selectProject || !upsert || !dispatch || !remove) {
+      throw new Error('agent handlers not registered');
+    }
+
+    await selectProject(undefined, { projectDir: projectRoot });
+
+    await expect(upsert(undefined, {
+      sourcePath: outsideAgent,
+      name: 'Unsafe',
+      description: 'Unsafe agent',
+      tools: [],
+      triggers: [],
+      systemPrompt: 'Do not write here.'
+    })).rejects.toThrow(/\.bobby\/agents/);
+    await expect(dispatch(undefined, { sourcePath: outsideAgent, task: 'Run outside' })).rejects.toThrow(/\.bobby\/agents/);
+    await expect(remove(undefined, { sourcePath: outsideAgent })).rejects.toThrow(/\.bobby\/agents/);
+    expect(readFileSync(outsideAgent, 'utf8')).toBe('do not delete');
+  });
 });
 
 describe('proposal IPC handlers', () => {
