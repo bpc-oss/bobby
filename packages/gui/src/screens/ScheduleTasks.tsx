@@ -29,6 +29,13 @@ function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function openAutomationHistory(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.dispatchEvent(new CustomEvent('bobby:navigate', { detail: { page: 'history' } }));
+}
+
 export function ScheduleTasks() {
   const client = React.useMemo(resolveClient, []);
   const [items, setItems] = React.useState<AutomationRecord[]>([]);
@@ -294,6 +301,15 @@ export function ScheduleTasks() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1">
+                      {item.lastRunAt ? (
+                        <button
+                          type="button"
+                          onClick={openAutomationHistory}
+                          className="inline-flex h-8 items-center rounded-lg px-2.5 text-[12px] font-medium text-bobby-muted transition hover:bg-bobby-sidebar-row-hover hover:text-bobby-ink"
+                        >
+                          View history
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => void runAutomationNow(item.id)}

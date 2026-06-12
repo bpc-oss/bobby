@@ -144,4 +144,25 @@ describe('ScheduleTasks', () => {
 
     expect(await screen.findByText('runner unavailable')).toBeTruthy();
   });
+
+  it('offers a history jump for automations with previous runs', async () => {
+    items.splice(0, items.length, makeAutomation({
+      title: 'Follow-up digest',
+      lastRunAt: '2026-06-11T10:00:00.000Z',
+      nextRunAt: '2026-06-11T10:30:00.000Z'
+    }));
+    const navigateListener = vi.fn();
+    window.addEventListener('bobby:navigate', navigateListener as EventListener);
+
+    render(<ScheduleTasks />);
+
+    expect(await screen.findByText('Follow-up digest')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'View history' }));
+
+    expect(navigateListener).toHaveBeenCalledTimes(1);
+    const event = navigateListener.mock.calls[0]?.[0] as CustomEvent<{ page?: string }> | undefined;
+    expect(event?.detail).toEqual({ page: 'history' });
+
+    window.removeEventListener('bobby:navigate', navigateListener as EventListener);
+  });
 });
