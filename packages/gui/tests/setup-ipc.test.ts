@@ -988,6 +988,25 @@ describe('project IPC handlers', () => {
     expect(matches.every((match) => match.path.startsWith('src'))).toBe(true);
     expect(matches.length).toBeGreaterThan(0);
   });
+
+  it('reads workspace files without rejecting safe dot-prefixed names or allowing traversal', async () => {
+    await loadMain();
+    const selectProject = handlers.get('project:select');
+    const readFileHandler = handlers.get('workspace:readFile');
+    if (!selectProject || !readFileHandler) throw new Error('workspace read handler not registered');
+
+    const projectRoot = mkdtempSync(join(tempHome, 'workspace-read-'));
+    writeFileSync(join(projectRoot, '..notes.txt'), 'safe note', 'utf8');
+    writeFileSync(join(projectRoot, '..', 'outside.txt'), 'outside', 'utf8');
+
+    await selectProject(undefined, { projectDir: projectRoot });
+
+    const safeFile = await readFileHandler(undefined, { path: '..notes.txt' }) as { path: string; content: string } | null;
+    expect(safeFile).toMatchObject({ path: '..notes.txt', content: 'safe note' });
+
+    const outsideFile = await readFileHandler(undefined, { path: '../outside.txt' });
+    expect(outsideFile).toBeNull();
+  });
 });
 
 describe('desktop integration', () => {

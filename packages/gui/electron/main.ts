@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { basename, dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, shell, Tray } from 'electron';
 import {
@@ -367,14 +367,15 @@ function buildWorkspaceTreeEntries(workspaceRoot: string, currentPath = workspac
 function readWorkspaceTextFile(workspaceRoot: string, relativePath: string): WorkspaceReadFileResult | null {
   const absolute = resolve(workspaceRoot, relativePath);
   const normalizedRoot = resolve(workspaceRoot);
-  if (relative(normalizedRoot, absolute).startsWith('..')) {
+  const relativeToRoot = relative(normalizedRoot, absolute);
+  if (relativeToRoot === '..' || relativeToRoot.startsWith(`..${sep}`) || isAbsolute(relativeToRoot)) {
     return null;
   }
 
   try {
     const content = readFileSync(absolute, 'utf8');
     return {
-      path: relative(normalizedRoot, absolute).split('\\').join('/'),
+      path: relativeToRoot.split('\\').join('/'),
       content
     };
   } catch {
