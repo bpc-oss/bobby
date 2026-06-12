@@ -708,6 +708,35 @@ describe('proposal IPC handlers', () => {
     }, projectRoot);
     expect(existsSync(proposalPath)).toBe(false);
   });
+
+  it('keeps proposal read, discard, and apply paths inside .bobby/proposals', async () => {
+    await loadMain();
+    const projectRoot = mkdtempSync(join(tempHome, 'proposal-boundary-project-'));
+    const bobbyDir = join(projectRoot, '.bobby');
+    mkdirSync(join(bobbyDir, 'proposals'), { recursive: true });
+    const outsidePatch = join(bobbyDir, 'outside.patch');
+    writeFileSync(outsidePatch, 'diff --git a/outside.txt b/outside.txt\n', 'utf8');
+
+    const selectProject = handlers.get('project:select');
+    const read = handlers.get('proposals:read');
+    const discard = handlers.get('proposals:discard');
+    const apply = handlers.get('proposals:apply');
+    if (!selectProject || !read || !discard || !apply) {
+      throw new Error('proposal handlers not registered');
+    }
+
+    await selectProject(undefined, { projectDir: projectRoot });
+
+    await expect(read(undefined, { proposalId: '../outside' })).resolves.toBeNull();
+    await expect(discard(undefined, { proposalId: '../outside' })).rejects.toThrow();
+    await expect(apply(undefined, {
+      proposalId: '../outside',
+      gatePassed: true,
+      proReviewPassed: true,
+      humanConfirmed: true
+    })).rejects.toThrow();
+    expect(existsSync(outsidePatch)).toBe(true);
+  });
 });
 
 describe('task IPC handlers', () => {

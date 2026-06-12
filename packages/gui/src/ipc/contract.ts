@@ -183,8 +183,10 @@ export const ProposalSummarySchema = z.object({
 });
 export type ProposalSummary = z.infer<typeof ProposalSummarySchema>;
 
+const ProposalIdSchema = z.string().min(1).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
+
 export const ProposalApplyInputSchema = z.object({
-  proposalId: z.string().min(1),
+  proposalId: ProposalIdSchema,
   gatePassed: z.boolean(),
   proReviewPassed: z.boolean(),
   humanConfirmed: z.boolean()
@@ -192,7 +194,7 @@ export const ProposalApplyInputSchema = z.object({
 export type ProposalApplyInput = z.infer<typeof ProposalApplyInputSchema>;
 
 export const ProposalDiscardInputSchema = z.object({
-  proposalId: z.string().min(1)
+  proposalId: ProposalIdSchema
 });
 export type ProposalDiscardInput = z.infer<typeof ProposalDiscardInputSchema>;
 

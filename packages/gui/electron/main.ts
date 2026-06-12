@@ -1488,8 +1488,8 @@ ipcMain.handle('commands:remove', async (_event, input) => {
 ipcMain.handle('proposals:list', async () => listProposals());
 
 ipcMain.handle('proposals:read', async (_event, input) => {
-  const proposalId = typeof input === 'object' && input !== null && 'proposalId' in input ? String((input as { proposalId?: unknown }).proposalId) : '';
-  const path = proposalId ? proposalPath(proposalId) : null;
+  const parsed = ProposalDiscardInputSchema.safeParse(input);
+  const path = parsed.success ? proposalPath(parsed.data.proposalId) : null;
   return path ? readProposalSummary(path) : null;
 });
 
