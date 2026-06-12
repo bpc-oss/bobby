@@ -2,7 +2,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**']
+    ignores: ['**/dist/**', '**/dist-electron/**', '**/.bobby/**']
   },
   ...tseslint.configs.recommended,
   {

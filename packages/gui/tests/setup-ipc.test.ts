@@ -10,6 +10,7 @@ const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>();
 let tempHome = '';
 let originalHome = '';
 let originalUserProfile = '';
+let originalDeepSeekApiKey = '';
 
 const appWhenReady = vi.fn(async () => undefined);
 const appOn = vi.fn();
@@ -250,8 +251,10 @@ async function loadMain(initialAutomations: AutomationRecord[] = [], initialProj
   writeFileSync(join(tempHome, '.bobby', 'capabilities.json'), '{}\n', 'utf8');
   originalHome = process.env.HOME ?? '';
   originalUserProfile = process.env.USERPROFILE ?? '';
+  originalDeepSeekApiKey = process.env.DEEPSEEK_API_KEY ?? '';
   process.env.HOME = tempHome;
   process.env.USERPROFILE = tempHome;
+  delete process.env.DEEPSEEK_API_KEY;
   appGetPath.mockReturnValue(tempHome);
   safeStorageIsEncryptionAvailable.mockReturnValue(true);
   safeStorageEncryptString.mockImplementation((value: string) => Buffer.from(`encrypted:${value}`, 'utf8'));
@@ -288,6 +291,11 @@ afterEach(() => {
     process.env.USERPROFILE = originalUserProfile;
   } else {
     delete process.env.USERPROFILE;
+  }
+  if (originalDeepSeekApiKey) {
+    process.env.DEEPSEEK_API_KEY = originalDeepSeekApiKey;
+  } else {
+    delete process.env.DEEPSEEK_API_KEY;
   }
   vi.clearAllMocks();
 });
