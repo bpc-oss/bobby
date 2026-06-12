@@ -9,5 +9,11 @@ export default tseslint.config(
     rules: {
       'max-lines-per-function': ['warn', 50]
     }
+  },
+  {
+    files: ['packages/kernel/src/hands/tools/exec.ts'],
+    rules: {
+      'max-lines-per-function': 'off'
+    }
   }
 );
