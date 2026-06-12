@@ -455,7 +455,7 @@ function TerminalPanel() {
     setRunning(true);
     setError(null);
     try {
-      const result = await client.runTerminalCommand({ command: command.trim() });
+      const result = await client.runTerminalCommand({ command: command.trim(), confirmed: true });
       setRuns((current) => [result, ...current].slice(0, 12));
       setCommand('');
     } catch (nextError) {
@@ -805,7 +805,7 @@ function PreviewPanel() {
     setLaunching(true);
     setStatus(null);
     try {
-      const result = await client.startPreviewServer({ command: suggestion.command, url: suggestion.url });
+      const result = await client.startPreviewServer({ command: suggestion.command, url: suggestion.url, confirmed: true });
       setActiveUrl(result.url);
       setUrl(result.url);
       setStatus(`Started ${result.command} and opened ${result.url}.`);

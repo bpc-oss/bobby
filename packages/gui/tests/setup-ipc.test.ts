@@ -84,6 +84,10 @@ class ExecToolMock {
   permissionTier = 'L2';
   description = 'execute a command';
   constructor(_workspaceRoot: string) {}
+  run = vi.fn(async (input: { command: string }) => ({
+    evidence: [{ evidenceType: 'command_output', payload: { stdout: input.command } }],
+    result: { exitCode: 0 }
+  }));
 }
 class WriteFileToolMock {
   name = 'write_file';
@@ -968,6 +972,17 @@ describe('preview IPC handlers', () => {
     handlers.clear();
   });
 
+  it('requires human confirmation before launching a preview server', async () => {
+    await loadMain();
+    const startPreview = handlers.get('preview:startDevServer');
+    if (!startPreview) throw new Error('preview:startDevServer handler not registered');
+
+    await expect(startPreview(undefined, {
+      command: 'node -e "process.exit(0)"',
+      url: 'http://localhost:5173'
+    })).rejects.toThrow(/human confirmation is required/);
+  });
+
   it('starts a detached preview server from the selected workspace', async () => {
     await loadMain();
     const startPreview = handlers.get('preview:startDevServer');
@@ -975,7 +990,8 @@ describe('preview IPC handlers', () => {
 
     const result = await startPreview(undefined, {
       command: 'node -e "process.exit(0)"',
-      url: 'http://localhost:5173'
+      url: 'http://localhost:5173',
+      confirmed: true
     }) as PreviewStartResult;
 
     expect(result).toMatchObject({
@@ -984,6 +1000,30 @@ describe('preview IPC handlers', () => {
       url: 'http://localhost:5173',
       pid: expect.any(Number)
     });
+  });
+});
+
+describe('terminal IPC handlers', () => {
+  beforeEach(() => {
+    handlers.clear();
+  });
+
+  it('requires human confirmation before running a terminal command', async () => {
+    await loadMain();
+    const runTerminal = handlers.get('terminal:run');
+    if (!runTerminal) throw new Error('terminal:run handler not registered');
+
+    await expect(runTerminal(undefined, { command: 'pnpm test' })).rejects.toThrow(/human confirmation is required/);
+  });
+
+  it('runs confirmed terminal commands through the exec tool', async () => {
+    await loadMain();
+    const runTerminal = handlers.get('terminal:run');
+    if (!runTerminal) throw new Error('terminal:run handler not registered');
+
+    const result = await runTerminal(undefined, { command: 'pnpm test', confirmed: true }) as { result: { exitCode: number } };
+
+    expect(result.result.exitCode).toBe(0);
   });
 });
 

@@ -257,7 +257,8 @@ export type WorkspaceReadFileResult = z.infer<typeof WorkspaceReadFileResultSche
 
 export const TerminalRunInputSchema = z.object({
   command: z.string().min(1),
-  timeoutMs: z.number().int().positive().optional()
+  timeoutMs: z.number().int().positive().optional(),
+  confirmed: z.literal(true)
 });
 export type TerminalRunInput = z.infer<typeof TerminalRunInputSchema>;
 
@@ -271,7 +272,8 @@ export type TerminalRunResult = z.infer<typeof TerminalRunResultSchema>;
 
 export const PreviewStartInputSchema = z.object({
   command: z.string().min(1),
-  url: z.string().min(1)
+  url: z.string().min(1),
+  confirmed: z.literal(true)
 });
 export type PreviewStartInput = z.infer<typeof PreviewStartInputSchema>;
 

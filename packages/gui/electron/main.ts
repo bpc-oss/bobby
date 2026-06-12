@@ -384,8 +384,12 @@ function readWorkspaceTextFile(workspaceRoot: string, relativePath: string): Wor
 }
 
 function startPreviewServer(input: unknown) {
-  const parsed = PreviewStartInputSchema.parse(input);
-  const child = spawn(parsed.command, {
+  const parsed = PreviewStartInputSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error('Preview launch denied: human confirmation is required');
+  }
+
+  const child = spawn(parsed.data.command, {
     cwd: currentWorkspaceRoot(),
     shell: true,
     detached: true,
@@ -396,8 +400,8 @@ function startPreviewServer(input: unknown) {
 
   return PreviewStartResultSchema.parse({
     started: true,
-    command: parsed.command,
-    url: parsed.url,
+    command: parsed.data.command,
+    url: parsed.data.url,
     pid: child.pid ?? null
   });
 }
@@ -1553,7 +1557,7 @@ ipcMain.handle('workspace:readFile', async (_event, input) => {
 ipcMain.handle('terminal:run', async (_event, input) => {
   const parsed = TerminalRunInputSchema.safeParse(input);
   if (!parsed.success) {
-    return null;
+    throw new Error('Terminal command denied: human confirmation is required');
   }
 
   const tool = new ExecTool(currentWorkspaceRoot());

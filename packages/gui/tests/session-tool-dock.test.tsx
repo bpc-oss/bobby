@@ -256,7 +256,7 @@ describe('SessionToolDock', () => {
 
     const runTerminalCommand = window.bobby.runTerminalCommand;
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('pnpm test'));
-    expect(runTerminalCommand).toHaveBeenCalledWith({ command: 'pnpm test' });
+    expect(runTerminalCommand).toHaveBeenCalledWith({ command: 'pnpm test', confirmed: true });
     expect(await screen.findByText('exit 0')).toBeTruthy();
     expect(screen.getByText('ok')).toBeTruthy();
   });
@@ -385,7 +385,7 @@ describe('SessionToolDock', () => {
 
     const startPreviewServer = window.bobby.startPreviewServer;
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('pnpm dev'));
-    expect(startPreviewServer).toHaveBeenCalledWith({ command: 'pnpm dev', url: 'http://localhost:5173' });
+    expect(startPreviewServer).toHaveBeenCalledWith({ command: 'pnpm dev', url: 'http://localhost:5173', confirmed: true });
     expect(await screen.findByText(/Active preview: http:\/\/localhost:5173/)).toBeTruthy();
   });
 });
