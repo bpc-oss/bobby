@@ -334,3 +334,38 @@
   height: 100%;
   background: linear-gradient(90deg, var(--teal), var(--blue));
 }
+
+.app-grid {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 44px 1fr 26px;
+  grid-template-columns: 280px 1fr auto;
+  grid-template-areas:
+    'title title title'
+    'side  main  right'
+    'status status status';
+  overflow: hidden;
+}
+
+.app-grid > .titlebar {
+  grid-area: title;
+}
+
+.app-grid > .side {
+  grid-area: side;
+}
+
+.app-grid > .main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-grid > .right {
+  grid-area: right;
+}
+
+.app-grid > .status {
+  grid-area: status;
+}
