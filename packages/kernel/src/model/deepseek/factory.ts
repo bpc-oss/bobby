@@ -17,6 +17,11 @@ export interface DeepSeekLoadDeps {
   homeDir?: string;
   readFile?: ReadFile;
   baseUrl?: string;
+  workspaceRoot?: string;
+}
+
+export interface MakeDeepSeekClientOptions {
+  workspaceRoot?: string;
 }
 
 const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean';
@@ -116,10 +121,16 @@ export async function loadDeepSeekConfig(deps: DeepSeekLoadDeps = {}): Promise<{
   };
 }
 
-export function makeDeepSeekClient(apiKey: string, report: CapabilityReport, baseUrl?: string): DeepSeekModelClient {
+export function makeDeepSeekClient(
+  apiKey: string,
+  report: CapabilityReport,
+  baseUrl?: string,
+  options: MakeDeepSeekClientOptions = {}
+): DeepSeekModelClient {
   return new DeepSeekModelClient({
     apiKey,
     report,
+    workspaceRoot: options.workspaceRoot,
     transport: new FetchTransport({
       apiKey,
       baseUrl: baseUrl ?? DEFAULT_DEEPSEEK_BASE_URL
@@ -129,5 +140,5 @@ export function makeDeepSeekClient(apiKey: string, report: CapabilityReport, bas
 
 export async function makeDeepSeekClientFromBobbyConfig(deps: DeepSeekLoadDeps = {}): Promise<DeepSeekModelClient> {
   const { apiKey, report } = await loadDeepSeekConfig(deps);
-  return makeDeepSeekClient(apiKey, report, deps.baseUrl);
+  return makeDeepSeekClient(apiKey, report, deps.baseUrl, { workspaceRoot: deps.workspaceRoot });
 }

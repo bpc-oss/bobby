@@ -2,7 +2,7 @@ import { withRetry, type RetryOptions } from './retry';
 
 export interface ChatRequest {
   model: string;
-  messages: { role: string; content: string }[];
+  messages: ChatMessage[];
   jsonMode?: boolean;
   reasoningEffort?: 'low' | 'medium' | 'high';
   reasoning?: boolean;
@@ -13,6 +13,15 @@ export interface ChatRequest {
     sessionId: string;
     tools: readonly string[];
   };
+}
+
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
+export interface ChatMessage {
+  role: string;
+  content: string | ChatContentPart[];
 }
 
 export interface ChatResponse {

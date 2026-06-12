@@ -376,7 +376,7 @@ describe('workspace UI smoke', () => {
     fireEvent.paste(input, { clipboardData: { files: [image] } });
 
     expect(input.value).toContain('![vision.png](C:\\temp\\vision.png)');
-    expect(await screen.findByText(/Vision capability is available/)).toBeTruthy();
+    expect(await screen.findByText(/Vision is enabled; Bobby will send workspace image references as multimodal input/)).toBeTruthy();
   });
 
   it('refreshes custom slash commands after the command registry changes', async () => {

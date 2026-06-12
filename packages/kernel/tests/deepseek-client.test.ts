@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
 import { expect, it } from 'vitest';
 
 import { DeepSeekModelClient } from '../src/model/deepseek/client';
@@ -242,4 +246,90 @@ it('passes-through original messages to transport unchanged', async () => {
 
   expect(calls[0]!.messages).toBe(messages);
   expect(calls[0]!.messages).toEqual(messages);
+});
+
+it('converts workspace image markdown into multimodal content when vision is enabled', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'bobby-vision-'));
+  try {
+    writeFileSync(join(workspaceRoot, 'tiny.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    const calls: ChatRequest[] = [];
+    const transport: HttpTransport = {
+      async chat(req) {
+        calls.push(req);
+        return { content: 'ok', model: req.model };
+      }
+    };
+    const client = new DeepSeekModelClient({
+      apiKey: 'secret-key',
+      report: createReport({ useVision: true }),
+      transport,
+      workspaceRoot
+    });
+
+    await client.complete('runner', [{ role: 'user', content: 'Look at ![tiny](tiny.png) please.' }]);
+
+    const content = calls[0]!.messages[0]!.content;
+    expect(Array.isArray(content)).toBe(true);
+    expect(content).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('Look at ') }),
+      expect.objectContaining({ type: 'image_url', image_url: { url: expect.stringMatching(/^data:image\/png;base64,/) } })
+    ]));
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+it('keeps image markdown as text when vision is disabled', async () => {
+  const calls: ChatRequest[] = [];
+  const transport: HttpTransport = {
+    async chat(req) {
+      calls.push(req);
+      return { content: 'ok', model: req.model };
+    }
+  };
+  const client = new DeepSeekModelClient({
+    apiKey: 'secret-key',
+    report: createReport({ useVision: false }),
+    transport,
+    workspaceRoot: '/workspace'
+  });
+
+  const messages: ModelMessage[] = [{ role: 'user', content: 'Look at ![tiny](tiny.png).' }];
+  await client.complete('runner', messages);
+
+  expect(calls[0]!.messages).toBe(messages);
+  expect(calls[0]!.messages[0]!.content).toBe('Look at ![tiny](tiny.png).');
+});
+
+it('does not read local image paths outside the workspace', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'bobby-vision-root-'));
+  const outsideRoot = mkdtempSync(join(tmpdir(), 'bobby-vision-outside-'));
+  try {
+    const outsideImage = join(outsideRoot, 'outside.png');
+    writeFileSync(outsideImage, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    const calls: ChatRequest[] = [];
+    const readFile = async () => {
+      throw new Error('outside path must not be read');
+    };
+    const transport: HttpTransport = {
+      async chat(req) {
+        calls.push(req);
+        return { content: 'ok', model: req.model };
+      }
+    };
+    const client = new DeepSeekModelClient({
+      apiKey: 'secret-key',
+      report: createReport({ useVision: true }),
+      transport,
+      workspaceRoot,
+      readFile
+    });
+
+    await client.complete('runner', [{ role: 'user', content: `Look at ![outside](${outsideImage}).` }]);
+
+    expect(calls[0]!.messages[0]!.content).toBe(`Look at ![outside](${outsideImage}).`);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(outsideRoot, { recursive: true, force: true });
+  }
 });

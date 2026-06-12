@@ -492,6 +492,14 @@ function writePublicSettings(update: unknown): AppSettings {
     writeSecret(parsed.apiKey);
   }
   const { apiKey: _apiKey, ...publicUpdate } = parsed;
+  if (publicUpdate.workspaceDir) {
+    currentProjectDir = publicUpdate.workspaceDir;
+    currentProject = {
+      name: projectName(publicUpdate.workspaceDir),
+      path: publicUpdate.workspaceDir,
+      lastOpenedAt: new Date().toISOString()
+    };
+  }
   const next = {
     ...readPublicSettings(),
     ...publicUpdate,
@@ -1386,11 +1394,11 @@ function setupDesktopIntegration(): void {
   }
 }
 
-async function createModelClient(agent?: SubAgentRecordDto) {
+async function createModelClient(agent?: SubAgentRecordDto, workspaceRoot = currentWorkspaceRoot()) {
   const settings = readPublicSettings();
   const loaded = await loadDeepSeekConfig();
   const report = agent?.model ? { ...loaded.report, runnerModel: agent.model } : loaded.report;
-  return makeDeepSeekClient(readSecret() ?? loaded.apiKey, report, settings.baseUrl);
+  return makeDeepSeekClient(readSecret() ?? loaded.apiKey, report, settings.baseUrl, { workspaceRoot });
 }
 
 function createSubAgentConscienceDeps(workspaceRoot: string) {
@@ -1398,7 +1406,7 @@ function createSubAgentConscienceDeps(workspaceRoot: string) {
 }
 
 async function runSubAgentTaskInWorktree(agent: SubAgentRecordDto, task: string, worktreePath: string): Promise<void> {
-  const model = await createModelClient(agent);
+  const model = await createModelClient(agent, worktreePath);
   const host = new KernelHost(() => model, createSubAgentConscienceDeps(worktreePath), worktreePath, false);
   await host.send({
     type: 'startTask',
@@ -1408,8 +1416,8 @@ async function runSubAgentTaskInWorktree(agent: SubAgentRecordDto, task: string,
 
 const createHost = async () => {
   try {
-    const model = await createModelClient();
-    const workspaceRoot = currentProjectDir ?? process.cwd();
+    const workspaceRoot = currentWorkspaceRoot();
+    const model = await createModelClient(undefined, workspaceRoot);
     refreshToolRegistry();
     const host = new KernelHost(() => model, conscienceDeps, workspaceRoot, true);
     currentHost = host;

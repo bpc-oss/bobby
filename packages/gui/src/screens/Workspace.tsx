@@ -620,7 +620,7 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     event.preventDefault();
     setNotice(
       visionSupported
-        ? 'Vision capability is available, but Bobby still inserts a local file path reference in this build.'
+        ? 'Vision is enabled; Bobby will send workspace image references as multimodal input.'
         : 'Vision is not enabled in this build, so Bobby inserted a local file path reference instead.'
     );
     const insertion = `![${image.name}](${path})`;
@@ -644,7 +644,7 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     event.preventDefault();
     setNotice(
       visionSupported
-        ? 'Vision capability is available, but Bobby still inserts a local file path reference in this build.'
+        ? 'Vision is enabled; Bobby will send workspace image references as multimodal input.'
         : 'Vision is not enabled in this build, so Bobby inserted a local file path reference instead.'
     );
     const insertion = `![${image.name}](${path})`;

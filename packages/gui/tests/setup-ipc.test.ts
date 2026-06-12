@@ -414,7 +414,8 @@ describe('settings IPC handlers', () => {
     expect(makeDeepSeekClient).toHaveBeenLastCalledWith(
       'sk-settings-secret',
       expect.objectContaining({ runnerModel: 'deepseek-chat' }),
-      'https://deepseek.example.test'
+      'https://deepseek.example.test',
+      { workspaceRoot: 'E:\\ai-files\\Bobby' }
     );
   });
 
