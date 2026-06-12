@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Bobby GUI 设计草图 — Shell Mockup</title>
+<style>
+  :root {
+    --bg: #16181d; --bg2: #1d2026; --bg3: #23272e; --bg4: #2b3038;
+    --border: #32363e; --text: #d7dae0; --muted: #8a909a; --dim: #5c6370;
+    --accent: #4fa8d8; --accent2: #5ec9a8; --warn: #d8a04f; --err: #d86b6b; --ok: #6bd88a;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: #0d0e11; color: var(--text); font-size: 13px;
+    display: flex; flex-direction: column; align-items: center; padding: 24px; gap: 12px;
+  }
+  .sketch-note { color: var(--muted); font-size: 12px; }
+  .sketch-note b { color: var(--accent); }
+
+  /* ===== 应用窗口 ===== */
+  .app {
+    width: 1280px; height: 800px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+    display: grid;
+    grid-template-rows: 40px 1fr 26px;
+    grid-template-columns: 48px 260px 1fr auto;
+    grid-template-areas:
+      "title title title title"
+      "rail side main right"
+      "status status status status";
+    box-shadow: 0 12px 48px rgba(0,0,0,.5);
+  }
+
+  /* ===== ① 标题栏 ===== */
+  .titlebar {
+    grid-area: title; display: flex; align-items: center; gap: 12px;
+    padding: 0 12px; background: var(--bg2); border-bottom: 1px solid var(--border);
+  }
+  .brand { font-weight: 700; color: var(--accent); letter-spacing: .5px; }
+  .proj-switch, .palette {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer;
+  }
+  .palette { margin-left: auto; width: 260px; text-align: left; color: var(--dim); }
+  .win-btns { display: flex; gap: 8px; color: var(--dim); font-size: 12px; margin-left: 12px; }
+
+  /* ===== ② 活动栏 ===== */
+  .rail {
+    grid-area: rail; background: var(--bg2); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center; padding: 10px 0; gap: 6px;
+  }
+  .rail-btn {
+    width: 38px; height: 38px; border-radius: 8px; border: none; background: transparent;
+    color: var(--muted); font-size: 17px; cursor: pointer; position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .rail-btn:hover { background: var(--bg3); }
+  .rail-btn.active { background: var(--bg4); color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
+  .rail-btn .badge {
+    position: absolute; top: 2px; right: 2px; background: var(--warn); color: #000;
+    font-size: 9px; border-radius: 8px; padding: 0 4px; font-weight: 700;
+  }
+  .rail-label { font-size: 9px; color: var(--dim); margin: -6px 0 4px; }
+  .rail-spacer { flex: 1; }
+
+  /* ===== ③ 侧边栏 ===== */
+  .side {
+    grid-area: side; background: var(--bg2); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .side-fn { padding: 10px 8px 6px; display: flex; flex-direction: column; gap: 2px; }
+  .fn-item {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px;
+    border: none; background: transparent; color: var(--text); font-size: 13px;
+    cursor: pointer; text-align: left; width: 100%;
+  }
+  .fn-item:hover { background: var(--bg3); }
+  .fn-item.active { background: var(--bg4); color: var(--accent); }
+  .fn-item .new { margin-left: auto; font-size: 9px; color: var(--accent2); border: 1px solid var(--accent2); border-radius: 4px; padding: 0 4px; }
+  .side-sep { border-top: 1px solid var(--border); margin: 4px 12px; }
+  .side-list { flex: 1; overflow-y: auto; padding: 4px 8px 12px; }
+  .group-h { font-size: 11px; color: var(--dim); padding: 10px 10px 4px; letter-spacing: .5px; }
+  .item {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px;
+    cursor: pointer; color: var(--muted);
+  }
+  .item:hover { background: var(--bg3); color: var(--text); }
+  .item .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .dot.run { background: var(--accent); animation: pulse 1.6s infinite; }
+  .dot.gate { background: var(--warn); }
+  .dot.ok { background: var(--ok); opacity: .6; }
+  .dot.err { background: var(--err); }
+  .dot.none { background: var(--dim); opacity: .35; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .item .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .time { font-size: 11px; color: var(--dim); }
+
+  /* ===== ④ 工作区 ===== */
+  .main { grid-area: main; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+  .ws-top {
+    display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+    border-bottom: 1px solid var(--border); background: var(--bg2);
+  }
+  .ws-title { font-weight: 600; }
+  .git-chip { font-size: 11px; color: var(--accent2); background: var(--bg3); padding: 2px 8px; border-radius: 10px; }
+  .summary-toggle { margin-left: auto; background: var(--bg3); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
+  .summary-toggle.open { color: var(--accent); border-color: var(--accent); }
+  .summary {
+    display: none; border-bottom: 1px solid var(--border); background: var(--bg2);
+    padding: 10px 16px; font-size: 12px;
+  }
+  .summary.open { display: block; }
+  .summary .row { display: flex; gap: 14px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+  .step { display: flex; gap: 6px; align-items: center; }
+  .step.done { color: var(--ok); }
+  .step.cur { color: var(--accent); }
+
+  .stream { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 78%; padding: 10px 14px; border-radius: var(--radius); line-height: 1.6; }
+  .msg.user { align-self: flex-end; background: #2a3b4d; }
+  .msg.bot { align-self: flex-start; background: var(--bg3); }
+  .card {
+    align-self: stretch; background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 14px; font-size: 12px;
+  }
+  .card .ch { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--muted); }
+  .card.tool { border-left: 3px solid var(--dim); }
+  .card.gate { border-left: 3px solid var(--warn); }
+  .card.evid { border-left: 3px solid var(--ok); }
+  .card pre { background: #111317; border-radius: 6px; padding: 8px 10px; margin-top: 8px; color: var(--muted); overflow-x: auto; font-size: 11px; }
+  .gate-btns { display: flex; gap: 8px; margin-top: 10px; }
+  .gate-btns button { border-radius: 6px; padding: 4px 14px; cursor: pointer; border: 1px solid var(--border); background: var(--bg3); color: var(--text); }
+  .gate-btns .allow { background: #234232; border-color: var(--ok); color: var(--ok); }
+  .gate-btns .deny { border-color: var(--err); color: var(--err); }
+  .gate-done { margin-top: 10px; color: var(--ok); display: none; }
+
+  .composer-wrap { padding: 10px 16px 6px; border-top: 1px solid var(--border); background: var(--bg2); }
+  .composer { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .composer .input { color: var(--dim); min-height: 34px; }
+  .composer .tools { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .chip {
+    background: var(--bg4); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer;
+  }
+  .chip.model { color: var(--accent); }
+  .send { margin-left: auto; background: var(--accent); color: #08222e; border: none; border-radius: 6px; padding: 4px 16px; font-weight: 700; cursor: pointer; }
+  .costbar { display: flex; gap: 14px; padding: 6px 4px 2px; font-size: 11px; color: var(--dim); }
+  .costbar b { color: var(--accent2); font-weight: 600; }
+
+  /* ===== 占位页（空状态）===== */
+  .placeholder { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); }
+  .placeholder .big { font-size: 44px; opacity: .85; }
+  .placeholder h2 { font-size: 17px; color: var(--text); }
+  .placeholder p { max-width: 460px; text-align: center; line-height: 1.7; font-size: 12.5px; }
+  .placeholder .soon { font-size: 11px; color: var(--accent2); border: 1px solid var(--accent2); border-radius: 10px; padding: 2px 10px; }
+  .mini-sketch { margin-top: 10px; display: flex; gap: 10px; }
+  .mini-sketch .box { width: 150px; height: 90px; background: var(--bg2); border: 1px dashed var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 11px; text-align: center; padding: 6px; }
+
+  /* ===== ⑤ 右侧面板 ===== */
+  .right { grid-area: right; width: 360px; background: var(--bg2); border-left: 1px solid var(--border); display: flex; flex-direction: column; transition: width .15s; }
+  .right.collapsed { width: 36px; }
+  .right.collapsed .rp-body, .right.collapsed .rp-tabs { display: none; }
+  .rp-head { display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+  .rp-collapse { background: none; border: none; color: var(--dim); cursor: pointer; padding: 8px 10px; font-size: 13px; }
+  .rp-tabs { display: flex; flex: 1; }
+  .rp-tab { flex: 1; background: none; border: none; color: var(--muted); padding: 9px 4px; cursor: pointer; font-size: 12px; border-bottom: 2px solid transparent; }
+  .rp-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .rp-body { flex: 1; overflow-y: auto; padding: 12px; font-size: 12px; }
+  .rp-sec-h { font-size: 11px; color: var(--dim); margin: 8px 0 6px; letter-spacing: .5px; }
+  .file-row { display: flex; gap: 8px; padding: 5px 8px; border-radius: 6px; cursor: pointer; color: var(--muted); }
+  .file-row:hover { background: var(--bg3); }
+  .file-row .m { font-weight: 700; width: 14px; }
+  .m.A { color: var(--ok); } .m.M { color: var(--warn); } .m.D { color: var(--err); }
+  .diff { background: #111317; border-radius: 6px; padding: 8px 10px; font-family: Consolas, monospace; font-size: 11px; line-height: 1.7; margin: 6px 0; }
+  .diff .add { color: var(--ok); } .diff .del { color: var(--err); }
+  .evid-row { display: flex; gap: 8px; padding: 6px 8px; border-left: 2px solid var(--ok); margin: 6px 0; background: var(--bg3); border-radius: 0 6px 6px 0; color: var(--muted); }
+  .review-btn { width: 100%; margin-top: 10px; background: var(--bg4); border: 1px solid var(--accent); color: var(--accent); border-radius: 6px; padding: 6px; cursor: pointer; }
+  .term { background: #111317; border-radius: 6px; padding: 10px; font-family: Consolas, monospace; font-size: 11px; line-height: 1.8; color: var(--muted); }
+  .term .ps { color: var(--accent2); }
+  .web-bar { display: flex; gap: 6px; margin-bottom: 8px; }
+  .web-bar input { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); padding: 4px 8px; font-size: 11px; }
+  .web-frame { height: 420px; background: var(--bg3); border: 1px dashed var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--dim); }
+  .sc-msg { background: var(--bg3); border-radius: 8px; padding: 8px 10px; margin: 6px 0; color: var(--muted); }
+  .sc-msg.me { background: #2a3b4d; }
+  .sc-note { font-size: 11px; color: var(--dim); margin-bottom: 6px; }
+
+  /* ===== ⑥ 状态栏 ===== */
+  .status {
+    grid-area: status; display: flex; align-items: center; gap: 16px; padding: 0 14px;
+    background: var(--bg2); border-top: 1px solid var(--border); font-size: 11px; color: var(--dim);
+  }
+  .status .ok { color: var(--ok); } .status .upd { color: var(--warn); margin-left: auto; cursor: pointer; }
+  .ctx-meter { display: inline-block; width: 60px; height: 6px; background: var(--bg4); border-radius: 3px; vertical-align: middle; overflow: hidden; }
+  .ctx-meter i { display: block; width: 34%; height: 100%; background: var(--accent); }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="sketch-note">Bobby GUI <b>设计草图</b>（静态 mock）— 可点击：左侧 <b>Chat / Code</b> 入口、侧边栏各功能项、右侧面板 tabs、摘要栏、闸口审批按钮、⚙ 设置</div>
+
+<div class="app">
+
+  <!-- ① 标题栏 -->
+  <div class="titlebar">
+    <span class="brand">● Bobby</span>
+    <button class="proj-switch">📂 项目: bobby ▾</button>
+    <button class="palette">🔍 搜索或执行命令…　Ctrl+K</button>
+    <span style="color:var(--dim);cursor:pointer">🔔</span>
+    <div class="win-btns"><span>─</span><span>□</span><span>✕</span></div>
+  </div>
+
+  <!-- ② 活动栏 -->
+  <div class="rail">
+    <button class="rail-btn active" id="rail-chat" onclick="setMode('chat')">💬</button>
+    <div class="rail-label">Chat</div>
+    <button class="rail-btn" id="rail-code" onclick="setMode('code')">⌨<span class="badge">1</span></button>
+    <div class="rail-label">Code</div>
+    <div class="rail-spacer"></div>
+    <button class="rail-btn" id="rail-settings" onclick="showView('settings')">⚙</button>
+    <button class="rail-btn">👤</button>
+  </div>
+
+  <!-- ③ 侧边栏：Chat 模式 -->
+  <div class="side" id="side-chat">
+    <div class="side-fn">
+      <button class="fn-item active" onclick="showView('chat-session', this)">＋ <span>New Chat</span></button>
+      <button class="fn-item" onclick="showView('search', this)">🔍 <span>搜索</span></button>
+      <button class="fn-item" onclick="showView('write', this)">✍ <span>Write</span><span class="new">即将推出</span></button>
+      <button class="fn-item" onclick="showView('projects', this)">📁 <span>Projects</span></button>
+    </div>
+    <div class="side-sep"></div>
+    <div class="side-list">
+      <div class="group-h">📌 置顶</div>
+      <div class="item"><span class="dot none"></span><span class="t">DeepSeek V4 定价梳理</span><span class="time">6/2</span></div>
+      <div class="group-h">📂 项目</div>
+      <div class="item"><span class="dot none"></span><span class="t">论文写作 / 引言修改</span><span class="time">周三</span></div>
+      <div class="item"><span class="dot none"></span><span class="t">论文写作 / 审稿回复</span><span class="time">周一</span></div>
+      <div class="group-h">🕘 今天</div>
+      <div class="item"><span class="dot none"></span><span class="t">Electron 自动更新方案对比</span><span class="time">14:02</span></div>
+      <div class="group-h">🕘 昨天</div>
+      <div class="item"><span class="dot none"></span><span class="t">pnpm workspace 依赖提升问题</span><span class="time">22:41</span></div>
+      <div class="item"><span class="dot none"></span><span class="t">zustand vs jotai</span><span class="time">20:15</span></div>
+    </div>
+  </div>
+
+  <!-- ③ 侧边栏：Code 模式 -->
+  <div class="side hidden" id="side-code">
+    <div class="side-fn">
+      <button class="fn-item active" onclick="showView('code-session', this)">＋ <span>New Session</span></button>
+      <button class="fn-item" onclick="showView('routines', this)">⏰ <span>Routines</span><span class="new">即将推出</span></button>
+      <button class="fn-item" onclick="showView('loop', this)">🔁 <span>Loop Engineering</span><span class="new">即将推出</span></button>
+      <button class="fn-item" onclick="showView('team', this)">👥 <span>Team</span><span class="new">即将推出</span></button>
+    </div>
+    <div class="side-sep"></div>
+    <div class="side-list">
+      <div class="group-h">📌 置顶</div>
+      <div class="item"><span class="dot run"></span><span class="t">GUI 外壳重构 P0</span><span class="time">运行中</span></div>
+      <div class="group-h">📂 bobby</div>
+      <div class="item"><span class="dot gate"></span><span class="t">修复 updater 校验失败</span><span class="time">待审批</span></div>
+      <div class="item"><span class="dot ok"></span><span class="t">kernel 事件总线单测补全</span><span class="time">11:20</span></div>
+      <div class="group-h">📂 paper-tools</div>
+      <div class="item"><span class="dot err"></span><span class="t">PDF 解析管线迁移</span><span class="time">昨天</span></div>
+      <div class="item"><span class="dot ok"></span><span class="t">CI release 工作流</span><span class="time">6/9</span></div>
+    </div>
+  </div>
+
+  <!-- ④ 工作区 -->
+  <div class="main">
+
+    <!-- 视图：Code 会话（默认展示最完整的形态）-->
+    <div id="view-code-session" class="hidden" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+      <div class="ws-top">
+        <span class="ws-title">修复 updater 校验失败</span>
+        <span class="git-chip">⎇ fix/updater-sig</span>
+        <button class="summary-toggle" id="sum-btn" onclick="toggleSummary()">📋 摘要 ▾</button>
+      </div>
+      <div class="summary" id="summary">
+        <div class="step done">✓ 1. 复现校验失败（已获取日志证据）</div>
+        <div class="step done">✓ 2. 定位 latest.yml 签名字段缺失</div>
+        <div class="step cur">● 3. 修改 electron-builder.yml 并重新打包验证 ← 当前</div>
+        <div class="step">○ 4. Pro 复核 + 产出证据报告</div>
+        <div class="row"><span>变更文件 2</span><span>·</span><span>证据 3 条</span><span>·</span><span>累计 ≈¥0.42</span></div>
+      </div>
+      <div class="stream">
+        <div class="msg user">更新器报 signature validation failed，帮我查一下并修复</div>
+        <div class="card tool"><div class="ch">🔧 工具调用 · read_file <span style="color:var(--dim)">electron/updater.ts</span> ▸</div></div>
+        <div class="msg bot">定位到原因：<code>latest.yml</code> 缺少 <code>sha512</code> 签名字段，是打包配置里 publish 段被裁剪时误删了校验配置。我需要修改 <code>electron-builder.yml</code> 并重新运行打包验证。</div>
+        <div class="card gate">
+          <div class="ch">⛔ 闸口审批 · 写入文件 + 执行打包命令</div>
+          <pre>修改: packages/gui/electron-builder.yml  (+3 -1)
+执行: pnpm --filter @bobby/gui package</pre>
+          <div class="gate-btns" id="gate-btns">
+            <button class="allow" onclick="approveGate()">允许</button>
+            <button class="deny">拒绝</button>
+            <button>总是允许此类操作</button>
+          </div>
+          <div class="gate-done" id="gate-done">✓ 已允许 — 14:23:08，决策已记录</div>
+        </div>
+        <div class="card evid">
+          <div class="ch">🧾 证据 · command_output</div>
+          <pre>$ pnpm --filter @bobby/gui package
+✓ built in 42.3s · latest.yml sha512 字段已生成</pre>
+        </div>
+      </div>
+      <div class="composer-wrap">
+        <div class="composer">
+          <div class="input">询问或下达任务… 　@文件　/命令　粘贴图片</div>
+          <div class="tools">
+            <span class="chip">@</span><span class="chip">/</span><span class="chip">🖼</span>
+            <span class="chip model">模型: Flash ▾</span>
+            <span class="chip">权限: 询问 ▾</span>
+            <span class="chip">🧠 思考: 关</span>
+            <button class="send">发送 ⏎</button>
+          </div>
+        </div>
+        <div class="costbar"><span>缓存命中 <b>92%</b></span><span>输入 8.1k / 输出 4.2k tok</span><span>本会话 ≈<b>¥0.18</b></span><span style="margin-left:auto">明细 ▸</span></div>
+      </div>
+    </div>
+
+    <!-- 视图：Chat 会话 -->
+    <div id="view-chat-session" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+      <div class="ws-top">
+        <span class="ws-title">New Chat</span>
+        <button class="summary-toggle" onclick="toggleSummary()">📋 摘要 ▾</button>
+      </div>
+      <div class="stream">
+        <div class="placeholder" style="flex:1">
+          <div class="big">💬</div>
+          <h2>开始新对话</h2>
+          <p>普通对话模式。支持 @引用文件、/命令、图片。下方计费条实时显示缓存命中率与人民币花费（DeepSeek 风格）。</p>
+        </div>
+      </div>
+      <div class="composer-wrap">
+        <div class="composer">
+          <div class="input">问点什么…</div>
+          <div class="tools">
+            <span class="chip">@</span><span class="chip">/</span><span class="chip">🖼</span>
+            <span class="chip model">模型: 自动 ▾</span>
+            <span class="chip">🧠 思考: 关</span>
+            <button class="send">发送 ⏎</button>
+          </div>
+        </div>
+        <div class="costbar"><span>缓存命中 <b>—</b></span><span>0 tok</span><span>≈<b>¥0.00</b></span></div>
+      </div>
+    </div>
+
+    <!-- 占位视图们 -->
+    <div id="view-search" class="placeholder hidden">
+      <div class="big">🔍</div><h2>全文搜索</h2>
+      <p>跨所有对话与会话的全文检索。也可以随时用 Ctrl+K 唤起命令面板：搜索 + 跳转 + 执行动作。</p>
+      <span class="soon">P6 实现</span>
+    </div>
+
+    <div id="view-write" class="placeholder hidden">
+      <div class="big">✍</div><h2>Write 写作模式</h2>
+      <p>文档型创作（模仿 DeepSeek GUI）：左侧 Markdown 编辑器 + AI 续写/改写/润色，右侧实时预览，可导出 md / docx。</p>
+      <div class="mini-sketch"><div class="box">编辑器<br>（AI 续写/润色按钮）</div><div class="box">实时预览</div></div>
+      <span class="soon">即将推出</span>
+    </div>
+
+    <div id="view-projects" class="placeholder hidden">
+      <div class="big">📁</div><h2>Projects</h2>
+      <p>项目 = 共享上下文 + 自定义指令 + 知识文件（模仿 Claude Projects）。归属项目的对话自动携带项目上下文。</p>
+      <div class="mini-sketch"><div class="box">项目信息卡<br>指令 / 知识文件</div><div class="box">项目内对话列表<br>＋ 新建</div></div>
+      <span class="soon">P5 后实现</span>
+    </div>
+
+    <div id="view-routines" class="placeholder hidden">
+      <div class="big">⏰</div><h2>Routines 定时任务</h2>
+      <p>自然语言排程 → cron。每次运行落成一条 Code 会话记录。列表显示：下次运行 / 上次结果 / 开关。</p>
+      <div class="mini-sketch"><div class="box">每天 09:00<br>依赖安全扫描 ✓</div><div class="box">每周一 10:00<br>周报汇总 ✓</div><div class="box">＋ 新建<br>（自然语言描述）</div></div>
+      <span class="soon">P5 实现</span>
+    </div>
+
+    <div id="view-loop" class="placeholder hidden">
+      <div class="big">🔁</div><h2>Loop Engineering 循环工程</h2>
+      <p>Loop = <b>目标 + 验收器 + 迭代策略 + 预算</b>。每轮把上轮失败证据喂回去，直到验收通过或预算耗尽。验收默认由 Pro 复核 —— 自己不能给自己打分。</p>
+      <div class="mini-sketch"><div class="box">迭代时间线<br>第1…n轮 各带验收分</div><div class="box">收敛曲线 📈</div><div class="box">控制台<br>暂停/介入/调预算</div></div>
+      <span class="soon">P5 实现 · 重点版块</span>
+    </div>
+
+    <div id="view-team" class="placeholder hidden">
+      <div class="big">👥</div><h2>Team 多智能体流水线</h2>
+      <p>角色编排：节点 = agent（模型/提示词/工具权限），连线 = 交接物。MVP 提供模板：执行者→复核者、规划→编码→测试→复核。运行时泳道图展示各 agent 消息流。</p>
+      <div class="mini-sketch"><div class="box">规划 Pro</div><div class="box">→ 编码 Flash</div><div class="box">→ 复核 Pro</div></div>
+      <span class="soon">P5 实现 · 重点版块</span>
+    </div>
+
+    <div id="view-settings" class="placeholder hidden">
+      <div class="big">⚙</div><h2>Settings 设置中心</h2>
+      <p>通用（语言/主题/快捷键/通知）· 模型与密钥（key / probe 报告 / Flash-Pro 分工）· 权限与闸口 · MCP/插件 · <b>用量统计</b>（日/月 token、缓存命中趋势、¥累计）· 数据与隐私（零遥测）· 关于与更新。</p>
+      <div class="mini-sketch"><div class="box">左侧子页导航</div><div class="box">右侧设置表单</div><div class="box">用量 dashboard 📊</div></div>
+      <span class="soon">P2 起逐步填充</span>
+    </div>
+  </div>
+
+  <!-- ⑤ 右侧面板 -->
+  <div class="right" id="rpanel">
+    <div class="rp-head">
+      <button class="rp-collapse" onclick="toggleRight()">⇥</button>
+      <div class="rp-tabs">
+        <button class="rp-tab active" onclick="setTab('review', this)">🔍 审查</button>
+        <button class="rp-tab" onclick="setTab('term', this)">＞ 终端</button>
+        <button class="rp-tab" onclick="setTab('web', this)">🌐 网页</button>
+        <button class="rp-tab" onclick="setTab('sidechat', this)">💭 SideChat</button>
+      </div>
+    </div>
+    <div class="rp-body">
+      <div id="tab-review">
+        <div class="rp-sec-h">文件变更（2）</div>
+        <div class="file-row"><span class="m M">M</span><span>packages/gui/electron-builder.yml</span></div>
+        <div class="file-row"><span class="m A">A</span><span>packages/gui/scripts/verify-sig.mjs</span></div>
+        <div class="diff">
+          <div>@@ electron-builder.yml @@</div>
+          <div class="del">-  # publish 段裁剪时误删</div>
+          <div class="add">+  generateUpdatesFilesForAllChannels: true</div>
+          <div class="add">+  verifyUpdateCodeSignature: true</div>
+        </div>
+        <div class="rp-sec-h">证据链（3）</div>
+        <div class="evid-row">✓ <span>command_output · 打包成功，sha512 已生成</span></div>
+        <div class="evid-row">✓ <span>file_diff · electron-builder.yml +3 −1</span></div>
+        <div class="evid-row">✓ <span>file_exists · release/latest.yml</span></div>
+        <button class="review-btn">🛡 用 Pro 复核本次变更</button>
+      </div>
+      <div id="tab-term" class="hidden">
+        <div class="term">
+          <div><span class="ps">bobby&gt;</span> pnpm --filter @bobby/gui package</div>
+          <div>vite v5.3.0 building for production...</div>
+          <div>✓ 214 modules transformed.</div>
+          <div>✓ built in 42.3s</div>
+          <div><span class="ps">bobby&gt;</span> node scripts/verify-sig.mjs</div>
+          <div>sha512 OK · signature OK</div>
+          <div style="color:var(--dim)">— 只读命令流（kernel 执行记录），可交互 shell 后续阶段 —</div>
+        </div>
+      </div>
+      <div id="tab-web" class="hidden">
+        <div class="web-bar"><input value="http://localhost:5173"><span class="chip">刷新</span></div>
+        <div class="web-frame">内嵌 webview 预览<br>（dev server / 文档）</div>
+      </div>
+      <div id="tab-sidechat" class="hidden">
+        <div class="sc-note">旁路小聊 · 不污染主会话上下文 · Flash · 独立计费 ¥0.01</div>
+        <div class="sc-msg me">sha512 和 blockmap 是什么关系？</div>
+        <div class="sc-msg">sha512 校验整包完整性；blockmap 用于差量更新时按块比对，二者……</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑥ 状态栏 -->
+  <div class="status">
+    <span><span class="ok">●</span> kernel 已连接</span>
+    <span><span class="ok">●</span> DeepSeek · Flash</span>
+    <span>上下文 <span class="ctx-meter"><i></i></span> 34%</span>
+    <span>mock 模式</span>
+    <span class="upd">⬆ v0.1.1 更新可用</span>
+  </div>
+</div>
+
+<div class="sketch-note">P0 阶段交付物即为此框架的 React 实现（全部吃 mock 数据）· 详见同目录设计文档</div>
+
+<script>
+  let mode = 'chat';
+  const views = ['chat-session','code-session','search','write','projects','routines','loop','team','settings'];
+
+  function setMode(m) {
+    mode = m;
+    document.getElementById('rail-chat').classList.toggle('active', m === 'chat');
+    document.getElementById('rail-code').classList.toggle('active', m === 'code');
+    document.getElementById('rail-settings').classList.remove('active');
+    document.getElementById('side-chat').classList.toggle('hidden', m !== 'chat');
+    document.getElementById('side-code').classList.toggle('hidden', m !== 'code');
+    showView(m === 'chat' ? 'chat-session' : 'code-session');
+    // 重置侧边栏高亮到第一项
+    const side = document.getElementById(m === 'chat' ? 'side-chat' : 'side-code');
+    side.querySelectorAll('.fn-item').forEach((b, i) => b.classList.toggle('active', i === 0));
+  }
+
+  function showView(v, btn) {
+    views.forEach(id => {
+      const el = document.getElementById('view-' + id);
+      if (el) el.classList.toggle('hidden', id !== v);
+    });
+    if (btn) {
+      btn.closest('.side-fn').querySelectorAll('.fn-item').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+    if (v === 'settings') {
+      document.getElementById('rail-settings').classList.add('active');
+      document.getElementById('rail-chat').classList.remove('active');
+      document.getElementById('rail-code').classList.remove('active');
+    }
+  }
+
+  function setTab(t, btn) {
+    ['review','term','web','sidechat'].forEach(id =>
+      document.getElementById('tab-' + id).classList.toggle('hidden', id !== t));
+    btn.parentElement.querySelectorAll('.rp-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  function toggleSummary() {
+    document.getElementById('summary').classList.toggle('open');
+    document.getElementById('sum-btn').classList.toggle('open');
+  }
+
+  function toggleRight() {
+    document.getElementById('rpanel').classList.toggle('collapsed');
+  }
+
+  function approveGate() {
+    document.getElementById('gate-btns').style.display = 'none';
+    document.getElementById('gate-done').style.display = 'block';
+  }
+</script>
+</body>
+</html>
