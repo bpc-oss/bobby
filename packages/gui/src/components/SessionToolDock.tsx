@@ -64,6 +64,11 @@ function collectDiffs(blocks: ChatBlock[]): Array<{ path: string; patch: string 
   });
 }
 
+function listPatchFiles(patch: string): string[] {
+  const matches = patch.matchAll(/^\+\+\+ b\/(.+)$/gm);
+  return Array.from(matches, (match) => match[1]).filter(Boolean);
+}
+
 function blockText(block: ChatBlock): string {
   if (block.kind === 'user' || block.kind === 'assistant' || block.kind === 'reasoning') return block.text;
   if (block.kind === 'tool') return [block.tool, block.content].filter(Boolean).join(' - ');
@@ -138,6 +143,11 @@ function ReviewPanel({ proposals, refresh }: { proposals: ProposalSummary[]; ref
   const gates = blocks.filter((block) => block.kind === 'gate');
   const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
   const canApply = status === 'done' && findings.length === 0 && gates.length === 0;
+  const changedFiles = React.useMemo(() => {
+    const fromEvidence = collectDiffs(blocks).map((diff) => diff.path);
+    const fromProposals = proposals.flatMap((proposal) => listPatchFiles(proposal.patch));
+    return Array.from(new Set([...fromEvidence, ...fromProposals])).sort((left, right) => left.localeCompare(right));
+  }, [blocks, proposals]);
   const [isGitRepo, setIsGitRepo] = React.useState(false);
   const [commitMessage, setCommitMessage] = React.useState('Apply Bobby proposal');
   const [commitStatus, setCommitStatus] = React.useState<string | null>(null);
@@ -197,6 +207,39 @@ function ReviewPanel({ proposals, refresh }: { proposals: ProposalSummary[]; ref
       {findings.length === 0 && gates.length === 0 ? <Row icon={CheckCircle2} title="No blocking review findings" tone="success" /> : null}
       {gates.map((gate) => <Row key={gate.id} icon={ShieldAlert} title={gate.reason} meta={gate.gateId} tone="warning" />)}
       {findings.map((finding) => <Row key={finding.id} icon={Bug} title={blockText(finding)} meta={finding.kind} tone="danger" />)}
+      <section className="rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
+        <div className="text-[12px] font-semibold text-bobby-ink">Review readiness</div>
+        <div className="mt-2 space-y-2">
+          <Row
+            icon={canApply ? CheckCircle2 : ShieldAlert}
+            title={gates.length === 0 && status === 'done' ? 'Completion gate passed' : 'Completion gate pending'}
+            meta={status === 'done' ? 'Task reached done status.' : `Current task status: ${status}`}
+            tone={gates.length === 0 && status === 'done' ? 'success' : 'warning'}
+          />
+          <Row
+            icon={findings.length === 0 ? CheckCircle2 : Bug}
+            title={findings.length === 0 ? 'Pro review passed' : 'Pro review blocked'}
+            meta={findings.length === 0 ? 'No failing verdicts or error cards.' : `${findings.length} blocking findings`}
+            tone={findings.length === 0 ? 'success' : 'danger'}
+          />
+          <Row
+            icon={CheckCircle2}
+            title="Human confirmation required"
+            meta="Apply still requires an explicit confirmation click."
+            tone="default"
+          />
+        </div>
+      </section>
+      <section className="rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
+        <div className="text-[12px] font-semibold text-bobby-ink">Changed files</div>
+        <div className="mt-2 space-y-2">
+          {changedFiles.length === 0 ? (
+            <Empty title="No changed files detected yet." />
+          ) : (
+            changedFiles.map((path) => <Row key={path} icon={FileDiff} title={path} />)
+          )}
+        </div>
+      </section>
       {proposals.length === 0 ? <Empty title="No proposal patches in .bobby/proposals." /> : proposals.map((proposal) => (
         <section key={proposal.proposalId} className="rounded-lg border p-2" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
           <div className="mb-2 flex items-center gap-2">

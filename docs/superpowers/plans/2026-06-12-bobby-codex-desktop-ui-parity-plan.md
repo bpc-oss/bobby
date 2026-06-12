@@ -481,6 +481,12 @@ Acceptance:
 
 Goal: Make Codex-style review the primary path for proposals and worktree changes.
 
+Status:
+
+- Completed on 2026-06-12.
+- Implemented with review readiness statuses, changed-file listing, proposal diff visibility, gated apply/discard actions, and git commit flow inside the review dock.
+- Verified with focused GUI tests, GUI package tests, Electron smoke, and full workspace tests.
+
 Scope:
 
 - Changed files list.

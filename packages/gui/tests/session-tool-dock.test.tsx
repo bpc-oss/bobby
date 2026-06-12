@@ -20,6 +20,10 @@ function installBobby() {
     }),
     openQuickstart: vi.fn().mockResolvedValue(undefined),
     listProposals: vi.fn().mockResolvedValue([]),
+    applyProposal: vi.fn().mockResolvedValue(null),
+    discardProposal: vi.fn().mockResolvedValue(undefined),
+    gitIsRepo: vi.fn().mockResolvedValue(true),
+    gitCommit: vi.fn().mockResolvedValue({ committed: true, hash: 'abc1234', output: 'Committed changes' }),
     listSubAgentDispatches: vi.fn().mockResolvedValue([
       {
         id: 'dispatch-1',
@@ -451,6 +455,89 @@ describe('SessionToolDock', () => {
     fireEvent.click(screen.getByTitle(/Review/));
     expect(await screen.findByText('proposal-1')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows review readiness, changed files, and applies a ready proposal with all gates', async () => {
+    window.bobby.listProposals = vi.fn().mockResolvedValue([
+      {
+        proposalId: 'proposal-1',
+        proposalPath: 'E:\\ai-files\\Bobby\\.bobby\\proposals\\proposal-1.patch',
+        createdAt: '2026-06-11T00:00:00.000Z',
+        bytes: 84,
+        lineCount: 6,
+        patch: [
+          'diff --git a/src/index.ts b/src/index.ts',
+          '--- a/src/index.ts',
+          '+++ b/src/index.ts',
+          '@@ -0,0 +1 @@',
+          '+export const ready = true;',
+          'diff --git a/src/utils.ts b/src/utils.ts',
+          '--- a/src/utils.ts',
+          '+++ b/src/utils.ts',
+          '@@ -0,0 +1 @@',
+          '+export const value = 42;'
+        ].join('\n')
+      }
+    ]);
+    useChatStore.setState({
+      blocks: [
+        { kind: 'user', id: 'u-1', text: 'Run this through Mission Control' },
+        {
+          kind: 'evidence',
+          id: 'e-1',
+          evidence: {
+            claimId: 'c1',
+            acId: 'AC1',
+            evidenceType: 'file_diff',
+            payload: { path: 'src/index.ts', patch: '@@ -0,0 +1 @@\n+export const ready = true;' },
+            producedBy: 'tool'
+          }
+        },
+        {
+          kind: 'evidence',
+          id: 'e-2',
+          evidence: {
+            claimId: 'c2',
+            acId: 'AC2',
+            evidenceType: 'file_diff',
+            payload: { path: 'src/utils.ts', patch: '@@ -0,0 +1 @@\n+export const value = 42;' },
+            producedBy: 'tool'
+          }
+        }
+      ],
+      status: 'done'
+    });
+
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Review/));
+    expect(await screen.findByText('Completion gate passed')).toBeTruthy();
+    expect(screen.getByText('Pro review passed')).toBeTruthy();
+    expect(screen.getByText('Human confirmation required')).toBeTruthy();
+    expect(screen.getByText('Changed files')).toBeTruthy();
+    expect(screen.getByText('src/index.ts')).toBeTruthy();
+    expect(screen.getByText('src/utils.ts')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(window.bobby.applyProposal).toHaveBeenCalledWith({
+      proposalId: 'proposal-1',
+      gatePassed: true,
+      proReviewPassed: true,
+      humanConfirmed: true
+    });
+  });
+
+  it('commits workspace changes from the review panel only for git projects', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Review/));
+    expect(await screen.findByText('git repo')).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText('Apply Bobby proposal'), { target: { value: 'Ship review slice' } });
+    fireEvent.click(screen.getByText('Commit changes'));
+
+    expect(window.confirm).toHaveBeenCalledWith('Commit current workspace changes?\n\nShip review slice');
+    expect(window.bobby.gitCommit).toHaveBeenCalledWith({ message: 'Ship review slice' });
+    expect(await screen.findByText(/Committed abc1234/)).toBeTruthy();
   });
 
   it('detects a web project and can start a preview server from package.json', async () => {
