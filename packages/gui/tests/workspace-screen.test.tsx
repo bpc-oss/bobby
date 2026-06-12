@@ -334,6 +334,12 @@ describe('workspace UI smoke', () => {
     expect(screen.getByText('New Chat')).toBeTruthy();
     expect(screen.getByText('Search')).toBeTruthy();
     expect(screen.getByText('Plugins')).toBeTruthy();
+    expect(screen.getByText('Automations')).toBeTruthy();
+    expect(screen.getByText('Settings')).toBeTruthy();
+    expect(screen.queryByText('Tools')).toBeNull();
+    expect(screen.queryByText('History')).toBeNull();
+    expect(screen.queryByText('Agents')).toBeNull();
+    expect(screen.queryByText('Commands')).toBeNull();
   });
 
   it('collapses and expands project task groups from the navigator', () => {
@@ -574,16 +580,31 @@ describe('workspace UI smoke', () => {
     });
   });
 
-  it('starts from brainstorming mission guidance instead of write/code modules', () => {
+  it('keeps the empty state focused on the centered prompt and composer instead of suggestion cards', () => {
     render(<Workspace kernelClient={makeKernelClientMock()} />);
 
-    expect(screen.getByText('Shape a mission')).toBeTruthy();
-    expect(screen.getByText('Explore approaches')).toBeTruthy();
-    expect(screen.getByText('Build the plan')).toBeTruthy();
-    expect(screen.getByText('Run with proof')).toBeTruthy();
-    expect(screen.getByText('Audit the session')).toBeTruthy();
+    expect(screen.getByText('我们应该在 Bobby 中构建什么?')).toBeTruthy();
+    expect(screen.queryByText('Shape a mission')).toBeNull();
+    expect(screen.queryByText('Explore approaches')).toBeNull();
+    expect(screen.queryByText('Build the plan')).toBeNull();
+    expect(screen.queryByText('Run with proof')).toBeNull();
+    expect(screen.queryByText('Audit the session')).toBeNull();
     expect(screen.queryByText('Write')).toBeNull();
     expect(screen.queryByText('Code')).toBeNull();
+  });
+
+  it('defaults the app shell to the dark theme when no preference was saved', () => {
+    render(<App />);
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('prefers the new dark default over a legacy saved light theme value', () => {
+    window.localStorage.setItem('bobby-theme', 'light');
+
+    render(<App />);
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
 
   it('renders a codex-style empty state and floating composer console', () => {

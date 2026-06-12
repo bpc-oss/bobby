@@ -1,13 +1,10 @@
 import React from 'react';
 import {
-  Bot,
   CalendarClock,
   Circle,
   CircleDot,
   ChevronDown,
   ChevronRight,
-  Clock3,
-  Command,
   FolderOpen,
   MessageSquarePlus,
   Puzzle,
@@ -18,8 +15,6 @@ import { useChatStore } from '../store/chat-store';
 
 type SidebarProps = {
   page: 'chat' | 'search' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'settings';
-  theme: 'light' | 'dark';
-  onThemeChange: (theme: 'light' | 'dark') => void;
   onPage: (page: 'chat' | 'search' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'settings') => void;
   onNewSession: () => void;
 };
@@ -165,7 +160,7 @@ function RailButton({
   );
 }
 
-export function Sidebar({ page, theme, onThemeChange, onPage, onNewSession }: SidebarProps): React.ReactElement {
+export function Sidebar({ page, onPage, onNewSession }: SidebarProps): React.ReactElement {
   const threads = useChatStore((s) => s.threads);
   const currentProject = useChatStore((s) => s.currentProject);
   const recentProjects = useChatStore((s) => s.recentProjects);
@@ -232,13 +227,14 @@ export function Sidebar({ page, theme, onThemeChange, onPage, onNewSession }: Si
       icon: CalendarClock,
       active: page === 'schedule',
       onClick: () => onPage('schedule')
+    },
+    {
+      key: 'settings',
+      label: 'Settings',
+      icon: Settings2,
+      active: page === 'settings',
+      onClick: () => onPage('settings')
     }
-  ];
-
-  const secondaryItems = [
-    { key: 'history', label: 'History', icon: Clock3, active: page === 'history', onClick: () => onPage('history') },
-    { key: 'agents', label: 'Agents', icon: Bot, active: page === 'agents', onClick: () => onPage('agents') },
-    { key: 'commands', label: 'Commands', icon: Command, active: page === 'commands', onClick: () => onPage('commands') }
   ];
 
   return (
@@ -261,24 +257,6 @@ export function Sidebar({ page, theme, onThemeChange, onPage, onNewSession }: Si
           {primaryItems.map((item) => (
             <RailButton key={item.key} active={item.active} disabled={item.disabled} icon={item.icon} label={item.label} onClick={item.onClick} />
           ))}
-        </div>
-        <div className="mt-6 border-t pt-4" style={{ borderColor: 'var(--bobby-sidebar-divider)' }}>
-          <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-bobby-faint">Tools</div>
-          <div className="space-y-1.5">
-            {secondaryItems.map((item) => (
-              <RailButton key={item.key} active={item.active} icon={item.icon} label={item.label} onClick={item.onClick} />
-            ))}
-          </div>
-        </div>
-        <div className="mt-auto space-y-2">
-          <button
-            type="button"
-            onClick={() => onThemeChange(theme === 'light' ? 'dark' : 'light')}
-            className="w-full rounded-2xl px-3 py-2 text-left text-[12px] text-bobby-muted transition hover:bg-bobby-sidebar-row-hover hover:text-bobby-ink"
-          >
-            {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
-          </button>
-          <RailButton active={page === 'settings'} icon={Settings2} label="Settings" onClick={() => onPage('settings')} />
         </div>
       </div>
 

@@ -24,6 +24,7 @@ type AppNavigateEvent = CustomEvent<{ page?: AppPage; sessionId?: string; dockTa
 
 const ONBOARDING_COMPLETE_KEY = 'bobby-onboarding-complete';
 const LAST_ACTIVE_SESSION_KEY = 'bobby-last-active-session';
+const THEME_STORAGE_KEY = 'bobby-theme-v2';
 
 function resolveKernelClient() {
   if (typeof window === 'undefined') return null;
@@ -62,9 +63,10 @@ function saveLastActiveSessionId(sessionId: string | null): void {
 export function App() {
   const [theme, setTheme] = React.useState<'light' | 'dark'>(() => {
     try {
-      return (localStorage.getItem('bobby-theme') as 'light' | 'dark') || 'light';
+      const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+      return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark';
     } catch {
-      return 'light';
+      return 'dark';
     }
   });
   const [page, setPage] = React.useState<AppPage>('chat');
@@ -87,7 +89,7 @@ export function App() {
   React.useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     try {
-      localStorage.setItem('bobby-theme', theme);
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
     } catch {
       // ignore localStorage write failures
     }
@@ -297,7 +299,7 @@ export function App() {
       className="flex h-screen w-screen overflow-hidden bg-bobby-main text-bobby-ink"
       style={{ fontFamily: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }}
     >
-      <Sidebar page={page} theme={theme} onThemeChange={handleTheme} onPage={setPage} onNewSession={() => setPage('chat')} />
+      <Sidebar page={page} onPage={setPage} onNewSession={() => setPage('chat')} />
       <main className="h-full min-w-0 flex-1 overflow-hidden">{content}</main>
     </div>
   );

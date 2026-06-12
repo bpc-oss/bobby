@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { GateDecision, KernelEvent } from '@bobby/shared';
-import { Check, ChevronDown, ChevronUp, GitBranch, Lightbulb, Mic, Plus, Route, Search, Send, ShieldCheck, Square } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, GitBranch, Lightbulb, Mic, Plus, Send, Square } from 'lucide-react';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { useChatStore, type ChatBlock } from '../store/chat-store';
 import type { CapabilityReport, CommandRecordDto, GitStatusSummary, McpServerRecordDto, SessionMode } from '../ipc/contract';
@@ -1344,33 +1344,21 @@ function Composer({ onSend, busy, onAbort, kernelClient, onOpenPlugins }: { onSe
 }
 
 function SuggestionCards({ onPick }: { onPick: (text: string) => void }) {
-  const cards = [
-    { icon: Lightbulb, title: 'Shape a mission', sub: 'Turn a rough goal into acceptance criteria', prompt: 'Help me brainstorm this goal into a clear mission, assumptions, risks, and acceptance criteria before implementation.' },
-    { icon: GitBranch, title: 'Explore approaches', sub: 'Compare paths before choosing one', prompt: 'Brainstorm multiple implementation approaches for the current goal, compare tradeoffs, and recommend the safest plan.' },
-    { icon: Route, title: 'Build the plan', sub: 'Create steps, tools, evidence, and gates', prompt: 'Create a step-by-step execution plan with tool calls, evidence to collect, permission pause points, and final validation.' },
-    { icon: ShieldCheck, title: 'Run with proof', sub: 'Execute only with visible evidence gates', prompt: 'Run this through Mission Control. Show the current task, plan steps, tool calls, evidence, permission pauses, and final acceptance state.' },
-    { icon: Search, title: 'Audit the session', sub: 'Find gaps against the requested outcome', prompt: 'Review the current session against the original request, identify missing requirements, and propose concrete fixes.' }
-  ];
   return (
     <div className="flex flex-col items-center justify-center px-4 py-20 text-center">
       <div className="max-w-[760px]">
         <div className="text-5xl font-semibold tracking-tight text-bobby-ink">{'\u6211\u4eec\u5e94\u8be5\u5728 Bobby \u4e2d\u6784\u5efa\u4ec0\u4e48?'}</div>
         <p className="mx-auto mt-4 max-w-[560px] text-[15px] leading-7 text-bobby-muted">{'\u4ece\u4e00\u4e2a\u660e\u786e\u4efb\u52a1\u5f00\u59cb\uff0c\u7136\u540e\u8ba9\u4ee3\u7406\u89c4\u5212\u3001\u6267\u884c\u3001\u4e3e\u8bc1\u5e76\u5b8c\u6210\u9a8c\u6536\u3002'}</p>
       </div>
-      <div className="mt-12 grid w-full max-w-[720px] grid-cols-2 gap-3 text-left">
-        {cards.map((card) => (
-          <button
-            key={card.title}
-            onClick={() => onPick(card.prompt)}
-            className="bobby-empty-hero-card cursor-pointer rounded-2xl border p-4 transition-all hover:border-accent/30 hover:shadow-md"
-            style={{ background: 'rgba(255, 255, 255, 0.04)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
-          >
-            <card.icon className="mb-2 h-5 w-5" style={{ color: 'var(--bobby-accent)' }} />
-            <div className="text-[13px] font-semibold text-bobby-ink">{card.title}</div>
-            <div className="mt-0.5 text-[12px] text-bobby-muted">{card.sub}</div>
-          </button>
-        ))}
-      </div>
+      <button
+        type="button"
+        onClick={() => onPick('Help me create a concrete implementation plan for this project and then execute it with visible evidence.')}
+        className="mt-10 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[13px] font-medium text-bobby-muted transition hover:text-bobby-ink"
+        style={{ background: 'rgba(255, 255, 255, 0.04)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
+      >
+        <Lightbulb className="h-4 w-4" style={{ color: 'var(--bobby-accent)' }} />
+        从计划开始
+      </button>
     </div>
   );
 }
