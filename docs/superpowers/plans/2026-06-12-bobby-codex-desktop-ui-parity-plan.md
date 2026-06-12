@@ -420,6 +420,12 @@ Acceptance:
 
 Goal: Provide a real terminal-like project tool panel.
 
+Status:
+
+- Completed on 2026-06-12.
+- Implemented with current project path, project-root command execution, local rerun control, local clear-history control, and preserved task evidence stream.
+- Verified with focused GUI tests, GUI package tests, Electron smoke, and full workspace tests.
+
 Scope:
 
 - Terminal tab with current path.

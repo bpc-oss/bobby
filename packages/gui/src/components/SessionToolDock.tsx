@@ -442,6 +442,7 @@ function CommandOutputRow({ block, index }: { block: ChatBlock; index: number })
 function TerminalPanel() {
   const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
   const blocks = useChatStore((state) => state.blocks);
+  const currentProject = useChatStore((state) => state.currentProject);
   const [command, setCommand] = React.useState('');
   const [runs, setRuns] = React.useState<TerminalRunResult[]>([]);
   const [running, setRunning] = React.useState(false);
@@ -452,15 +453,19 @@ function TerminalPanel() {
   );
 
   async function runCommand() {
-    if (!client?.runTerminalCommand || !command.trim()) return;
-    if (!window.confirm(`Run command in the current workspace?\n\n${command.trim()}`)) {
+    await executeCommand(command.trim());
+  }
+
+  async function executeCommand(nextCommand: string) {
+    if (!client?.runTerminalCommand || !nextCommand) return;
+    if (!window.confirm(`Run command in the current workspace?\n\n${nextCommand}`)) {
       return;
     }
 
     setRunning(true);
     setError(null);
     try {
-      const result = await client.runTerminalCommand({ command: command.trim(), confirmed: true });
+      const result = await client.runTerminalCommand({ command: nextCommand, confirmed: true });
       setRuns((current) => [result, ...current].slice(0, 12));
       setCommand('');
     } catch (nextError) {
@@ -477,6 +482,7 @@ function TerminalPanel() {
           <TerminalSquare className="h-3.5 w-3.5" />
           Terminal
         </label>
+        <div className="mb-2 text-[11px] text-bobby-faint">{currentProject?.path ?? 'No project selected'}</div>
         <div className="flex gap-2">
           <input
             data-testid="terminal-command-input"
@@ -497,6 +503,16 @@ function TerminalPanel() {
           </button>
         </div>
         {error && <div className="mt-2 rounded-md px-3 py-2 text-[12px]" style={{ background: 'var(--bobby-danger-soft)', color: 'var(--bobby-danger)' }}>{error}</div>}
+        <div className="mt-2 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => setRuns([])}
+            disabled={runs.length === 0}
+            className="rounded-md px-2.5 py-1.5 text-[11px] font-medium text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink disabled:opacity-40"
+          >
+            Clear history
+          </button>
+        </div>
       </div>
 
       <section className="space-y-2">
@@ -535,6 +551,15 @@ function TerminalPanel() {
                 </div>
                 {stdout && <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-bobby-surface-subtle px-3 py-2 text-[12px] leading-5 text-bobby-ink">{stdout}</pre>}
                 {stderr && <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-bobby-danger-soft px-3 py-2 text-[12px] leading-5 text-bobby-danger">{stderr}</pre>}
+                <div className="mt-2 flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void executeCommand(typeof payload.cmd === 'string' ? String(payload.cmd) : '')}
+                    className="rounded-md px-2.5 py-1.5 text-[11px] font-medium text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink"
+                  >
+                    Rerun
+                  </button>
+                </div>
               </div>
             );
           })}

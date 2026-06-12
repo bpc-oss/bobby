@@ -309,6 +309,7 @@ describe('SessionToolDock', () => {
     render(<SessionToolDock />);
 
     fireEvent.click(screen.getByTitle(/Terminal/));
+    expect(screen.getByText('E:\\ai-files\\Bobby')).toBeTruthy();
     const input = screen.getByPlaceholderText(/pnpm test/i);
     fireEvent.change(input, { target: { value: 'pnpm test' } });
     fireEvent.click(screen.getByText('Run'));
@@ -318,6 +319,22 @@ describe('SessionToolDock', () => {
     expect(runTerminalCommand).toHaveBeenCalledWith({ command: 'pnpm test', confirmed: true });
     expect(await screen.findByText('exit 0')).toBeTruthy();
     expect(screen.getByText('ok')).toBeTruthy();
+  });
+
+  it('reruns and clears terminal command history without removing evidence stream', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Terminal/));
+    fireEvent.change(screen.getByPlaceholderText(/pnpm test/i), { target: { value: 'pnpm test' } });
+    fireEvent.click(screen.getByText('Run'));
+    expect(await screen.findByText('exit 0')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Rerun'));
+    expect(window.bobby.runTerminalCommand).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByText('Clear history'));
+    expect(screen.getByText('No terminal commands yet.')).toBeTruthy();
+    expect(screen.getByText(/Task stream/)).toBeTruthy();
   });
 
   it('shows task command_output evidence in chronological order', async () => {
