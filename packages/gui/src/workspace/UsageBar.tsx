@@ -1,11 +1,6 @@
 import React from 'react';
 
-export interface Usage {
-  inputTokens: number;
-  outputTokens: number;
-  cacheHitRate: number;
-  cny: number;
-}
+import type { Usage } from '../kernel/client';
 
 function fmtTok(value: number): string {
   return value >= 1000 ? `${(value / 1000).toFixed(1)}K` : String(value);
