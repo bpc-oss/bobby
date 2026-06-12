@@ -599,36 +599,32 @@ function taskIds(): string[] {
   return Array.from(ids);
 }
 
-function taskSummary(taskId: string): TaskSummary | null {
-  const root = taskRoot();
-  const taskDir = root ? join(root, taskId) : null;
-  if (taskDir && existsSync(taskDir)) {
-    const meta = readJsonFile<Record<string, unknown>>(join(taskDir, 'task.json'), {});
-    const fallbackTime = new Date(statSync(taskDir).mtimeMs).toISOString();
-    const summary = {
-      taskId,
-      userGoal: String(meta.userGoal ?? meta.goal ?? taskId),
-      state: String(meta.state ?? meta.status ?? 'unknown'),
-      taskType: String(meta.taskType ?? 'task'),
-      createdAt: String(meta.createdAt ?? fallbackTime),
-      updatedAt: String(meta.updatedAt ?? fallbackTime),
-      traceCount: readTaskTrace(taskId).length,
-      hasContract: existsSync(join(taskDir, 'contract.json')),
-      hasPlan: existsSync(join(taskDir, 'plan.json')),
-      hasReport: existsSync(join(taskDir, 'report.md'))
-    };
-    const parsed = TaskSummarySchema.safeParse(summary);
-    return parsed.success ? parsed.data : null;
-  }
+function taskSummaryFromDir(taskId: string, taskDir: string): TaskSummary | null {
+  const meta = readJsonFile<Record<string, unknown>>(join(taskDir, 'task.json'), {});
+  const fallbackTime = new Date(statSync(taskDir).mtimeMs).toISOString();
+  const summary = {
+    taskId,
+    userGoal: String(meta.userGoal ?? meta.goal ?? taskId),
+    state: String(meta.state ?? meta.status ?? 'unknown'),
+    taskType: String(meta.taskType ?? 'task'),
+    createdAt: String(meta.createdAt ?? fallbackTime),
+    updatedAt: String(meta.updatedAt ?? fallbackTime),
+    traceCount: readTaskTrace(taskId).length,
+    hasContract: existsSync(join(taskDir, 'contract.json')),
+    hasPlan: existsSync(join(taskDir, 'plan.json')),
+    hasReport: existsSync(join(taskDir, 'report.md'))
+  };
+  const parsed = TaskSummarySchema.safeParse(summary);
+  return parsed.success ? parsed.data : null;
+}
 
-  const trace = readTaskTrace(taskId);
-  if (trace.length === 0) {
-    return null;
-  }
-
-  const fallbackTime = traceRoot() && existsSync(join(traceRoot()!, `${taskId}.jsonl`))
-    ? new Date(statSync(join(traceRoot()!, `${taskId}.jsonl`)).mtimeMs).toISOString()
-    : new Date().toISOString();
+function scanTraceForSummary(taskId: string, trace: unknown[]): {
+  userGoal: string;
+  state: TaskSummary['state'];
+  hasContract: boolean;
+  hasPlan: boolean;
+  hasReport: boolean;
+} {
   let userGoal = taskId;
   let state: TaskSummary['state'] = 'running';
   let hasContract = false;
@@ -657,17 +653,31 @@ function taskSummary(taskId: string): TaskSummary | null {
     }
   }
 
+  return { userGoal, state, hasContract, hasPlan, hasReport };
+}
+
+function taskSummary(taskId: string): TaskSummary | null {
+  const root = taskRoot();
+  const taskDir = root ? join(root, taskId) : null;
+  if (taskDir && existsSync(taskDir)) {
+    return taskSummaryFromDir(taskId, taskDir);
+  }
+
+  const trace = readTaskTrace(taskId);
+  if (trace.length === 0) {
+    return null;
+  }
+
+  const fallbackTime = traceRoot() && existsSync(join(traceRoot()!, `${taskId}.jsonl`))
+    ? new Date(statSync(join(traceRoot()!, `${taskId}.jsonl`)).mtimeMs).toISOString()
+    : new Date().toISOString();
   const summary = {
     taskId,
-    userGoal,
-    state,
+    ...scanTraceForSummary(taskId, trace),
     taskType: 'task',
     createdAt: fallbackTime,
     updatedAt: fallbackTime,
-    traceCount: trace.length,
-    hasContract,
-    hasPlan,
-    hasReport
+    traceCount: trace.length
   };
   const parsed = TaskSummarySchema.safeParse(summary);
   return parsed.success ? parsed.data : null;
@@ -821,6 +831,72 @@ function resolveAutomationStatus(events: KernelEvent[]): 'done' | 'failed' | 'bl
   return 'failed';
 }
 
+function automationTraceLine(event: KernelEvent): string {
+  if (event.type === 'direct_answer') {
+    return `- direct_answer: ${event.text}`;
+  }
+  if (event.type === 'error') {
+    return `- error: ${event.message}`;
+  }
+  if (event.type === 'intent_proposed') {
+    return `- intent_proposed: ${event.contract.goal}`;
+  }
+  if (event.type === 'plan_ready') {
+    return `- plan_ready: ${event.steps.map((step) => step.id).join(', ')}`;
+  }
+  if (event.type === 'final_result') {
+    return `- final_result: ${event.status}`;
+  }
+  return `- ${event.type}`;
+}
+
+function automationReportMarkdown(
+  taskId: string,
+  automation: AutomationRecord,
+  status: string,
+  startedAt: string,
+  finishedAt: string,
+  events: KernelEvent[]
+): string {
+  return [
+    `# Automation ${automation.title}`,
+    '',
+    `- taskId: ${taskId}`,
+    `- status: ${status}`,
+    `- kind: ${automation.kind}`,
+    `- intervalMinutes: ${automation.intervalMinutes}`,
+    `- startedAt: ${startedAt}`,
+    `- finishedAt: ${finishedAt}`,
+    '',
+    '## Prompt',
+    automation.prompt,
+    '',
+    '## Trace',
+    ...events.map(automationTraceLine)
+  ].join('\n');
+}
+
+function automationTaskMeta(
+  taskId: string,
+  automation: AutomationRecord,
+  status: string,
+  startedAt: string,
+  finishedAt: string
+): Record<string, unknown> {
+  return {
+    id: taskId,
+    userGoal: automation.title,
+    goal: automation.prompt,
+    taskType: `automation:${automation.kind}`,
+    state: status,
+    createdAt: startedAt,
+    updatedAt: finishedAt,
+    automationId: automation.id,
+    automationTitle: automation.title,
+    automationKind: automation.kind
+  };
+}
+
 function writeAutomationTaskArtifacts(
   taskId: string,
   automation: AutomationRecord,
@@ -841,22 +917,7 @@ function writeAutomationTaskArtifacts(
   mkdirSync(taskDir, { recursive: true });
   writeFileSync(
     join(taskDir, 'task.json'),
-    JSON.stringify(
-      {
-        id: taskId,
-        userGoal: automation.title,
-        goal: automation.prompt,
-        taskType: `automation:${automation.kind}`,
-        state: status,
-        createdAt: startedAt,
-        updatedAt: finishedAt,
-        automationId: automation.id,
-        automationTitle: automation.title,
-        automationKind: automation.kind
-      },
-      null,
-      2
-    ),
+    JSON.stringify(automationTaskMeta(taskId, automation, status, startedAt, finishedAt), null, 2),
     'utf8'
   );
 
@@ -870,39 +931,7 @@ function writeAutomationTaskArtifacts(
 
   writeFileSync(
     join(taskDir, 'report.md'),
-    [
-      `# Automation ${automation.title}`,
-      '',
-      `- taskId: ${taskId}`,
-      `- status: ${status}`,
-      `- kind: ${automation.kind}`,
-      `- intervalMinutes: ${automation.intervalMinutes}`,
-      `- startedAt: ${startedAt}`,
-      `- finishedAt: ${finishedAt}`,
-      '',
-      '## Prompt',
-      automation.prompt,
-      '',
-      '## Trace',
-      ...events.map((event) => {
-        if (event.type === 'direct_answer') {
-          return `- direct_answer: ${event.text}`;
-        }
-        if (event.type === 'error') {
-          return `- error: ${event.message}`;
-        }
-        if (event.type === 'intent_proposed') {
-          return `- intent_proposed: ${event.contract.goal}`;
-        }
-        if (event.type === 'plan_ready') {
-          return `- plan_ready: ${event.steps.map((step) => step.id).join(', ')}`;
-        }
-        if (event.type === 'final_result') {
-          return `- final_result: ${event.status}`;
-        }
-        return `- ${event.type}`;
-      })
-    ].join('\n'),
+    automationReportMarkdown(taskId, automation, status, startedAt, finishedAt, events),
     'utf8'
   );
 }
@@ -1006,6 +1035,30 @@ function createAutomation(input: unknown): AutomationRecord {
   };
 }
 
+function captureFirstTaskEvents(subscribe: (listener: (event: KernelEvent) => void) => () => void): {
+  observedEvents: KernelEvent[];
+  getTaskId: () => string | null;
+  unsubscribe: () => void;
+} {
+  const observedEvents: KernelEvent[] = [];
+  let capturedTaskId: string | null = null;
+  const unsubscribe = subscribe((event) => {
+    if (!('taskId' in event) || event.taskId === 'system') {
+      return;
+    }
+
+    if (!capturedTaskId) {
+      capturedTaskId = event.taskId;
+    }
+
+    if (event.taskId === capturedTaskId) {
+      observedEvents.push(event);
+    }
+  });
+
+  return { observedEvents, getTaskId: () => capturedTaskId, unsubscribe };
+}
+
 async function runAutomation(automation: AutomationRecord): Promise<AutomationRecord> {
   const startedAt = nowIso();
   const updated: AutomationRecord = {
@@ -1023,22 +1076,8 @@ async function runAutomation(automation: AutomationRecord): Promise<AutomationRe
     return updated;
   }
 
-  const observedEvents: KernelEvent[] = [];
-  let capturedTaskId: string | null = null;
   let failedToRun = false;
-  const unsubscribe = host.subscribe((event) => {
-    if (!('taskId' in event) || event.taskId === 'system') {
-      return;
-    }
-
-    if (!capturedTaskId) {
-      capturedTaskId = event.taskId;
-    }
-
-    if (event.taskId === capturedTaskId) {
-      observedEvents.push(event);
-    }
-  });
+  const { observedEvents, getTaskId, unsubscribe } = captureFirstTaskEvents((listener) => host.subscribe(listener));
 
   try {
     await host.send({ type: 'startTask', input: automation.prompt });
@@ -1050,7 +1089,7 @@ async function runAutomation(automation: AutomationRecord): Promise<AutomationRe
     unsubscribe();
   }
 
-  const taskId = capturedTaskId ?? `automation-${automation.id}-${Date.now()}`;
+  const taskId = getTaskId() ?? `automation-${automation.id}-${Date.now()}`;
   writeAutomationTaskArtifacts(taskId, automation, observedEvents, startedAt);
 
   const status = resolveAutomationStatus(observedEvents);

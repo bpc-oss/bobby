@@ -368,8 +368,29 @@ export const SubAgentDispatchRecordSchema = z.object({
 });
 export type SubAgentDispatchRecordDto = z.infer<typeof SubAgentDispatchRecordSchema>;
 
+function makeRegistryClientMethods() {
+  return {
+    listMcpServers: () => window.bobby.listMcpServers!(),
+    upsertMcpServer: (input: McpServerUpsertInput) => window.bobby.upsertMcpServer!(input),
+    toggleMcpServer: (input: McpServerToggleInput) => window.bobby.toggleMcpServer!(input),
+    removeMcpServer: (input: McpServerRemoveInput) => window.bobby.removeMcpServer!(input),
+    listSubAgents: () => window.bobby.listSubAgents!(),
+    upsertSubAgent: (input: SubAgentUpsertInput) => window.bobby.upsertSubAgent!(input),
+    removeSubAgent: (input: SubAgentRemoveInput) => window.bobby.removeSubAgent!(input),
+    dispatchSubAgent: (input: SubAgentDispatchInput) => window.bobby.dispatchSubAgent!(input),
+    listSubAgentDispatches: () => window.bobby.listSubAgentDispatches!(),
+    listAutomations: () => window.bobby.listAutomations(),
+    createAutomation: (input: AutomationCreateInput) => window.bobby.createAutomation(input),
+    updateAutomation: (input: AutomationUpdateInput) => window.bobby.updateAutomation(input),
+    toggleAutomation: (input: AutomationToggleInput) => window.bobby.toggleAutomation(input),
+    removeAutomation: (input: AutomationRemoveInput) => window.bobby.removeAutomation(input),
+    runAutomationNow: (input: AutomationToggleInput) => window.bobby.runAutomationNow(input)
+  };
+}
+
 export function makeKernelClient() {
   return {
+    ...makeRegistryClientMethods(),
     startTask: (input: string, mode?: SessionMode) => window.bobby.send({ type: 'startTask', input, mode }),
     approveGate: (gateId: string, decision: GateDecision) =>
       window.bobby.send({ type: 'approveGate', gateId, decision }),
@@ -402,21 +423,6 @@ export function makeKernelClient() {
     applyProposal: (input: ProposalApplyInput) => window.bobby.applyProposal!(input),
     discardProposal: (input: ProposalDiscardInput) => window.bobby.discardProposal!(input),
     gitIsRepo: () => window.bobby.gitIsRepo?.() ?? Promise.resolve(false),
-    gitCommit: (input: GitCommitInput) => window.bobby.gitCommit!(input),
-    listMcpServers: () => window.bobby.listMcpServers!(),
-    upsertMcpServer: (input: McpServerUpsertInput) => window.bobby.upsertMcpServer!(input),
-    toggleMcpServer: (input: McpServerToggleInput) => window.bobby.toggleMcpServer!(input),
-    removeMcpServer: (input: McpServerRemoveInput) => window.bobby.removeMcpServer!(input),
-    listSubAgents: () => window.bobby.listSubAgents!(),
-    upsertSubAgent: (input: SubAgentUpsertInput) => window.bobby.upsertSubAgent!(input),
-    removeSubAgent: (input: SubAgentRemoveInput) => window.bobby.removeSubAgent!(input),
-    dispatchSubAgent: (input: SubAgentDispatchInput) => window.bobby.dispatchSubAgent!(input),
-    listSubAgentDispatches: () => window.bobby.listSubAgentDispatches!(),
-    listAutomations: () => window.bobby.listAutomations(),
-    createAutomation: (input: AutomationCreateInput) => window.bobby.createAutomation(input),
-    updateAutomation: (input: AutomationUpdateInput) => window.bobby.updateAutomation(input),
-    toggleAutomation: (input: AutomationToggleInput) => window.bobby.toggleAutomation(input),
-    removeAutomation: (input: AutomationRemoveInput) => window.bobby.removeAutomation(input),
-    runAutomationNow: (input: AutomationToggleInput) => window.bobby.runAutomationNow(input)
+    gitCommit: (input: GitCommitInput) => window.bobby.gitCommit!(input)
   };
 }

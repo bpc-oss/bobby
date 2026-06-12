@@ -268,6 +268,23 @@ export class Orchestrator {
     );
   }
 
+  private resolveRunnerTools(conscience: ConscienceDeps): {
+    tools: RunnerToolDescriptor[] | undefined;
+    allowedToolNames: Set<string> | null;
+  } {
+    const toolCatalog = conscience.toolRegistry?.list().map((tool) => ({
+      name: tool.name,
+      permissionTier: tool.permissionTier,
+      description: tool.description
+    }));
+    const ceiling = this.options.toolPermissionCeiling;
+    if (ceiling === undefined || toolCatalog === undefined) {
+      return { tools: toolCatalog, allowedToolNames: null };
+    }
+    const allowedTools = this.filterToolsByPermission(toolCatalog, ceiling);
+    return { tools: allowedTools, allowedToolNames: new Set(allowedTools.map((tool) => tool.name)) };
+  }
+
   private async runRunnerAttempts(
     taskId: string,
     step: PlanStep,
@@ -278,19 +295,7 @@ export class Orchestrator {
   ): Promise<{ stepDone: boolean; runnerFailures: number; blockedOnNeedHuman: boolean }> {
     let runnerFailures = 0;
     let retryContext: string | undefined;
-    const shouldStopRunnerLoop = (needsPro: boolean, failureCount: number): boolean =>
-      needsPro || failureCount >= budget.maxRetries;
-    const toolCatalog = conscience.toolRegistry?.list().map((tool) => ({
-      name: tool.name,
-      permissionTier: tool.permissionTier,
-      description: tool.description
-    }));
-    const ceiling = this.options.toolPermissionCeiling;
-    const shouldEnforceToolPermission = ceiling !== undefined && toolCatalog !== undefined;
-    const allowedTools = shouldEnforceToolPermission
-      ? this.filterToolsByPermission(toolCatalog, ceiling)
-      : toolCatalog ?? [];
-    const allowedToolNames = shouldEnforceToolPermission ? new Set(allowedTools.map((tool) => tool.name)) : null;
+    const { tools, allowedToolNames } = this.resolveRunnerTools(conscience);
 
     while (runnerFailures < budget.maxRetries) {
       const plan = buildEscalationPlan('runner', runnerFailures, budget);
@@ -300,7 +305,7 @@ export class Orchestrator {
           model: plan.model,
           reasoningEffort: plan.reasoning_effort,
           retryContext,
-          tools: shouldEnforceToolPermission ? allowedTools : toolCatalog
+          tools
         });
         if (allowedToolNames) {
           this.assertClaimToolsAllowed(claim.calls, allowedToolNames);
@@ -320,17 +325,13 @@ export class Orchestrator {
         }
 
         runnerFailures += 1;
-        if (shouldStopRunnerLoop(claim.needsPro ?? false, runnerFailures)) {
+        if ((claim.needsPro ?? false) || runnerFailures >= budget.maxRetries) {
           return { stepDone: false, runnerFailures, blockedOnNeedHuman: false };
         }
       }
     }
 
-    return {
-      stepDone: false,
-      runnerFailures,
-      blockedOnNeedHuman: false
-    };
+    return { stepDone: false, runnerFailures, blockedOnNeedHuman: false };
   }
 
   private filterToolsByPermission(

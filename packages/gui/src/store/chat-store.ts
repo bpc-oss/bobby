@@ -359,111 +359,95 @@ function readLastActiveSessionId(): string | null {
 
 // ---- Event sink ----
 
-export function reduceEvent(state: ChatState, event: KernelEvent): Partial<ChatState> {
-  const partial: Partial<ChatState> = {};
-
-  switch (event.type) {
-    case 'intent_proposed': {
-      partial.currentTaskId = event.taskId;
-      partial.status = 'running';
-      partial.busy = true;
-      break;
-    }
-    case 'direct_answer': {
-      partial.blocks = [...state.blocks, { kind: 'assistant', id: uid(), text: event.text }];
-      break;
-    }
-    case 'plan_ready': {
-      partial.currentPlan = event.steps;
-      partial.blocks = [
-        ...state.blocks,
-        { kind: 'plan', id: uid(), steps: event.steps, status: 'pending' }
-      ];
-      break;
-    }
-    case 'step_started': {
-      break;
-    }
-    case 'tool_called': {
-      partial.blocks = [
-        ...state.blocks,
-        { kind: 'tool', id: uid(), tool: event.tool, status: 'start', content: '' }
-      ];
-      break;
-    }
-    case 'tool_delta': {
-      const deltaContent = [event.status, event.tool, event.content].filter(Boolean).join(' ');
-      const lastTool = [...state.blocks].reverse().find((b) => b.kind === 'tool');
-      if (lastTool && lastTool.kind === 'tool') {
-        const prevContent = (lastTool as ToolBlock).content;
-        partial.blocks = state.blocks.map((b) =>
-          b.id === lastTool.id && b.kind === 'tool'
-            ? { ...b, content: prevContent ? `${prevContent} ${deltaContent}` : deltaContent, status: 'running' as const }
-            : b
-        );
-      }
-      partial.liveToolContent = state.liveToolContent ? `${state.liveToolContent} ${deltaContent}` : deltaContent;
-      break;
-    }
-    case 'evidence_produced': {
-      partial.blocks = [...state.blocks, { kind: 'evidence', id: uid(), evidence: event.evidence }];
-      break;
-    }
-    case 'verdict': {
-      if (event.verdict.result !== 'pass') {
-        partial.blocks = [
-          ...state.blocks,
-          { kind: 'verdict', id: uid(), acId: event.verdict.acId, result: event.verdict.result }
-        ];
-      }
-      break;
-    }
-    case 'assistant_delta': {
-      partial.liveAssistant = `${state.liveAssistant}${event.content}`;
-      break;
-    }
-    case 'reasoning_delta': {
-      partial.liveReasoning = `${state.liveReasoning}${event.content}`;
-      break;
-    }
-    case 'usage_delta': {
-      if (event.model) partial.model = event.model;
-      if (event.costUsd) partial.costUsd = event.costUsd;
-      break;
-    }
-    case 'gate_request': {
-      partial.blocks = [...state.blocks, { kind: 'gate', id: uid(), gateId: event.gateId, reason: event.reason }];
-      break;
-    }
-    case 'final_result': {
-      // Flush live blocks
-      const newBlocks: ChatBlock[] = [];
-      if (state.liveReasoning) {
-        newBlocks.push({ kind: 'reasoning', id: uid(), text: state.liveReasoning });
-      }
-      if (state.liveAssistant) {
-        newBlocks.push({ kind: 'assistant', id: uid(), text: state.liveAssistant });
-      }
-      newBlocks.push({ kind: 'status', id: uid(), status: event.status });
-
-      partial.blocks = [...state.blocks, ...newBlocks];
-      partial.liveReasoning = '';
-      partial.liveAssistant = '';
-      partial.liveToolContent = '';
-      partial.busy = false;
-      partial.status = event.status;
-      break;
-    }
-    case 'error': {
-      partial.blocks = [...state.blocks, { kind: 'error', id: uid(), message: event.message }];
-      partial.error = event.message;
-      partial.busy = false;
-      partial.status = 'failed';
-      break;
-    }
+function reduceToolDelta(state: ChatState, event: Extract<KernelEvent, { type: 'tool_delta' }>): Partial<ChatState> {
+  const deltaContent = [event.status, event.tool, event.content].filter(Boolean).join(' ');
+  const partial: Partial<ChatState> = {
+    liveToolContent: state.liveToolContent ? `${state.liveToolContent} ${deltaContent}` : deltaContent
+  };
+  const lastTool = [...state.blocks].reverse().find((b) => b.kind === 'tool');
+  if (lastTool && lastTool.kind === 'tool') {
+    const prevContent = (lastTool as ToolBlock).content;
+    partial.blocks = state.blocks.map((b) =>
+      b.id === lastTool.id && b.kind === 'tool'
+        ? { ...b, content: prevContent ? `${prevContent} ${deltaContent}` : deltaContent, status: 'running' as const }
+        : b
+    );
   }
-
   return partial;
+}
+
+function reduceFinalResult(state: ChatState, event: Extract<KernelEvent, { type: 'final_result' }>): Partial<ChatState> {
+  // Flush live blocks
+  const newBlocks: ChatBlock[] = [];
+  if (state.liveReasoning) {
+    newBlocks.push({ kind: 'reasoning', id: uid(), text: state.liveReasoning });
+  }
+  if (state.liveAssistant) {
+    newBlocks.push({ kind: 'assistant', id: uid(), text: state.liveAssistant });
+  }
+  newBlocks.push({ kind: 'status', id: uid(), status: event.status });
+
+  return {
+    blocks: [...state.blocks, ...newBlocks],
+    liveReasoning: '',
+    liveAssistant: '',
+    liveToolContent: '',
+    busy: false,
+    status: event.status
+  };
+}
+
+function reduceUsageDelta(event: Extract<KernelEvent, { type: 'usage_delta' }>): Partial<ChatState> {
+  const partial: Partial<ChatState> = {};
+  if (event.model) partial.model = event.model;
+  if (event.costUsd) partial.costUsd = event.costUsd;
+  return partial;
+}
+
+export function reduceEvent(state: ChatState, event: KernelEvent): Partial<ChatState> {
+  switch (event.type) {
+    case 'intent_proposed':
+      return { currentTaskId: event.taskId, status: 'running', busy: true };
+    case 'direct_answer':
+      return { blocks: [...state.blocks, { kind: 'assistant', id: uid(), text: event.text }] };
+    case 'plan_ready':
+      return {
+        currentPlan: event.steps,
+        blocks: [...state.blocks, { kind: 'plan', id: uid(), steps: event.steps, status: 'pending' }]
+      };
+    case 'tool_called':
+      return { blocks: [...state.blocks, { kind: 'tool', id: uid(), tool: event.tool, status: 'start', content: '' }] };
+    case 'tool_delta':
+      return reduceToolDelta(state, event);
+    case 'evidence_produced':
+      return { blocks: [...state.blocks, { kind: 'evidence', id: uid(), evidence: event.evidence }] };
+    case 'verdict':
+      if (event.verdict.result === 'pass') {
+        return {};
+      }
+      return {
+        blocks: [...state.blocks, { kind: 'verdict', id: uid(), acId: event.verdict.acId, result: event.verdict.result }]
+      };
+    case 'assistant_delta':
+      return { liveAssistant: `${state.liveAssistant}${event.content}` };
+    case 'reasoning_delta':
+      return { liveReasoning: `${state.liveReasoning}${event.content}` };
+    case 'usage_delta':
+      return reduceUsageDelta(event);
+    case 'gate_request':
+      return { blocks: [...state.blocks, { kind: 'gate', id: uid(), gateId: event.gateId, reason: event.reason }] };
+    case 'final_result':
+      return reduceFinalResult(state, event);
+    case 'error':
+      return {
+        blocks: [...state.blocks, { kind: 'error', id: uid(), message: event.message }],
+        error: event.message,
+        busy: false,
+        status: 'failed'
+      };
+    default:
+      return {};
+  }
 }
 
 // ---- Mock mode (no backend) ----
@@ -506,8 +490,134 @@ function mockReply(text: string) {
   event({ type: 'final_result', taskId, status: 'done' });
 }
 
+// ---- Action helpers ----
+
+function buildOutgoingThread(
+  state: ChatState,
+  input: {
+    userBlock: UserBlock;
+    threadId: string;
+    createdAt: string;
+    active: ThreadRecord | null | undefined;
+    currentSnapshot: ThreadRecord | null;
+  }
+): ThreadRecord {
+  return SessionRecordSchema.parse({
+    id: input.threadId,
+    title: sessionTitle([input.userBlock]),
+    blocks: [input.userBlock],
+    createdAt: input.createdAt,
+    updatedAt: nowIso(),
+    projectDir: state.currentProject?.path ?? input.currentSnapshot?.projectDir ?? input.active?.projectDir ?? null,
+    taskId: null,
+    status: 'running',
+    liveReasoning: '',
+    liveAssistant: '',
+    liveToolContent: '',
+    currentPlan: [],
+    error: null,
+    costUsd: 0,
+    spendUsd: 0,
+    model: null,
+    mode: state.sessionMode
+  });
+}
+
+function outgoingStatePatch(
+  state: ChatState,
+  input: {
+    userBlock: UserBlock;
+    threadId: string;
+    reuseActive: boolean;
+    currentSnapshot: ThreadRecord | null;
+    nextThread: ThreadRecord;
+  }
+): Partial<ChatState> {
+  const threadsWithSnapshot = input.currentSnapshot ? replaceThread(state.threads, input.currentSnapshot) : state.threads;
+  return {
+    blocks: [input.userBlock],
+    liveReasoning: '',
+    liveAssistant: '',
+    liveToolContent: '',
+    busy: true,
+    currentTaskId: null,
+    currentPlan: [],
+    status: 'running',
+    error: null,
+    costUsd: 0,
+    spendUsd: 0,
+    model: null,
+    sessionMode: state.sessionMode,
+    activeSessionId: input.threadId,
+    pendingThreadIds: input.reuseActive ? state.pendingThreadIds : [...state.pendingThreadIds, input.threadId],
+    threads: input.reuseActive
+      ? replaceThread(state.threads, input.nextThread)
+      : replaceThread(threadsWithSnapshot, input.nextThread),
+    sessions: input.currentSnapshot ? replaceSession(state.sessions, input.currentSnapshot) : state.sessions
+  };
+}
+
+async function dispatchOutgoingTask(client: ChatClient | null, text: string, mode: SessionMode): Promise<void> {
+  if (client) {
+    await client.startTask(text, mode);
+    return;
+  }
+  if (typeof window !== 'undefined') {
+    const bobby = (window as unknown as { bobby?: { send: (cmd: unknown) => Promise<unknown> } }).bobby;
+    if (bobby && typeof bobby.send === 'function') {
+      await bobby.send({ type: 'startTask', input: text, mode });
+      return;
+    }
+  }
+  mockReply(text);
+}
+
+function resolveEventThreadId(state: ChatState, taskId: string): string {
+  const resolved = resolveThreadId(state, taskId);
+  if (resolved) {
+    return resolved;
+  }
+  if (state.activeSessionId) {
+    const active = state.threads[state.activeSessionId];
+    if (active && (!active.taskId || active.taskId === taskId)) {
+      return active.id;
+    }
+  }
+  return state.activeSessionId ?? uid();
+}
+
+function mergeThreadEvent(
+  baseThread: ThreadRecord,
+  threadState: ChatState,
+  partial: Partial<ChatState>,
+  event: KernelEvent,
+  threadId: string
+): ThreadRecord {
+  return SessionRecordSchema.parse({
+    ...baseThread,
+    id: threadId,
+    title: baseThread.title || sessionTitle(threadState.blocks),
+    blocks: (partial.blocks ?? threadState.blocks) as unknown[],
+    createdAt: baseThread.createdAt,
+    updatedAt: nowIso(),
+    projectDir: threadState.currentProject?.path ?? baseThread.projectDir ?? null,
+    taskId: partial.currentTaskId ?? threadState.currentTaskId ?? baseThread.taskId ?? (event.type === 'intent_proposed' ? event.taskId : null),
+    status: partial.status ?? threadState.status,
+    liveReasoning: partial.liveReasoning ?? threadState.liveReasoning,
+    liveAssistant: partial.liveAssistant ?? threadState.liveAssistant,
+    liveToolContent: partial.liveToolContent ?? threadState.liveToolContent,
+    currentPlan: partial.currentPlan ?? threadState.currentPlan,
+    error: partial.error ?? threadState.error,
+    costUsd: partial.costUsd ?? threadState.costUsd,
+    spendUsd: partial.spendUsd ?? threadState.spendUsd,
+    model: partial.model ?? threadState.model,
+    mode: threadState.sessionMode
+  });
+}
+
 // ---- Store ----
 
+// eslint-disable-next-line max-lines-per-function -- zustand store definition: one literal wiring state fields to thin actions
 export const useChatStore = create<ChatState>()((set, get) => ({
   blocks: [],
   liveReasoning: '',
@@ -541,76 +651,15 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const userBlock: UserBlock = { kind: 'user', id: uid(), text };
     const threadId = reuseActive && active ? active.id : uid();
     const createdAt = reuseActive && active ? active.createdAt : nowIso();
-    const nextThread = SessionRecordSchema.parse({
-      id: threadId,
-      title: sessionTitle([userBlock]),
-      blocks: [userBlock],
-      createdAt,
-      updatedAt: nowIso(),
-      projectDir: state.currentProject?.path ?? currentSnapshot?.projectDir ?? active?.projectDir ?? null,
-      taskId: null,
-      status: 'running',
-      liveReasoning: '',
-      liveAssistant: '',
-      liveToolContent: '',
-      currentPlan: [],
-      error: null,
-      costUsd: 0,
-      spendUsd: 0,
-      model: null,
-      mode: state.sessionMode
-    });
+    const nextThread = buildOutgoingThread(state, { userBlock, threadId, createdAt, active, currentSnapshot });
 
-    set({
-      blocks: [userBlock],
-      liveReasoning: '',
-      liveAssistant: '',
-      liveToolContent: '',
-      busy: true,
-      currentTaskId: null,
-      currentPlan: [],
-      status: 'running',
-      error: null,
-      costUsd: 0,
-      spendUsd: 0,
-      model: null,
-      sessionMode: state.sessionMode,
-      activeSessionId: threadId,
-      pendingThreadIds: reuseActive ? state.pendingThreadIds : [...state.pendingThreadIds, threadId],
-      threads: reuseActive
-        ? replaceThread(state.threads, nextThread)
-        : replaceThread(currentSnapshot ? replaceThread(state.threads, currentSnapshot) : state.threads, nextThread),
-      sessions: currentSnapshot ? replaceSession(state.sessions, currentSnapshot) : state.sessions
-    });
-
-    const { _client } = get();
-    if (_client) {
-      await _client.startTask(text, state.sessionMode);
-      return;
-    }
-    if (typeof window !== 'undefined') {
-      const bobby = (window as unknown as { bobby?: { send: (cmd: unknown) => Promise<unknown> } }).bobby;
-      if (bobby && typeof bobby.send === 'function') {
-        await bobby.send({ type: 'startTask', input: text, mode: state.sessionMode });
-        return;
-      }
-    }
-    mockReply(text);
+    set(outgoingStatePatch(state, { userBlock, threadId, reuseActive, currentSnapshot, nextThread }));
+    await dispatchOutgoingTask(get()._client, text, state.sessionMode);
   },
 
   handleEvent: (event: KernelEvent) => {
     const state = get();
-    let threadId = resolveThreadId(state, event.taskId);
-    if (!threadId && state.activeSessionId) {
-      const active = state.threads[state.activeSessionId];
-      if (active && (!active.taskId || active.taskId === event.taskId)) {
-        threadId = active.id;
-      }
-    }
-    if (!threadId) {
-      threadId = state.activeSessionId ?? uid();
-    }
-
+    const threadId = resolveEventThreadId(state, event.taskId);
     const baseThread = state.threads[threadId] ?? makeBlankSession(threadId, state.currentProject?.path ?? null);
     const threadState = stateFromThread(state, baseThread);
     const partial = reduceEvent(threadState, event);
@@ -618,36 +667,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       return;
     }
 
-    const nextThread: ThreadRecord = SessionRecordSchema.parse({
-      ...baseThread,
-      id: threadId,
-      title: baseThread.title || sessionTitle(threadState.blocks),
-      blocks: (partial.blocks ?? threadState.blocks) as unknown[],
-      createdAt: baseThread.createdAt,
-      updatedAt: nowIso(),
-      projectDir: threadState.currentProject?.path ?? baseThread.projectDir ?? null,
-      taskId: partial.currentTaskId ?? threadState.currentTaskId ?? baseThread.taskId ?? (event.type === 'intent_proposed' ? event.taskId : null),
-      status: partial.status ?? threadState.status,
-      liveReasoning: partial.liveReasoning ?? threadState.liveReasoning,
-      liveAssistant: partial.liveAssistant ?? threadState.liveAssistant,
-      liveToolContent: partial.liveToolContent ?? threadState.liveToolContent,
-      currentPlan: partial.currentPlan ?? threadState.currentPlan,
-      error: partial.error ?? threadState.error,
-      costUsd: partial.costUsd ?? threadState.costUsd,
-      spendUsd: partial.spendUsd ?? threadState.spendUsd,
-      model: partial.model ?? threadState.model,
-      mode: threadState.sessionMode
-    });
-
-    const nextThreads = replaceThread(state.threads, nextThread);
-    const nextSessions = replaceSession(state.sessions, nextThread);
-    const nextTaskThreadIds = nextThread.taskId ? { ...state.taskThreadIds, [nextThread.taskId]: nextThread.id } : state.taskThreadIds;
-    const nextPending = state.pendingThreadIds.filter((pendingId) => pendingId !== nextThread.id);
+    const nextThread = mergeThreadEvent(baseThread, threadState, partial, event, threadId);
     const basePatch: Partial<ChatState> = {
-      threads: nextThreads,
-      sessions: nextSessions,
-      taskThreadIds: nextTaskThreadIds,
-      pendingThreadIds: nextPending
+      threads: replaceThread(state.threads, nextThread),
+      sessions: replaceSession(state.sessions, nextThread),
+      taskThreadIds: nextThread.taskId ? { ...state.taskThreadIds, [nextThread.taskId]: nextThread.id } : state.taskThreadIds,
+      pendingThreadIds: state.pendingThreadIds.filter((pendingId) => pendingId !== nextThread.id)
     };
 
     if (threadId === state.activeSessionId) {

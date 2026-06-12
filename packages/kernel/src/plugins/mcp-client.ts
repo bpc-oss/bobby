@@ -120,16 +120,21 @@ function parseJsonRpcLine(line: string): JsonRpcResponse | null {
   }
 }
 
-async function runStdioSession<T>(
-  config: StdioMcpTransportConfig,
-  session: (process: ChildProcessWithoutNullStreams, send: (method: string, params?: unknown) => Promise<JsonRpcResponse>) => Promise<T>
-): Promise<T> {
-  const child = spawn(config.command, config.args ?? [], {
-    cwd: config.cwd,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, ...config.env }
-  });
+function dispatchJsonRpcLine(
+  line: string,
+  pending: Map<string, (response: JsonRpcResponse) => void>,
+  overflow: string[]
+): void {
+  const parsed = parseJsonRpcLine(line);
+  if (parsed?.id && pending.has(parsed.id)) {
+    pending.get(parsed.id)?.(parsed);
+    pending.delete(parsed.id);
+  } else {
+    overflow.push(line);
+  }
+}
 
+function createJsonRpcSender(child: ChildProcessWithoutNullStreams): (method: string, params?: unknown) => Promise<JsonRpcResponse> {
   let buffer = '';
   let requestId = 0;
   const pending = new Map<string, (response: JsonRpcResponse) => void>();
@@ -146,16 +151,8 @@ async function runStdioSession<T>(
   };
 
   const flush = (): void => {
-    let line = readNextLine();
-    while (line !== undefined) {
-      const parsed = parseJsonRpcLine(line);
-      if (parsed?.id && pending.has(parsed.id)) {
-        pending.get(parsed.id)?.(parsed);
-        pending.delete(parsed.id);
-      } else {
-        responseQueue.push(line);
-      }
-      line = readNextLine();
+    for (let line = readNextLine(); line !== undefined; line = readNextLine()) {
+      dispatchJsonRpcLine(line, pending, responseQueue);
     }
   };
 
@@ -166,10 +163,10 @@ async function runStdioSession<T>(
 
   child.stderr.on('data', () => undefined);
 
-  const send = async (method: string, params?: unknown): Promise<JsonRpcResponse> => {
+  return async (method: string, params?: unknown): Promise<JsonRpcResponse> => {
     const id = `${Date.now()}-${requestId += 1}`;
     const payload: JsonRpcRequest = { jsonrpc: '2.0', id, method, params };
-    const response = await new Promise<JsonRpcResponse>((resolve, reject) => {
+    return new Promise<JsonRpcResponse>((resolve, reject) => {
       pending.set(id, resolve);
       child.stdin.write(`${JSON.stringify(payload)}\n`, 'utf8', (error) => {
         if (error) {
@@ -179,12 +176,22 @@ async function runStdioSession<T>(
       });
       child.once('error', reject);
     });
-    return response;
   };
+}
+
+async function runStdioSession<T>(
+  config: StdioMcpTransportConfig,
+  session: (process: ChildProcessWithoutNullStreams, send: (method: string, params?: unknown) => Promise<JsonRpcResponse>) => Promise<T>
+): Promise<T> {
+  const child = spawn(config.command, config.args ?? [], {
+    cwd: config.cwd,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, ...config.env }
+  });
+  const send = createJsonRpcSender(child);
 
   try {
-    const result = await session(child, send);
-    return result;
+    return await session(child, send);
   } finally {
     child.kill();
   }
@@ -243,6 +250,35 @@ export function createMcpTransport(config: McpTransportConfig): McpTransport {
   };
 }
 
+function mcpEvidencePayload(evidenceType: McpEvidenceType, result: McpResult): Record<string, unknown> {
+  if (evidenceType === 'file_diff') {
+    return {
+      path: result.payload?.path ?? '',
+      bytes: typeof result.payload?.bytes === 'number' ? result.payload.bytes : 0,
+      content: typeof result.payload?.content === 'string' ? result.payload.content : undefined,
+      patch:
+        typeof result.payload?.patch === 'string'
+          ? result.payload.patch
+          : typeof result.payload?.diff === 'string'
+            ? result.payload.diff
+            : typeof result.payload?.content === 'string'
+              ? result.payload.content
+              : undefined,
+      diff: typeof result.payload?.diff === 'string' ? result.payload.diff : undefined
+    };
+  }
+  if (evidenceType === 'file_exists') {
+    return {
+      path: result.payload?.path ?? '',
+      exists: Boolean(result.payload?.exists)
+    };
+  }
+  return {
+    stdout: result.stdout,
+    exitCode: result.isError ? 1 : 0
+  };
+}
+
 export function mcpToolToBobbyTool(name: string, transport: McpTransport, options: McpToolOptions = {}): Tool {
   const toolName = options.toolName ?? (options.serverId ? `mcp:${options.serverId}:${name}` : `mcp:${name}`);
   const evidenceType = options.evidenceType ?? 'command_output';
@@ -254,37 +290,11 @@ export function mcpToolToBobbyTool(name: string, transport: McpTransport, option
     run: async (input, ctx): Promise<ToolResult> => {
       const result = await transport.call(name, input);
 
-      const payload =
-        evidenceType === 'file_diff'
-          ? {
-              path: result.payload?.path ?? '',
-              bytes: typeof result.payload?.bytes === 'number' ? result.payload.bytes : 0,
-              content: typeof result.payload?.content === 'string' ? result.payload.content : undefined,
-              patch:
-                typeof result.payload?.patch === 'string'
-                  ? result.payload.patch
-                  : typeof result.payload?.diff === 'string'
-                    ? result.payload.diff
-                    : typeof result.payload?.content === 'string'
-                      ? result.payload.content
-                      : undefined,
-              diff: typeof result.payload?.diff === 'string' ? result.payload.diff : undefined
-            }
-          : evidenceType === 'file_exists'
-            ? {
-                path: result.payload?.path ?? '',
-                exists: Boolean(result.payload?.exists)
-              }
-            : {
-                stdout: result.stdout,
-                exitCode: result.isError ? 1 : 0
-              };
-
       const evidence: Evidence = {
         claimId: ctx.claimId,
         acId: ctx.acId,
         evidenceType,
-        payload,
+        payload: mcpEvidencePayload(evidenceType, result),
         producedBy: 'tool'
       };
 

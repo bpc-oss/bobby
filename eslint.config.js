@@ -20,6 +20,14 @@ export default tseslint.config(
     }
   },
   {
+    // JSX markup inflates line counts; component size is governed by review,
+    // not this cap. Logic in .ts files stays under the 50-line rule.
+    files: ['**/*.tsx'],
+    rules: {
+      'max-lines-per-function': 'off'
+    }
+  },
+  {
     files: ['**/tests/**', '**/*.test.*'],
     rules: {
       'max-lines-per-function': 'off'
