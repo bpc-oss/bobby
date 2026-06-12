@@ -15,7 +15,7 @@ describe('MockKernelClient', () => {
     return events;
   }
 
-  it('listSessions 按模式过滤', async () => {
+  it('listSessions filters by mode', async () => {
     const client = new MockKernelClient(FIXTURES);
     const chat = await client.listSessions('chat');
     const code = await client.listSessions('code');
@@ -28,7 +28,7 @@ describe('MockKernelClient', () => {
     ]);
   });
 
-  it('startTask 顺序播放剧本直到 gate_request 暂停', async () => {
+  it('gate 暂停: startTask 顺序播放剧本直到 gate_request', async () => {
     const client = new MockKernelClient(FIXTURES);
     const events = collect(client);
 
@@ -48,7 +48,7 @@ describe('MockKernelClient', () => {
     ]);
   });
 
-  it('approveGate(allow) 后继续播完：证据→verdict→usage→final', async () => {
+  it('gate 恢复: approveGate(allow) 后继续播完 evidence verdict usage final', async () => {
     const client = new MockKernelClient(FIXTURES);
     const events = collect(client);
 
@@ -64,7 +64,7 @@ describe('MockKernelClient', () => {
     expect(types[types.length - 1]).toBe('final_result');
   });
 
-  it('approveGate(deny) 直接产出 blocked 终态，不再播剩余步骤', async () => {
+  it('gate 拒绝: approveGate(deny) 直接产出 blocked 终态且不再播剩余步骤', async () => {
     const client = new MockKernelClient(FIXTURES);
     const events = collect(client);
 
@@ -82,7 +82,7 @@ describe('MockKernelClient', () => {
     expect(kernelEvents.some((event) => event.event.type === 'evidence_produced')).toBe(false);
   });
 
-  it('createSession 返回新会话并出现在 listSessions', async () => {
+  it('createSession returns a new session and exposes it via listSessions', async () => {
     const client = new MockKernelClient(FIXTURES);
     const created = await client.createSession('chat');
     const chat = await client.listSessions('chat');
