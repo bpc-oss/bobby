@@ -1007,6 +1007,7 @@ describe('workspace UI smoke', () => {
         path: 'E:\\ai-files\\Bobby',
         lastOpenedAt: '2026-06-12T00:00:00.000Z'
       },
+      status: 'running',
       previewTarget: 'http://localhost:5174'
     });
 
@@ -1017,8 +1018,32 @@ describe('workspace UI smoke', () => {
     expect(screen.getByText('+7')).toBeTruthy();
     expect(screen.getByText('-3')).toBeTruthy();
     expect(screen.getByText('Inspect shell parity')).toBeTruthy();
+    expect(screen.getByText('Current')).toBeTruthy();
     expect(screen.getByText('http://localhost:5174')).toBeTruthy();
     expect(screen.getAllByText('src/index.ts').length).toBeGreaterThan(0);
+  });
+
+  it('marks environment progress steps as completed when the task is done', async () => {
+    const client = makeKernelClientMock();
+    useChatStore.setState({
+      currentPlan: [
+        { id: 'step-1', desc: 'Inspect shell parity', satisfiesAcIds: ['AC1'], dependsOn: [] },
+        { id: 'step-2', desc: 'Verify browser target', satisfiesAcIds: ['AC2'], dependsOn: ['step-1'] }
+      ],
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      },
+      status: 'done'
+    });
+
+    render(<Workspace kernelClient={client} />);
+
+    expect(await screen.findByText('环境信息')).toBeTruthy();
+    expect(screen.getAllByText('Completed').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('Queued')).toBeNull();
+    expect(screen.queryByText('Current')).toBeNull();
   });
 
   it('filters and switches branches from the environment popover', async () => {

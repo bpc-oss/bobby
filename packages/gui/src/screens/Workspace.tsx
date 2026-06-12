@@ -317,6 +317,43 @@ function collectEnvironmentSources(blocks: ChatBlock[]): string[] {
   return Array.from(seen).slice(0, 6);
 }
 
+type EnvironmentProgressState = 'completed' | 'current' | 'queued' | 'blocked' | 'failed';
+
+function deriveEnvironmentProgress(
+  steps: Array<{ id: string; desc: string }>,
+  status: 'idle' | 'running' | 'done' | 'failed' | 'blocked'
+): Array<{ id: string; desc: string; state: EnvironmentProgressState; label: string }> {
+  if (steps.length === 0) {
+    return [];
+  }
+
+  if (status === 'done') {
+    return steps.map((step) => ({ ...step, state: 'completed', label: 'Completed' }));
+  }
+
+  if (status === 'failed') {
+    return steps.map((step, index) => ({
+      ...step,
+      state: index === 0 ? 'failed' : 'queued',
+      label: index === 0 ? 'Failed' : 'Queued'
+    }));
+  }
+
+  if (status === 'blocked') {
+    return steps.map((step, index) => ({
+      ...step,
+      state: index === 0 ? 'blocked' : 'queued',
+      label: index === 0 ? 'Blocked' : 'Queued'
+    }));
+  }
+
+  return steps.map((step, index) => ({
+    ...step,
+    state: index === 0 ? 'current' : 'queued',
+    label: index === 0 ? 'Current' : 'Queued'
+  }));
+}
+
 function openReviewDockFromEnvironment(): void {
   if (typeof window === 'undefined') {
     return;
@@ -329,20 +366,25 @@ function EnvironmentPopover({
   blocks,
   currentPlan,
   currentProject,
-  previewTarget
+  previewTarget,
+  status
 }: {
   kernelClient?: WorkspaceProps['kernelClient'];
   blocks: ChatBlock[];
   currentPlan: Array<{ id: string; desc: string }>;
   currentProject: { name: string; path: string; lastOpenedAt: string } | null;
   previewTarget: string | null;
+  status: 'idle' | 'running' | 'done' | 'failed' | 'blocked';
 }) {
   const [gitSummary, setGitSummary] = useState<GitStatusSummary | null>(null);
   const [branchesOpen, setBranchesOpen] = useState(false);
   const [branchQuery, setBranchQuery] = useState('');
   const [busyBranch, setBusyBranch] = useState<string | null>(null);
   const sources = React.useMemo(() => collectEnvironmentSources(blocks), [blocks]);
-  const progressSteps = currentPlan.slice(0, 4);
+  const progressSteps = React.useMemo(
+    () => deriveEnvironmentProgress(currentPlan.slice(0, 4), status),
+    [currentPlan, status]
+  );
 
   useEffect(() => {
     let active = true;
@@ -507,10 +549,56 @@ function EnvironmentPopover({
             {progressSteps.length === 0 ? (
               <div className="text-[12px] text-bobby-muted">暂无计划步骤</div>
             ) : (
-              progressSteps.map((step, index) => (
-                <div key={step.id} className="flex items-start gap-2 text-[12px] text-bobby-muted">
-                  <span className="mt-[2px] inline-block h-2 w-2 rounded-full" style={{ background: index === 0 ? 'var(--bobby-success)' : 'rgba(255, 255, 255, 0.28)' }} />
+              progressSteps.map((step) => (
+                <div
+                  key={step.id}
+                  data-testid={`environment-progress-${step.state}`}
+                  className="flex items-start gap-2 rounded-xl px-2 py-1.5 text-[12px] text-bobby-muted"
+                  style={{ background: 'rgba(255, 255, 255, 0.03)' }}
+                >
+                  <span
+                    className="mt-[2px] inline-block h-2 w-2 rounded-full"
+                    style={{
+                      background:
+                        step.state === 'completed'
+                          ? 'var(--bobby-success)'
+                          : step.state === 'current'
+                            ? '#9ca3af'
+                            : step.state === 'blocked'
+                              ? '#f59e0b'
+                              : step.state === 'failed'
+                                ? 'var(--bobby-danger)'
+                                : 'rgba(255, 255, 255, 0.28)'
+                    }}
+                  />
                   <span className="min-w-0 flex-1 break-words">{step.desc}</span>
+                  <span
+                    className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]"
+                    style={{
+                      background:
+                        step.state === 'completed'
+                          ? 'rgba(34, 197, 94, 0.14)'
+                          : step.state === 'current'
+                            ? 'rgba(255, 255, 255, 0.08)'
+                            : step.state === 'blocked'
+                              ? 'rgba(245, 158, 11, 0.14)'
+                              : step.state === 'failed'
+                                ? 'rgba(239, 68, 68, 0.14)'
+                                : 'rgba(255, 255, 255, 0.06)',
+                      color:
+                        step.state === 'completed'
+                          ? 'var(--bobby-success)'
+                          : step.state === 'current'
+                            ? 'var(--bobby-text-muted)'
+                            : step.state === 'blocked'
+                              ? '#f59e0b'
+                              : step.state === 'failed'
+                                ? 'var(--bobby-danger)'
+                                : 'var(--bobby-text-muted)'
+                    }}
+                  >
+                    {step.label}
+                  </span>
                 </div>
               ))
             )}
@@ -1497,6 +1585,7 @@ export function Workspace({ kernelClient, onOpenPlugins }: WorkspaceProps) {
         currentPlan={currentPlan}
         currentProject={currentProject}
         previewTarget={previewTarget}
+        status={status}
       />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[860px] px-4 py-5">
