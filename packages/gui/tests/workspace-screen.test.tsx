@@ -242,6 +242,28 @@ describe('workspace UI smoke', () => {
     expect(within(screen.getByTestId('task-flow-assistant')).getByText('Response')).toBeTruthy();
   });
 
+  it('keeps reasoning and tool output inside the same visible task-flow transcript', () => {
+    useChatStore.setState({
+      blocks: [
+        { kind: 'reasoning', id: 'r-flow-2', text: 'Tracing the current task state.' },
+        { kind: 'tool', id: 't-flow-2', tool: 'terminal', status: 'running', content: 'pnpm --filter @bobby/gui test' },
+        { kind: 'status', id: 's-flow-2', status: 'done' }
+      ],
+      liveReasoning: '',
+      liveAssistant: '',
+      busy: false,
+      currentTaskId: 'task-flow-2',
+      status: 'done'
+    });
+
+    render(<Workspace kernelClient={makeKernelClientMock()} />);
+
+    const transcript = screen.getByTestId('task-transcript');
+    expect(within(transcript).getByTestId('task-flow-reasoning')).toBeTruthy();
+    expect(within(transcript).getByTestId('task-flow-tool')).toBeTruthy();
+    expect(within(transcript).getByTestId('task-flow-status')).toBeTruthy();
+  });
+
   it('switches the composer into plan-only mode and forwards that mode to startTask', async () => {
     const client = makeKernelClientMock();
     render(<Workspace kernelClient={client} />);
@@ -785,6 +807,15 @@ describe('workspace UI smoke', () => {
     expect(screen.queryByText('新对话')).toBeNull();
     expect(screen.queryByText('等待输入')).toBeNull();
     expect(screen.getByText('目标')).toBeTruthy();
+  });
+
+  it('renders the composer as separate control, input, and context layers', () => {
+    render(<Workspace kernelClient={makeKernelClientMock()} />);
+
+    const composer = screen.getByTestId('composer-console');
+    expect(within(composer).getByTestId('composer-control-row')).toBeTruthy();
+    expect(within(composer).getByTestId('composer-input-row')).toBeTruthy();
+    expect(within(composer).getByTestId('composer-context-row')).toBeTruthy();
   });
 
   it('keeps the full shell visible around the empty state workbench', () => {

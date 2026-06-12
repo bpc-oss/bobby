@@ -140,13 +140,15 @@ function AssistantBubble({ text, streaming }: { text: string; streaming?: boolea
 function ReasoningBlock({ text }: { text: string }) {
   const [open, setOpen] = useState(true);
   return (
-    <div className="mb-4 rounded-2xl border border-bobby-border-muted" style={{ background: 'var(--bobby-surface-subtle)' }}>
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 px-4 py-2.5 text-[13px] font-medium text-bobby-muted hover:text-bobby-ink">
-        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4 rotate-90" />}
-        Thinking
-      </button>
-      {open && <div className="max-h-[360px] overflow-y-auto whitespace-pre-wrap border-t border-bobby-border-muted px-4 py-3 font-mono text-[13px] leading-[1.65] text-bobby-muted">{text}</div>}
-    </div>
+    <TaskFlowSection label="Reasoning" testId="task-flow-reasoning">
+      <div className="rounded-2xl border border-bobby-border-muted" style={{ background: 'var(--bobby-surface-subtle)' }}>
+        <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 px-4 py-2.5 text-[13px] font-medium text-bobby-muted hover:text-bobby-ink">
+          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4 rotate-90" />}
+          Thinking
+        </button>
+        {open && <div className="max-h-[360px] overflow-y-auto whitespace-pre-wrap border-t border-bobby-border-muted px-4 py-3 font-mono text-[13px] leading-[1.65] text-bobby-muted">{text}</div>}
+      </div>
+    </TaskFlowSection>
   );
 }
 
@@ -157,11 +159,13 @@ function ToolRow({ block }: { block: ChatBlock & { kind: 'tool' } }) {
   const border = done ? 'var(--bobby-success-soft)' : 'var(--bobby-border-muted)';
   const color = done ? 'var(--bobby-success)' : 'var(--bobby-text-muted)';
   return (
-    <div className="mb-2.5 flex items-start gap-2 rounded-xl px-4 py-2.5 font-mono text-[13px]" style={{ background: bg, border: `1px solid ${border}` }}>
-      <span className="mt-0.5 text-[11px] uppercase" style={{ color }}>{done ? 'done' : running ? 'run' : 'wait'}</span>
-      <span className="font-medium text-bobby-ink">{block.tool}</span>
-      {block.content && <span className="ml-auto max-w-[40%] truncate pl-2 text-bobby-muted">{block.content}</span>}
-    </div>
+    <TaskFlowSection label="Tool output" testId="task-flow-tool">
+      <div className="flex items-start gap-2 rounded-xl px-4 py-2.5 font-mono text-[13px]" style={{ background: bg, border: `1px solid ${border}` }}>
+        <span className="mt-0.5 text-[11px] uppercase" style={{ color }}>{done ? 'done' : running ? 'run' : 'wait'}</span>
+        <span className="font-medium text-bobby-ink">{block.tool}</span>
+        {block.content && <span className="ml-auto max-w-[40%] truncate pl-2 text-bobby-muted">{block.content}</span>}
+      </div>
+    </TaskFlowSection>
   );
 }
 
@@ -247,7 +251,11 @@ function StatusBanner({ block }: { block: ChatBlock & { kind: 'status' } }) {
     blocked: { bg: 'var(--bobby-surface-subtle)', border: 'var(--bobby-border)', color: 'var(--bobby-text-muted)', label: 'Blocked' }
   } as const;
   const style = palette[block.status] ?? palette.done;
-  return <div className="mb-5 rounded-2xl px-5 py-3 text-[14px] font-semibold" style={{ background: style.bg, border: `1px solid ${style.border}`, color: style.color }}>{style.label}</div>;
+  return (
+    <TaskFlowSection label="Status" testId="task-flow-status">
+      <div className="rounded-2xl px-5 py-3 text-[14px] font-semibold" style={{ background: style.bg, border: `1px solid ${style.border}`, color: style.color }}>{style.label}</div>
+    </TaskFlowSection>
+  );
 }
 
 function ChatRow({ block }: { block: ChatBlock }) {
@@ -1098,7 +1106,7 @@ function Composer({ onSend, busy, onAbort, kernelClient, onOpenPlugins }: { onSe
           boxShadow: '0 24px 60px rgba(0, 0, 0, 0.35)'
         }}
       >
-        <div className="flex flex-wrap items-center gap-2 px-4 pt-3 text-[12px]">
+        <div data-testid="composer-control-row" className="flex flex-wrap items-center gap-2 px-4 pt-3 text-[12px]">
           <div className="relative">
             <button
               type="button"
@@ -1237,7 +1245,7 @@ function Composer({ onSend, busy, onAbort, kernelClient, onOpenPlugins }: { onSe
           />
         </div>
 
-        <div className="px-4 pb-2 pt-2">
+        <div data-testid="composer-input-row" className="px-4 pb-2 pt-2">
           <div
             className="relative rounded-[22px] border"
             style={{ background: 'rgba(255, 255, 255, 0.04)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
@@ -1274,7 +1282,7 @@ function Composer({ onSend, busy, onAbort, kernelClient, onOpenPlugins }: { onSe
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 border-t px-4 pb-3 pt-2" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
+        <div data-testid="composer-context-row" className="flex flex-wrap items-center gap-2 border-t px-4 pb-3 pt-2" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
           <div className="relative">
             <button
               data-testid="composer-project-picker"
