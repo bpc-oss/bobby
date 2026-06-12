@@ -22,6 +22,7 @@ Restore a green GUI baseline before restarting the hosted GUI shell directive wo
 - Removed the lint error in `mock-client.ts`.
 - Reduced or suppressed `max-lines-per-function` lint failures so the repo baseline passes again.
 - Tightened type coverage so `gui` typecheck passes.
+- Fixed the remaining browser-only baseline failure by adding React runtime dedupe in `packages/gui/vite.config.ts`, which stopped Vite dev from triggering `Invalid hook call` in `AppShell`.
 
 ## Touched Files
 
@@ -53,6 +54,7 @@ Restore a green GUI baseline before restarting the hosted GUI shell directive wo
 - `pnpm lint`
 - `pnpm -r build`
 - `pnpm --filter @bobby/gui typecheck`
+- Browser check on `http://localhost:5178/`: app shell rendered and current-page console logs no longer contained the `Invalid hook call` / `useCallback` error.
 
 ## Blockers
 

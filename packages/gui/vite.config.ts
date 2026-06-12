@@ -5,6 +5,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react()],
   resolve: {
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
     alias: {
       '@bobby/shared': resolve(__dirname, '../shared/src/index.ts'),
       '@bobby/kernel': resolve(__dirname, '../kernel/src/index.ts')
