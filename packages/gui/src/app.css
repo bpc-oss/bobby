@@ -1,9 +1,3 @@
-:root {
-  font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  color: #0f172a;
-  background: #f8fafc;
-}
-
 * {
   box-sizing: border-box;
 }
@@ -12,110 +6,7 @@
   min-height: 100vh;
 }
 
-.app-shell {
-  min-height: 100vh;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  background: #f8fafc;
-  color: #0f172a;
-}
-
-.app-shell.theme-dark {
-  background: #0f172a;
-  color: #e2e8f0;
-}
-
-.app-header {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  border-bottom: 1px solid #cbd5e1;
-  background: #ffffff;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.app-shell.theme-dark .app-header {
-  background: #1e293b;
-  border-bottom-color: #334155;
-}
-
-.app-brand {
-  margin: 0;
-  font-size: 20px;
-  letter-spacing: 0.2px;
-}
-
-.app-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.app-nav button {
-  padding: 6px 12px;
-  border: 1px solid #94a3b8;
-  background: #f8fafc;
-  color: inherit;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.app-shell.theme-dark .app-nav button {
-  background: #334155;
-  border-color: #475569;
-}
-
-.app-nav button[aria-current='page'] {
-  background: #0369a1;
-  color: #ffffff;
-  border-color: #0369a1;
-}
-
-.app-main {
-  width: min(1200px, 100vw - 24px);
-  margin: 12px auto;
-  padding-bottom: 16px;
-}
-
-.app-help-error {
-  margin-top: 10px;
-  border: 1px solid #94a3b8;
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: #ffffff;
-}
-
-.app-shell.theme-dark .app-help-error {
-  background: #1e293b;
-  border-color: #475569;
-}
-
-.screen-shell {
-  display: grid;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.screen-shell > section,
-.screen-shell > div {
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 12px;
-}
-
-.app-shell.theme-dark .screen-shell > section,
-.app-shell.theme-dark .screen-shell > div {
-  background: #1e293b;
-  border-color: #475569;
-}
-
-.wizard-form,
-.workspace-top {
+.wizard-form {
   display: grid;
   gap: 10px;
 }
@@ -126,133 +17,14 @@
   gap: 6px;
 }
 
-.workspace-layout {
-  display: grid;
-  gap: 10px;
-}
-
-.workspace-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.workspace-footer {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-}
-
-.stream-list,
-.plan-list,
-.evidence-list {
-  padding-left: 18px;
-  margin: 6px 0 0 0;
-}
-
-.chat-stream-input {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-}
-
-.chat-stream-input input {
-  padding: 8px;
-  border-radius: 6px;
-  border: 1px solid #94a3b8;
+.wizard-form input,
+.wizard-form select,
+.wizard-form button,
+.settings-row input,
+.settings-row select {
   min-height: 36px;
-}
-
-.evidence-item {
-  margin: 0 0 8px 0;
-}
-
-.evidence-item summary {
-  cursor: pointer;
-}
-
-.evidence-item--ok {
-  color: #14532d;
-}
-
-.evidence-item--fail {
-  color: #b91c1c;
-}
-
-.evidence-item pre {
-  margin: 8px 0 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: #f1f5f9;
-  border-radius: 6px;
-  padding: 8px;
-}
-
-.app-shell.theme-dark .evidence-item pre {
-  background: #0f172a;
-}
-
-.gate-dialog {
-  border: 1px solid #fde68a;
-  border-radius: 8px;
-  background: #fffbeb;
-  padding: 12px;
-}
-
-.app-shell.theme-dark .gate-dialog {
-  border-color: #f59e0b;
-  background: #422006;
-}
-
-.gate-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.gate-buttons button {
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.gate-allow {
-  background: #16a34a;
-  color: #ffffff;
-}
-
-.gate-deny {
-  background: #dc2626;
-  color: #ffffff;
-}
-
-.costbar,
-.theme-toggle-btn,
-button {
-  border-radius: 6px;
-}
-
-.costbar {
-  border: 1px dashed #94a3b8;
   padding: 8px 10px;
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-}
-
-.theme-toggle-btn {
-  border: 1px solid #94a3b8;
-  background: #f8fafc;
-  color: inherit;
-  padding: 8px 10px;
-}
-
-.app-shell.theme-dark .theme-toggle-btn {
-  background: #334155;
-  border-color: #64748b;
+  border-radius: 6px;
 }
 
 .screen-title {
@@ -278,16 +50,11 @@ button {
   border-radius: 6px;
 }
 
-.app-footer {
-  padding: 8px 18px 14px;
-  color: #64748b;
-  border-top: 1px solid #cbd5e1;
-}
-
-.error-box {
-  border: 1px solid #fca5a5;
-  background: #fef2f2;
-  color: #991b1b;
+.costbar {
+  border: 1px dashed #94a3b8;
   border-radius: 6px;
   padding: 8px 10px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
 }
