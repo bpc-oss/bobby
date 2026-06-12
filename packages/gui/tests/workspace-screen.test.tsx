@@ -169,6 +169,7 @@ describe('workspace UI smoke', () => {
 
   it('executes the slash menu undo action without sending a task', async () => {
     const client = makeKernelClientMock();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<Workspace kernelClient={client} />);
 
     const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
@@ -176,7 +177,22 @@ describe('workspace UI smoke', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter' });
 
+    expect(window.confirm).toHaveBeenCalledWith('Restore the latest checkpoint?');
     expect(client.restoreSnapshot).toHaveBeenCalledWith(undefined);
+    expect(client.startTask).not.toHaveBeenCalled();
+  });
+
+  it('does not execute slash undo when restore confirmation is cancelled', async () => {
+    const client = makeKernelClientMock();
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<Workspace kernelClient={client} />);
+
+    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '/undo' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(window.confirm).toHaveBeenCalledWith('Restore the latest checkpoint?');
+    expect(client.restoreSnapshot).not.toHaveBeenCalled();
     expect(client.startTask).not.toHaveBeenCalled();
   });
 

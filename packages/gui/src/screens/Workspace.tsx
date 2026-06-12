@@ -336,6 +336,12 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     };
   }, [refreshCustomCommands]);
 
+  const confirmAndRestoreLatest = useCallback(() => {
+    if (!kernelClient?.restoreSnapshot) return;
+    if (typeof window !== 'undefined' && !window.confirm('Restore the latest checkpoint?')) return;
+    void kernelClient.restoreSnapshot(undefined);
+  }, [kernelClient]);
+
   const commands = React.useMemo(() => [
     {
       key: 'plan',
@@ -347,7 +353,7 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
       key: 'undo',
       title: 'undo',
       detail: 'Restore the latest snapshot',
-      run: () => void kernelClient?.restoreSnapshot?.(undefined)
+      run: confirmAndRestoreLatest
     },
     {
       key: 'status',
@@ -367,7 +373,7 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
       detail: command.description,
       run: () => onSend(expandCommandTemplate(command.promptTemplate, ''))
     }))
-  ], [customCommands, kernelClient?.restoreSnapshot, onSend]);
+  ], [confirmAndRestoreLatest, customCommands, onSend]);
 
   const applySelection = useCallback((nextValue: string, cursor: number) => {
     setInput(nextValue);
@@ -495,7 +501,7 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
           onSend(prepareTaskPrompt('Report the current task cost, token usage, and any notable spend.'));
           break;
         case 'undo':
-          void kernelClient?.restoreSnapshot?.(undefined);
+          confirmAndRestoreLatest();
           break;
         default:
           onSend(prepareTaskPrompt(trimmed));
@@ -510,7 +516,7 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     setHistoryIndex(-1);
     closeMenu();
     ref.current?.focus();
-  }, [closeMenu, customCommands, kernelClient?.restoreSnapshot, onSend]);
+  }, [closeMenu, confirmAndRestoreLatest, customCommands, onSend]);
 
   const send = useCallback(() => processCommand(input), [input, processCommand]);
 
