@@ -349,7 +349,7 @@ describe('workspace UI smoke', () => {
     const workbench = screen.getByTestId('chat-workbench');
     expect(workbench.className).toContain('flex');
     expect(workbench.className).toContain('h-full');
-    expect(screen.getByText('Mission Control')).toBeTruthy();
+    expect(screen.getByText('Review')).toBeTruthy();
     expect(screen.queryByTitle('Write')).toBeNull();
     expect(screen.queryByTitle('Code')).toBeNull();
   });
@@ -1163,8 +1163,16 @@ describe('workspace UI smoke', () => {
     });
   });
 
-  it('separates real side-tool entry points from mission status boards', () => {
+  it('keeps only the codex-style real side-tool entry points visible', () => {
     render(<App />);
+
+    expect(screen.queryByTitle(/Mission Control/)).toBeNull();
+    expect(screen.queryByTitle(/Side Chat/)).toBeNull();
+    expect(screen.queryByTitle(/Preview/)).toBeNull();
+    expect(screen.queryByTitle(/Background Tasks/)).toBeNull();
+
+    fireEvent.click(screen.getByTitle(/Review/));
+    expect(screen.getByText('Review readiness')).toBeTruthy();
 
     fireEvent.click(screen.getByTitle(/Terminal/));
     expect(screen.getByPlaceholderText(/pnpm test/)).toBeTruthy();
@@ -1175,9 +1183,6 @@ describe('workspace UI smoke', () => {
 
     fireEvent.click(screen.getByTitle(/Browser/));
     expect(screen.getByPlaceholderText(/localhost:5174/)).toBeTruthy();
-
-    fireEvent.click(screen.getByTitle(/Side Chat/));
-    expect(screen.getByPlaceholderText(/side question/)).toBeTruthy();
   });
 
   it('loads custom slash commands into the composer menu and executes template injection', async () => {

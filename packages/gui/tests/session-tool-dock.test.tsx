@@ -156,89 +156,20 @@ afterEach(() => {
 });
 
 describe('SessionToolDock', () => {
-  it('dispatches restoreSnapshot when undo is clicked from the diff tab', () => {
+  it('shows only the codex-style visible dock entries', () => {
     render(<SessionToolDock />);
 
-    fireEvent.click(screen.getByTitle(/Diff/));
-    fireEvent.click(screen.getByText('Undo'));
+    expect(screen.getByTitle(/Review/)).toBeTruthy();
+    expect(screen.getByTitle(/Terminal/)).toBeTruthy();
+    expect(screen.getByTitle(/Browser/)).toBeTruthy();
+    expect(screen.getByTitle(/Files/)).toBeTruthy();
 
-    const send = window.bobby.send;
-    expect(window.confirm).toHaveBeenCalledWith('Restore the latest checkpoint?');
-    expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot', restoreConfirmed: true });
-  });
-
-  it('shows checkpoint snapshots and restores a specific checkpoint', async () => {
-    render(<SessionToolDock />);
-
-    fireEvent.click(screen.getByTitle(/Diff/));
-    expect(await screen.findByText('#1 snap-1')).toBeTruthy();
-    expect(screen.getByText('task task-1 / step step-1')).toBeTruthy();
-    fireEvent.click(screen.getByText('Restore'));
-
-    const send = window.bobby.send;
-    expect(window.confirm).toHaveBeenCalledWith('Restore checkpoint snap-1?');
-    expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot', snapshotId: 'snap-1', restoreConfirmed: true });
-  });
-
-  it('filters checkpoint timeline to the current task', async () => {
-    render(<SessionToolDock />);
-
-    fireEvent.click(screen.getByTitle(/Diff/));
-    expect(await screen.findByText('#1 snap-1')).toBeTruthy();
-    expect(screen.queryByText('snap-2')).toBeNull();
-  });
-
-  it('refreshes the checkpoint timeline when the active task changes', async () => {
-    render(<SessionToolDock />);
-
-    fireEvent.click(screen.getByTitle(/Diff/));
-    expect(await screen.findByText('#1 snap-1')).toBeTruthy();
-    expect(screen.queryByText('snap-2')).toBeNull();
-
-    useChatStore.setState((state) => ({ ...state, currentTaskId: 'task-2' }));
-
-    await screen.findByText('#1 snap-2');
-    expect(screen.queryByText('snap-1')).toBeNull();
-  });
-
-  it('orders checkpoint timeline from oldest to newest', async () => {
-    window.bobby.listSnapshots = vi.fn().mockResolvedValue([
-      {
-        id: 'snap-2',
-        createdAt: '2026-06-11T00:01:00.000Z',
-        copied: [{ path: 'src/utils.ts', bytes: 24 }],
-        skipped: [],
-        snapshotDir: 'E:\\ai-files\\Bobby\\.bobby\\snapshots\\snap-2',
-        taskId: 'task-1',
-        stepId: 'step-9'
-      },
-      {
-        id: 'snap-1',
-        createdAt: '2026-06-11T00:00:00.000Z',
-        copied: [{ path: 'src/index.ts', bytes: 42 }],
-        skipped: [],
-        snapshotDir: 'E:\\ai-files\\Bobby\\.bobby\\snapshots\\snap-1',
-        taskId: 'task-1',
-        stepId: 'step-1'
-      }
-    ]);
-    useChatStore.setState((state) => ({ ...state, currentTaskId: null }));
-
-    render(<SessionToolDock />);
-
-    fireEvent.click(screen.getByTitle(/Diff/));
-    expect(await screen.findByText('#1 snap-1')).toBeTruthy();
-    expect(screen.getByText('#2 snap-2')).toBeTruthy();
-  });
-
-  it('shows recent background dispatches in the tasks panel', async () => {
-    render(<SessionToolDock />);
-
-    fireEvent.click(screen.getByTitle(/Background Tasks/));
-    expect(await screen.findByText('Writer')).toBeTruthy();
-    expect(screen.getByText('worktree: C:\\temp\\worktree')).toBeTruthy();
-    expect(screen.getByText('proposal: E:\\ai-files\\Bobby\\.bobby\\proposals\\proposal-1.patch')).toBeTruthy();
-    expect(screen.getByText('Ready')).toBeTruthy();
+    expect(screen.queryByTitle(/Mission Control/)).toBeNull();
+    expect(screen.queryByTitle(/Plan/)).toBeNull();
+    expect(screen.queryByTitle(/^Diff/)).toBeNull();
+    expect(screen.queryByTitle(/Side Chat/)).toBeNull();
+    expect(screen.queryByTitle(/Preview/)).toBeNull();
+    expect(screen.queryByTitle(/Background Tasks/)).toBeNull();
   });
 
   it('opens the review panel when a background proposal requests review', async () => {
@@ -246,6 +177,23 @@ describe('SessionToolDock', () => {
 
     expect((await screen.findByTestId('dock-active-tab')).textContent).toBe('Review');
     expect(window.bobby.listProposals).toHaveBeenCalled();
+  });
+
+  it('normalizes unsupported stored dock tabs to a supported tab on mount', async () => {
+    window.localStorage.setItem('bobby:dock:tab', 'mission');
+
+    render(<SessionToolDock />);
+
+    expect((await screen.findByTestId('dock-active-tab')).textContent).toBe('Review');
+    expect(screen.queryByTitle(/Mission Control/)).toBeNull();
+  });
+
+  it('maps legacy preview restores to the browser tab', async () => {
+    window.localStorage.setItem('bobby:dock:tab', 'preview');
+
+    render(<SessionToolDock />);
+
+    expect((await screen.findByTestId('dock-active-tab')).textContent).toBe('Browser');
   });
 
   it('loads workspace files from disk and keeps the preview empty until a file is selected', async () => {
@@ -540,20 +488,6 @@ describe('SessionToolDock', () => {
     expect(await screen.findByText(/Committed abc1234/)).toBeTruthy();
   });
 
-  it('detects a web project and can start a preview server from package.json', async () => {
-    render(<SessionToolDock />);
-
-    fireEvent.click(screen.getByTitle(/Preview/));
-    expect(await screen.findByText(/Detected dev script from package\.json\./)).toBeTruthy();
-
-    fireEvent.click(screen.getByText('Start dev server'));
-
-    const startPreviewServer = window.bobby.startPreviewServer;
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('pnpm dev'));
-    expect(startPreviewServer).toHaveBeenCalledWith({ command: 'pnpm dev', url: 'http://localhost:5173', confirmed: true });
-    expect(await screen.findByText(/Active preview: http:\/\/localhost:5173/)).toBeTruthy();
-  });
-
   it('opens browser targets inside the dock and updates the shared preview target', async () => {
     render(<SessionToolDock />);
 
@@ -613,5 +547,11 @@ describe('SessionToolDock', () => {
 
     render(<SessionToolDock />);
     expect((await screen.findByTestId('dock-active-tab')).textContent).toBe('Terminal');
+  });
+
+  it('opens the review tab when requested with an unsupported legacy dock id', async () => {
+    render(<SessionToolDock requestedTab={{ id: 'diff', nonce: 1 }} />);
+
+    expect((await screen.findByTestId('dock-active-tab')).textContent).toBe('Review');
   });
 });

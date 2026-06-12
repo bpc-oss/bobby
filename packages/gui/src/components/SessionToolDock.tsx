@@ -32,22 +32,31 @@ import {
 
 export type DockTab = 'mission' | 'plan' | 'review' | 'diff' | 'terminal' | 'files' | 'browser' | 'sidechat' | 'preview' | 'tasks';
 export type DockTabRequest = { id: DockTab; nonce: number };
+type VisibleDockTab = 'review' | 'terminal' | 'files' | 'browser';
 
 const DOCK_TAB_STORAGE_KEY = 'bobby:dock:tab';
 const DOCK_OPEN_STORAGE_KEY = 'bobby:dock:open';
 
-const TABS: Array<{ id: DockTab; label: string; shortcut?: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { id: 'mission', label: 'Mission Control', icon: ClipboardList },
-  { id: 'plan', label: 'Plan', icon: Route },
+const TABS: Array<{ id: VisibleDockTab; label: string; shortcut?: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: 'review', label: 'Review', shortcut: 'Ctrl+Shift+G', icon: Bug },
-  { id: 'diff', label: 'Diff', shortcut: 'Ctrl+Shift+D', icon: FileDiff },
   { id: 'terminal', label: 'Terminal', shortcut: 'Ctrl+`', icon: TerminalSquare },
   { id: 'files', label: 'Files', shortcut: 'Ctrl+P', icon: FolderOpen },
-  { id: 'browser', label: 'Browser', shortcut: 'Ctrl+T', icon: Globe },
-  { id: 'sidechat', label: 'Side Chat', shortcut: 'Ctrl+Alt+S', icon: MessageCircle },
-  { id: 'preview', label: 'Preview', shortcut: 'Ctrl+P', icon: MonitorPlay },
-  { id: 'tasks', label: 'Background Tasks', icon: Play }
+  { id: 'browser', label: 'Browser', shortcut: 'Ctrl+T', icon: Globe }
 ];
+
+function normalizeDockTab(tab: string | null | undefined): VisibleDockTab {
+  switch (tab) {
+    case 'review':
+    case 'terminal':
+    case 'files':
+    case 'browser':
+      return tab;
+    case 'preview':
+      return 'browser';
+    default:
+      return 'review';
+  }
+}
 
 function payloadValue(block: ChatBlock, key: string): string {
   if (block.kind !== 'evidence') return '';
@@ -1148,66 +1157,11 @@ function BrowserPanel() {
   );
 }
 
-function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'tasks' | 'sidechat' | 'preview' | 'files' }) {
-  const blocks = useChatStore((s) => s.blocks);
-  const [dispatches, setDispatches] = React.useState<SubAgentDispatchRecordDto[]>([]);
-  React.useEffect(() => {
-    if (kind !== 'tasks') return;
-    const client = typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null;
-    let active = true;
-
-    const refresh = async () => {
-      if (!client?.listSubAgentDispatches) {
-        if (active) setDispatches([]);
-        return;
-      }
-
-      try {
-        const next = await client.listSubAgentDispatches();
-        if (active) setDispatches(next);
-      } catch {
-        if (active) setDispatches([]);
-      }
-    };
-
-    void refresh();
-    const timer = window.setInterval(() => {
-      void refresh();
-    }, 4000);
-
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [kind]);
-
+function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'files' }) {
   if (kind === 'terminal') return <TerminalPanel />;
   if (kind === 'files') return <FilesPanel />;
   if (kind === 'browser') return <BrowserPanel />;
-  if (kind === 'preview') return <PreviewPanel />;
-  if (kind === 'tasks') {
-    return (
-      <div className="space-y-3">
-        {dispatches.length === 0 ? (
-          <Empty title="No background tasks dispatched yet." />
-        ) : (
-          <div className="space-y-2">
-            {dispatches.map((record) => <DispatchRow key={record.id} record={record} />)}
-          </div>
-        )}
-      </div>
-    );
-  }
-  const command =
-    kind === 'sidechat' ? <ToolCommand kind="Side Chat" icon={MessageCircle} placeholder="Ask a side question without changing the main mission..." button="Ask" buildPrompt={(value) => `Side chat for the current session: ${value}`} /> :
-    null;
-  const filtered = blocks.filter((block) => {
-    if (kind === 'browser') return block.kind === 'tool' && /browser|chrome|playwright|url|http/i.test(block.tool);
-    if (kind === 'sidechat') return block.kind === 'user' || block.kind === 'assistant' || block.kind === 'reasoning';
-    return block.kind === 'evidence';
-  });
-  const icon = kind === 'browser' ? Globe : MessageCircle;
-  return <div className="space-y-2">{command}{filtered.length === 0 ? <Empty title="No session data for this panel yet." /> : filtered.map((block) => <Row key={block.id} icon={icon} title={blockText(block)} meta={block.kind} />)}</div>;
+  return null;
 }
 
 export function SessionToolDock({ requestedTab }: { requestedTab?: DockTabRequest | null }) {
@@ -1217,12 +1171,11 @@ export function SessionToolDock({ requestedTab }: { requestedTab?: DockTabReques
     }
     return window.localStorage.getItem(DOCK_OPEN_STORAGE_KEY) !== 'false';
   });
-  const [tab, setTab] = React.useState<DockTab>(() => {
+  const [tab, setTab] = React.useState<VisibleDockTab>(() => {
     if (typeof window === 'undefined') {
-      return 'mission';
+      return 'review';
     }
-    const stored = window.localStorage.getItem(DOCK_TAB_STORAGE_KEY);
-    return TABS.some((item) => item.id === stored) ? (stored as DockTab) : 'mission';
+    return normalizeDockTab(window.localStorage.getItem(DOCK_TAB_STORAGE_KEY));
   });
   const [proposals, setProposals] = React.useState<ProposalSummary[]>([]);
   const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
@@ -1242,9 +1195,9 @@ export function SessionToolDock({ requestedTab }: { requestedTab?: DockTabReques
 
   React.useEffect(() => {
     if (!requestedTab) return;
-    setTab(requestedTab.id);
+    setTab(normalizeDockTab(requestedTab.id));
     setOpen(true);
-    if (requestedTab.id === 'review') {
+    if (normalizeDockTab(requestedTab.id) === 'review') {
       void refreshProposals();
     }
   }, [refreshProposals, requestedTab]);
@@ -1265,12 +1218,7 @@ export function SessionToolDock({ requestedTab }: { requestedTab?: DockTabReques
 
   const active = TABS.find((item) => item.id === tab) ?? TABS[0];
   const ActiveIcon = active.icon;
-  const content =
-    tab === 'mission' ? <MissionPanel /> :
-    tab === 'plan' ? <PlanPanel /> :
-    tab === 'review' ? <ReviewPanel proposals={proposals} refresh={refreshProposals} /> :
-    tab === 'diff' ? <DiffPanel /> :
-    <ToolPanel kind={tab} />;
+  const content = tab === 'review' ? <ReviewPanel proposals={proposals} refresh={refreshProposals} /> : <ToolPanel kind={tab} />;
 
   return (
     <aside className="flex h-full shrink-0 border-l" style={{ background: 'var(--bobby-bg-canvas)', borderColor: 'var(--bobby-border)' }}>
