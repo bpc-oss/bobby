@@ -78,6 +78,9 @@ importers:
       vite:
         specifier: ^5.3.0
         version: 5.4.21(@types/node@25.9.1)
+      zustand:
+        specifier: ^5
+        version: 5.0.14(@types/react@18.3.30)(react@18.3.1)
     devDependencies:
       '@testing-library/react':
         specifier: ^16.0.0
@@ -2846,6 +2849,24 @@ packages:
 
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
+  zustand@5.0.14:
+    resolution: {integrity: sha512-/8tAspM5LMPr28b3fwLYrtdj77ECpfZviaP75CMTnwO8ISyaE4GDIG/9rDDYq/cH9D2Xw2A2RXglLInmVBQB/g==}
+    engines: {node: '>=12.20.0'}
+    peerDependencies:
+      '@types/react': '>=18.0.0'
+      immer: '>=9.0.6'
+      react: '>=18.0.0'
+      use-sync-external-store: '>=1.2.0'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      immer:
+        optional: true
+      react:
+        optional: true
+      use-sync-external-store:
+        optional: true
 
 snapshots:
 
@@ -5652,3 +5673,8 @@ snapshots:
       readable-stream: 3.6.2
 
   zod@3.25.76: {}
+
+  zustand@5.0.14(@types/react@18.3.30)(react@18.3.1):
+    optionalDependencies:
+      '@types/react': 18.3.30
+      react: 18.3.1
