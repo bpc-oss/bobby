@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 import type { Evidence, KernelEvent } from '@bobby/shared';
 import { useChatStore } from '../src/store/chat-store';
@@ -286,7 +286,7 @@ describe('workspace UI smoke', () => {
   it('does not render a redundant workspace topbar in the empty state', () => {
     render(<App />);
 
-    expect(screen.getAllByText('Bobby')).toHaveLength(1);
+    expect(screen.getByText('我们应该在 Bobby 中构建什么?')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Light' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Dark' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'V3' })).toBeNull();
@@ -386,6 +386,57 @@ describe('workspace UI smoke', () => {
     expect(screen.queryByText('History')).toBeNull();
     expect(screen.queryByText('Agents')).toBeNull();
     expect(screen.queryByText('Commands')).toBeNull();
+  });
+
+  it('removes dashboard-style sidebar chrome in favor of a denser navigator', () => {
+    useChatStore.setState({
+      activeSessionId: 'thread-2',
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-11T00:04:00.000Z'
+      },
+      recentProjects: [
+        {
+          name: 'Bobby',
+          path: 'E:\\ai-files\\Bobby',
+          lastOpenedAt: '2026-06-11T00:04:00.000Z'
+        }
+      ],
+      threads: {
+        'thread-2': {
+          id: 'thread-2',
+          title: 'Second task',
+          blocks: [{ kind: 'user', id: 'u-2', text: 'Second task' }],
+          createdAt: '2026-06-11T00:03:00.000Z',
+          updatedAt: '2026-06-11T00:04:00.000Z',
+          projectDir: 'E:\\ai-files\\Bobby',
+          taskId: 'task-2',
+          status: 'running',
+          liveReasoning: '',
+          liveAssistant: '',
+          liveToolContent: '',
+          currentPlan: [],
+          error: null,
+          costUsd: 0,
+          spendUsd: 0,
+          model: null
+        }
+      },
+      blocks: [{ kind: 'user', id: 'u-2', text: 'Second task' }],
+      currentTaskId: 'task-2',
+      status: 'running',
+      busy: true
+    });
+
+    render(<App />);
+
+    const activityRail = screen.getByTestId('activity-rail');
+    const projectNavigator = screen.getByTestId('project-task-navigator');
+    expect(within(activityRail).queryByText('Bobby')).toBeNull();
+    expect(within(projectNavigator).queryByText(/project groups/i)).toBeNull();
+    expect(within(projectNavigator).queryByRole('button', { name: 'New Task' })).toBeNull();
+    expect(within(projectNavigator).queryAllByText('running')).toHaveLength(1);
   });
 
   it('collapses and expands project task groups from the navigator', () => {

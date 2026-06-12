@@ -240,7 +240,7 @@ export function Sidebar({ page, onPage, onNewSession }: SidebarProps): React.Rea
   return (
     <aside
       data-testid="sidebar"
-      className="flex h-full w-[358px] shrink-0 border-r"
+      className="flex h-full w-[320px] shrink-0 border-r"
       style={{
         background: 'var(--bobby-sidebar-gradient)',
         borderColor: 'var(--bobby-sidebar-border)',
@@ -249,10 +249,9 @@ export function Sidebar({ page, onPage, onNewSession }: SidebarProps): React.Rea
     >
       <div
         data-testid="activity-rail"
-        className="flex w-[104px] shrink-0 flex-col border-r px-3 py-4"
+        className="flex w-[88px] shrink-0 flex-col border-r px-3 py-4"
         style={{ borderColor: 'var(--bobby-sidebar-divider)' }}
       >
-        <div className="mb-4 px-1 text-[12px] font-semibold uppercase tracking-[0.24em] text-bobby-faint">Bobby</div>
         <div className="space-y-1.5">
           {primaryItems.map((item) => (
             <RailButton key={item.key} active={item.active} disabled={item.disabled} icon={item.icon} label={item.label} onClick={item.onClick} />
@@ -262,27 +261,9 @@ export function Sidebar({ page, onPage, onNewSession }: SidebarProps): React.Rea
 
       <div data-testid="project-task-navigator" className="flex min-w-0 flex-1 flex-col">
         <div className="border-b px-4 py-4" style={{ borderColor: 'var(--bobby-sidebar-divider)' }}>
-          <div className="mb-1 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-bobby-faint">Projects</div>
-              <div className="mt-1 text-[14px] font-semibold text-bobby-ink">
-                {currentProject?.name ?? projectLabel(activeProjectPath)}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                newSession();
-                onNewSession();
-              }}
-              className="rounded-xl border px-2.5 py-1.5 text-[12px] font-medium text-bobby-muted transition hover:bg-bobby-sidebar-row-hover hover:text-bobby-ink"
-              style={{ borderColor: 'var(--bobby-sidebar-divider)' }}
-            >
-              New Task
-            </button>
-          </div>
-          <div className="text-[12px] text-bobby-faint">
-            {groups.length} project groups, {Object.keys(threads).length} tracked threads
+          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-bobby-faint">Projects</div>
+          <div className="mt-2 truncate text-[14px] font-semibold text-bobby-ink">
+            {currentProject?.name ?? projectLabel(activeProjectPath)}
           </div>
         </div>
 
@@ -298,10 +279,9 @@ export function Sidebar({ page, onPage, onNewSession }: SidebarProps): React.Rea
               <section
                 key={group.key}
                 data-testid={`project-group-${projectGroupTestId(group.key)}`}
-                className="rounded-2xl border px-2 py-2"
+                className="rounded-2xl px-2 py-2"
                 style={{
-                  borderColor: group.path === activeProjectPath ? 'var(--bobby-accent)' : 'var(--bobby-sidebar-divider)',
-                  background: group.path === activeProjectPath ? 'var(--bobby-accent-soft)' : 'var(--bobby-card-ghost)'
+                  background: group.path === activeProjectPath ? 'rgba(255, 255, 255, 0.04)' : 'transparent'
                 }}
               >
                 <div className="flex items-center gap-2 px-2 py-1.5">
@@ -360,12 +340,6 @@ export function Sidebar({ page, onPage, onNewSession }: SidebarProps): React.Rea
                               <span className="truncate">{task.taskId ?? task.id}</span>
                             </div>
                           </div>
-                          <span
-                            className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                            style={{ background: tone.pillBg, color: tone.pillFg }}
-                          >
-                            {task.status}
-                          </span>
                         </button>
                       );
                     })}
