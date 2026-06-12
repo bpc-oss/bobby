@@ -516,8 +516,28 @@ describe('mcp IPC handlers', () => {
     const afterCreate = await list() as Array<{ id: string; enabled: boolean }>;
     expect(afterCreate.some((server) => server.id === created.id)).toBe(true);
 
+    mcpToolToBobbyTool.mockClear();
+    await upsert(undefined, {
+      id: created.id,
+      name: 'HTTP Files',
+      enabled: true,
+      transport: { kind: 'url', url: 'http://localhost:3010/mcp' },
+      tools: [
+        { name: 'read_remote', permissionTier: 'L2', description: 'Read remote file', evidenceType: 'command_output' }
+      ]
+    });
+    expect(mcpToolToBobbyTool).toHaveBeenCalledWith(
+      'read_remote',
+      expect.anything(),
+      expect.objectContaining({ serverId: created.id, permissionTier: 'L2' })
+    );
+
+    mcpToolToBobbyTool.mockClear();
     const toggled = await toggle(undefined, { id: created.id }) as { enabled: boolean };
     expect(toggled.enabled).toBe(false);
+    expect(mcpToolToBobbyTool.mock.calls.some(([, , options]) =>
+      (options as { serverId?: string } | undefined)?.serverId === created.id
+    )).toBe(false);
 
     const removed = await remove(undefined, { id: created.id });
     expect(removed).toBe(true);
