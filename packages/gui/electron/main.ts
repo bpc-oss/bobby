@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,6 +42,8 @@ import {
   ProposalDiscardInputSchema,
   ProposalSummarySchema,
   GitCommitResultSchema,
+  PreviewStartInputSchema,
+  PreviewStartResultSchema,
   McpServerRemoveInputSchema,
   McpServerToggleInputSchema,
   McpServerUpsertInputSchema,
@@ -378,6 +380,25 @@ function readWorkspaceTextFile(workspaceRoot: string, relativePath: string): Wor
   } catch {
     return null;
   }
+}
+
+function startPreviewServer(input: unknown) {
+  const parsed = PreviewStartInputSchema.parse(input);
+  const child = spawn(parsed.command, {
+    cwd: currentWorkspaceRoot(),
+    shell: true,
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true
+  });
+  child.unref();
+
+  return PreviewStartResultSchema.parse({
+    started: true,
+    command: parsed.command,
+    url: parsed.url,
+    pid: child.pid ?? null
+  });
 }
 
 function readRecentProjects(): ProjectMeta[] {
@@ -1494,6 +1515,8 @@ ipcMain.handle('terminal:run', async (_event, input) => {
   const tool = new ExecTool(currentWorkspaceRoot());
   return tool.run({ command: parsed.data.command, timeoutMs: parsed.data.timeoutMs }, { acId: 'terminal', claimId: 'terminal' });
 });
+
+ipcMain.handle('preview:startDevServer', async (_event, input) => startPreviewServer(input));
 
 ipcMain.handle('agents:list', async () => listSubAgents(currentWorkspaceRoot()));
 

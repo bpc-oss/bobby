@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { BrowserWindow } from 'electron';
-import type { AutomationRecord, CommandRecordDto, SessionRecordDto, SnapshotListEntry } from '../src/ipc/contract';
+import type { AutomationRecord, CommandRecordDto, PreviewStartResult, SessionRecordDto, SnapshotListEntry } from '../src/ipc/contract';
 
 const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>();
 let tempHome = '';
@@ -790,6 +790,30 @@ describe('session IPC handlers', () => {
 
     expect(detail.summary.taskId).toBe('session-task-1');
     expect(detail.sessionIds).toEqual(['session-1']);
+  });
+});
+
+describe('preview IPC handlers', () => {
+  beforeEach(() => {
+    handlers.clear();
+  });
+
+  it('starts a detached preview server from the selected workspace', async () => {
+    await loadMain();
+    const startPreview = handlers.get('preview:startDevServer');
+    if (!startPreview) throw new Error('preview:startDevServer handler not registered');
+
+    const result = await startPreview(undefined, {
+      command: 'node -e "process.exit(0)"',
+      url: 'http://localhost:5173'
+    }) as PreviewStartResult;
+
+    expect(result).toMatchObject({
+      started: true,
+      command: 'node -e "process.exit(0)"',
+      url: 'http://localhost:5173',
+      pid: expect.any(Number)
+    });
   });
 });
 

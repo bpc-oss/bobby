@@ -269,6 +269,20 @@ export const TerminalRunResultSchema = z.object({
 });
 export type TerminalRunResult = z.infer<typeof TerminalRunResultSchema>;
 
+export const PreviewStartInputSchema = z.object({
+  command: z.string().min(1),
+  url: z.string().min(1)
+});
+export type PreviewStartInput = z.infer<typeof PreviewStartInputSchema>;
+
+export const PreviewStartResultSchema = z.object({
+  started: z.boolean(),
+  command: z.string().min(1),
+  url: z.string().min(1),
+  pid: z.number().int().positive().nullable()
+});
+export type PreviewStartResult = z.infer<typeof PreviewStartResultSchema>;
+
 export const McpToolSchema = z.object({
   name: z.string().min(1),
   permissionTier: z.enum(['L0', 'L1', 'L2', 'L3', 'L4']),
@@ -419,6 +433,7 @@ export function makeKernelClient() {
     listWorkspaceTree: () => window.bobby.listWorkspaceTree!(),
     readWorkspaceFile: (path: string) => window.bobby.readWorkspaceFile!(path),
     runTerminalCommand: (input: TerminalRunInput) => window.bobby.runTerminalCommand!(input) as Promise<TerminalRunResult>,
+    startPreviewServer: (input: PreviewStartInput) => window.bobby.startPreviewServer!(input),
     restoreSnapshot: (snapshotId?: string) => window.bobby.send({ type: 'restoreSnapshot', snapshotId }),
     applyProposal: (input: ProposalApplyInput) => window.bobby.applyProposal!(input),
     discardProposal: (input: ProposalDiscardInput) => window.bobby.discardProposal!(input),

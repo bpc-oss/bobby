@@ -95,6 +95,12 @@ function installBobby() {
         }
       ],
       result: { exitCode: 0 }
+    }),
+    startPreviewServer: vi.fn().mockResolvedValue({
+      started: true,
+      command: 'pnpm dev',
+      url: 'http://localhost:5173',
+      pid: 12345
     })
   };
   vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -377,9 +383,9 @@ describe('SessionToolDock', () => {
 
     fireEvent.click(screen.getByText('Start dev server'));
 
-    const runTerminalCommand = window.bobby.runTerminalCommand;
+    const startPreviewServer = window.bobby.startPreviewServer;
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('pnpm dev'));
-    expect(runTerminalCommand).toHaveBeenCalledWith({ command: 'cmd /c start "" pnpm dev' });
+    expect(startPreviewServer).toHaveBeenCalledWith({ command: 'pnpm dev', url: 'http://localhost:5173' });
     expect(await screen.findByText(/Active preview: http:\/\/localhost:5173/)).toBeTruthy();
   });
 });

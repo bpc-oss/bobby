@@ -725,13 +725,6 @@ function buildLaunchCommand(packageManager: PreviewSuggestion['packageManager'],
   return `${packageManager} ${scriptName}`;
 }
 
-function buildBackgroundLaunchCommand(command: string): string {
-  if (typeof process !== 'undefined' && process.platform === 'win32') {
-    return `cmd /c start "" ${command}`;
-  }
-  return `sh -lc "${command.replace(/"/g, '\\"')} >/tmp/bobby-preview.log 2>&1 &"`;
-}
-
 function buildPreviewSuggestion(packageJsonText: string | null): PreviewSuggestion {
   const packageJson = parsePackageJson(packageJsonText);
   const scripts = packageJson && typeof packageJson.scripts === 'object' && packageJson.scripts !== null
@@ -803,9 +796,8 @@ function PreviewPanel() {
   }, [client, currentProject]);
 
   async function startPreviewServer() {
-    if (!client?.runTerminalCommand || !suggestion.command) return;
+    if (!client?.startPreviewServer || !suggestion.command) return;
 
-    const launchCommand = buildBackgroundLaunchCommand(suggestion.command);
     if (!window.confirm(`Start the local preview server?\n\n${suggestion.command}\n\nOpen ${suggestion.url} after launch?`)) {
       return;
     }
@@ -813,14 +805,10 @@ function PreviewPanel() {
     setLaunching(true);
     setStatus(null);
     try {
-      const result = await client.runTerminalCommand({ command: launchCommand });
-      if (result.result.exitCode === 0) {
-        setActiveUrl(suggestion.url);
-        setUrl(suggestion.url);
-        setStatus(`Started ${suggestion.command} and opened ${suggestion.url}.`);
-      } else {
-        setStatus(`Preview launch exited with code ${result.result.exitCode}.`);
-      }
+      const result = await client.startPreviewServer({ command: suggestion.command, url: suggestion.url });
+      setActiveUrl(result.url);
+      setUrl(result.url);
+      setStatus(`Started ${result.command} and opened ${result.url}.`);
     } catch (nextError) {
       setStatus(nextError instanceof Error ? nextError.message : String(nextError));
     } finally {

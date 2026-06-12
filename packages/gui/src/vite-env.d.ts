@@ -22,6 +22,8 @@ import type {
   ProposalDiscardInput,
   GitCommitInput,
   GitCommitResult,
+  PreviewStartInput,
+  PreviewStartResult,
   ProposalSummary,
   SnapshotListEntry,
   TerminalRunInput,
@@ -76,6 +78,7 @@ declare global {
       listWorkspaceTree?: () => Promise<WorkspaceTreeNode[]>;
       readWorkspaceFile?: (path: string) => Promise<WorkspaceReadFileResult | null>;
       runTerminalCommand?: (input: TerminalRunInput) => Promise<TerminalRunResult>;
+      startPreviewServer?: (input: PreviewStartInput) => Promise<PreviewStartResult>;
       listMcpServers?: () => Promise<McpServerRecordDto[]>;
       upsertMcpServer?: (input: McpServerUpsertInput) => Promise<McpServerRecordDto>;
       toggleMcpServer?: (input: McpServerToggleInput) => Promise<McpServerRecordDto>;
