@@ -983,6 +983,9 @@ function BrowserPanel() {
   const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
   const [url, setUrl] = React.useState(previewTarget ?? 'http://localhost:5174');
   const [activeUrl, setActiveUrl] = React.useState(previewTarget ?? 'http://localhost:5174');
+  const [frameKey, setFrameKey] = React.useState(0);
+  const [status, setStatus] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!previewTarget) {
@@ -992,14 +995,45 @@ function BrowserPanel() {
     setActiveUrl(previewTarget);
   }, [previewTarget]);
 
+  function isSupportedTarget(target: string): boolean {
+    try {
+      const parsed = new URL(target);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return false;
+      }
+      const hostname = parsed.hostname.toLowerCase();
+      return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
+    } catch {
+      return false;
+    }
+  }
+
   async function openTarget() {
     const trimmed = url.trim();
     if (!trimmed) {
       return;
     }
+    if (!isSupportedTarget(trimmed)) {
+      setError('Only local preview targets are supported in the docked browser.');
+      setStatus(null);
+      return;
+    }
+
+    setError(null);
+    setStatus(`Opening ${trimmed}`);
     setActiveUrl(trimmed);
     setPreviewTarget(trimmed);
+    setFrameKey((current) => current + 1);
     await client?.startTask(`Open and inspect this web page, then report visible evidence: ${trimmed}`);
+  }
+
+  function refreshTarget() {
+    if (!activeUrl) {
+      return;
+    }
+    setError(null);
+    setStatus(`Refreshing ${activeUrl}`);
+    setFrameKey((current) => current + 1);
   }
 
   return (
@@ -1031,11 +1065,35 @@ function BrowserPanel() {
           >
             Open
           </button>
+          <button
+            type="button"
+            onClick={refreshTarget}
+            disabled={!activeUrl}
+            className="rounded-md border px-2.5 py-1.5 text-[12px] font-medium text-bobby-ink disabled:opacity-40"
+            style={{ borderColor: 'var(--bobby-border)' }}
+          >
+            Refresh
+          </button>
         </div>
+        {error ? (
+          <div className="mt-2 rounded-md px-3 py-2 text-[12px]" style={{ background: 'var(--bobby-danger-soft)', color: 'var(--bobby-danger)' }}>
+            {error}
+          </div>
+        ) : null}
+        {status ? <div className="mt-2 text-[11px] text-bobby-faint">{status}</div> : null}
       </div>
       <iframe
+        key={`${activeUrl}-${frameKey}`}
         title="Browser"
         src={activeUrl}
+        onLoad={() => {
+          setError(null);
+          setStatus(`Loaded ${activeUrl}`);
+        }}
+        onError={() => {
+          setError(`Failed to load ${activeUrl}`);
+          setStatus(null);
+        }}
         className="min-h-[520px] w-full rounded-lg border"
         style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}
       />

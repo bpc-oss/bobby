@@ -137,6 +137,8 @@ beforeEach(() => {
     liveReasoning: '',
     liveAssistant: '',
     liveToolContent: '',
+    previewTarget: null,
+    composerInsertion: null,
     threads: {},
     taskThreadIds: {},
     pendingThreadIds: []
@@ -481,6 +483,37 @@ describe('SessionToolDock', () => {
     });
     expect(await screen.findByText(/Active browser target: http:\/\/localhost:4173/)).toBeTruthy();
     expect(useChatStore.getState().previewTarget).toBe('http://localhost:4173');
+  });
+
+  it('refreshes the active local browser target inside the dock', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Browser/));
+    fireEvent.change(screen.getByPlaceholderText(/https:\/\/example.com or http:\/\/localhost:5174/i), {
+      target: { value: 'http://localhost:4173' }
+    });
+    fireEvent.click(screen.getByText('Open'));
+    expect(await screen.findByText(/Active browser target: http:\/\/localhost:4173/)).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Refresh'));
+    expect(await screen.findByText(/Refreshing http:\/\/localhost:4173/)).toBeTruthy();
+  });
+
+  it('blocks unsupported external browser targets with an error card', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Browser/));
+    fireEvent.change(screen.getByPlaceholderText(/https:\/\/example.com or http:\/\/localhost:5174/i), {
+      target: { value: 'https://example.com' }
+    });
+    fireEvent.click(screen.getByText('Open'));
+
+    expect(await screen.findByText(/Only local preview targets are supported in the docked browser/)).toBeTruthy();
+    expect(window.bobby.send).not.toHaveBeenCalledWith({
+      type: 'startTask',
+      input: 'Open and inspect this web page, then report visible evidence: https://example.com'
+    });
+    expect(useChatStore.getState().previewTarget).toBeNull();
   });
 
   it('restores the last open dock tab after remount', async () => {

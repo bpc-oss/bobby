@@ -451,6 +451,12 @@ Acceptance:
 
 Goal: Match Codex's browser/preview dock.
 
+Status:
+
+- Completed on 2026-06-12.
+- Implemented with docked local browser target input, refresh control, iframe-backed preview surface, preview-target synchronization, preview-server handoff, and explicit error cards for unsupported external targets.
+- Verified with focused GUI tests, GUI package tests, Electron smoke, and full workspace tests.
+
 Scope:
 
 - Embedded browser/preview panel.
