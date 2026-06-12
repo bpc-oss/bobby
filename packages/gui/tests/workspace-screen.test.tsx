@@ -68,6 +68,129 @@ function makeKernelClientMock(): KernelClientMock {
   };
 }
 
+function installWindowBobby(overrides: Record<string, unknown> = {}) {
+  const send = vi.fn().mockImplementation(async (command: Record<string, unknown>) => {
+    if (command.type === 'startTask') {
+      const taskId = typeof command.taskId === 'string' ? command.taskId : 'task-acceptance';
+      useChatStore.getState().handleEvent({
+        type: 'intent_proposed',
+        taskId,
+        contract: { goal: String(command.input ?? ''), acceptanceCriteria: [], constraints: [], inputs: [], outOfScope: [] }
+      });
+      useChatStore.getState().handleEvent({
+        type: 'plan_ready',
+        taskId,
+        steps: [
+          { id: 'S1', desc: 'Review current shell status', satisfiesAcIds: ['AC1'], dependsOn: [] },
+          { id: 'S2', desc: 'Validate desktop shell flow', satisfiesAcIds: ['AC2'], dependsOn: ['S1'] }
+        ]
+      });
+      useChatStore.getState().handleEvent({
+        type: 'assistant_delta',
+        taskId,
+        content: `Handled ${String(command.input ?? '')}`,
+        sequence: 0
+      });
+      useChatStore.getState().handleEvent({ type: 'final_result', taskId, status: 'done' });
+    }
+    if (command.type === 'restoreSnapshot') {
+      return undefined;
+    }
+    return undefined;
+  });
+
+  (window as unknown as { bobby?: Record<string, unknown> }).bobby = {
+    send,
+    onEvent: vi.fn().mockReturnValue(() => undefined),
+    getSetupStatus: vi.fn().mockResolvedValue({
+      homeDir: 'C:\\Users\\Administrator',
+      bobbyDir: 'C:\\Users\\Administrator\\.bobby',
+      keyPath: 'C:\\Users\\Administrator\\.bobby\\key',
+      capabilitiesPath: 'C:\\Users\\Administrator\\.bobby\\capabilities.json',
+      hasKey: true,
+      hasCapabilities: true,
+      hasEnvKey: false
+    }),
+    getCurrentProject: vi.fn().mockResolvedValue({
+      name: 'Bobby',
+      path: 'E:\\ai-files\\Bobby',
+      lastOpenedAt: '2026-06-12T00:00:00.000Z'
+    }),
+    listProjects: vi.fn().mockResolvedValue([
+      { name: 'Bobby', path: 'E:\\ai-files\\Bobby', lastOpenedAt: '2026-06-12T00:00:00.000Z' }
+    ]),
+    openQuickstart: vi.fn().mockResolvedValue(undefined),
+    openProject: vi.fn().mockResolvedValue(undefined),
+    selectProject: vi.fn().mockResolvedValue({
+      project: { name: 'Bobby', path: 'E:\\ai-files\\Bobby', lastOpenedAt: '2026-06-12T00:00:00.000Z' },
+      recentProjects: [{ name: 'Bobby', path: 'E:\\ai-files\\Bobby', lastOpenedAt: '2026-06-12T00:00:00.000Z' }]
+    }),
+    listSessions: vi.fn().mockResolvedValue([]),
+    readSession: vi.fn().mockResolvedValue(null),
+    saveSession: vi.fn().mockResolvedValue(undefined),
+    listTasks: vi.fn().mockResolvedValue([]),
+    searchFiles: vi.fn().mockResolvedValue([{ path: 'src-utils.ts', preview: 'Utility helper preview' }]),
+    saveAttachment: vi.fn().mockResolvedValue({ path: '.bobby/uploads/saved.png' }),
+    listCommands: vi.fn().mockResolvedValue([]),
+    listMcpServers: vi.fn().mockResolvedValue([]),
+    listSubAgents: vi.fn().mockResolvedValue([]),
+    listProposals: vi.fn().mockResolvedValue([]),
+    readProposal: vi.fn().mockResolvedValue(null),
+    applyProposal: vi.fn().mockResolvedValue(null),
+    discardProposal: vi.fn().mockResolvedValue(true),
+    listSnapshots: vi.fn().mockResolvedValue([]),
+    listWorkspaceTree: vi.fn().mockResolvedValue([
+      { name: 'package.json', path: 'package.json', kind: 'file', size: 32 },
+      { name: 'src-utils.ts', path: 'src-utils.ts', kind: 'file', size: 64 }
+    ]),
+    readWorkspaceFile: vi.fn().mockImplementation(async (path: string) => {
+      if (path === 'package.json') {
+        return {
+          path,
+          content: JSON.stringify({ scripts: { dev: 'vite' } })
+        };
+      }
+      if (path === 'src-utils.ts') {
+        return {
+          path,
+          content: 'export const answer = 42;\n'
+        };
+      }
+      return null;
+    }),
+    runTerminalCommand: vi.fn().mockResolvedValue({
+      evidence: [],
+      result: { exitCode: 0 }
+    }),
+    startPreviewServer: vi.fn().mockResolvedValue({
+      started: true,
+      command: 'pnpm dev',
+      url: 'http://localhost:5173',
+      pid: 1234
+    }),
+    getGitStatusSummary: vi.fn().mockResolvedValue({
+      isRepo: true,
+      branch: 'codex/bobby-cli-parity',
+      ahead: 0,
+      behind: 0,
+      added: 7,
+      deleted: 3,
+      modified: 2,
+      untracked: 1,
+      branches: [
+        { name: 'codex/bobby-cli-parity', current: true, upstream: 'origin/codex/bobby-cli-parity' },
+        { name: 'main', current: false, upstream: 'origin/main' }
+      ]
+    }),
+    switchGitBranch: vi.fn().mockResolvedValue({ currentBranch: 'codex/bobby-cli-parity' }),
+    gitCommit: vi.fn().mockResolvedValue({ committed: true, hash: 'abc1234', output: 'Committed changes' }),
+    getCapabilityReport: vi.fn().mockResolvedValue(null),
+    ...overrides
+  };
+
+  return { send };
+}
+
 beforeEach(() => {
   window.localStorage.setItem('bobby-onboarding-complete', 'true');
   useChatStore.setState({
@@ -1359,6 +1482,66 @@ describe('workspace UI smoke', () => {
     fireEvent(window, new Event('bobby:commands-changed'));
 
     expect(await screen.findByText('rewrite')).toBeTruthy();
+  });
+
+  it('executes the desktop acceptance flow across task isolation, dock tools, file insertion, and environment actions', async () => {
+    const { send } = installWindowBobby();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const view = render(<App />);
+
+    const composer = await screen.findByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
+    fireEvent.change(composer, { target: { value: 'Audit the shell layout' } });
+    fireEvent.click(screen.getByText('Send'));
+
+    await vi.waitFor(() => {
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'startTask',
+        input: 'Audit the shell layout'
+      }));
+    });
+
+    fireEvent.click(screen.getByText('New Chat'));
+    const secondComposer = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
+    fireEvent.change(secondComposer, { target: { value: 'Inspect the dock behavior' } });
+    fireEvent.click(screen.getByText('Send'));
+
+    await vi.waitFor(() => {
+      expect(Object.values(useChatStore.getState().threads)).toHaveLength(2);
+    });
+
+    const navigator = screen.getByTestId('project-task-navigator');
+    expect(within(navigator).getByText('Audit the shell layout')).toBeTruthy();
+    expect(within(navigator).getByText('Inspect the dock behavior')).toBeTruthy();
+    expect(view.container.querySelectorAll('button[data-testid^="sidebar-task-"]').length).toBe(2);
+
+    fireEvent.click(screen.getByTitle(/Review/));
+    expect(await screen.findByText('Review readiness')).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle(/Terminal/));
+    expect(screen.getByPlaceholderText(/pnpm test/)).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle(/Browser/));
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    await vi.waitFor(() => {
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'startTask',
+        input: expect.stringContaining('Open and inspect this web page')
+      }));
+    });
+
+    fireEvent.click(screen.getByTitle(/Files/));
+    expect(await screen.findByTestId('files-layout')).toBeTruthy();
+    fireEvent.click(screen.getByText('src-utils.ts'));
+    expect(await screen.findByText('export const answer = 42;')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Insert reference' }));
+    await vi.waitFor(() => {
+      expect((screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement).value).toContain('@src-utils.ts');
+    });
+
+    expect(screen.getByText('环境信息')).toBeTruthy();
+    expect(screen.getByText('Review current shell status')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Commit or push' }));
+    expect((await screen.findByTestId('dock-active-tab')).textContent).toBe('Review');
   });
 
   it('does not create a duplicate session when clicking the current session row', () => {

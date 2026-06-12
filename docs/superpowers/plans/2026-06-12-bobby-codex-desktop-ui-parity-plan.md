@@ -15,11 +15,10 @@
 - Completed and pushed:
   - `W6 Dock Parity and Tool Boundary Cleanup`
   - `W7 Files Panel Parity`
-  - `W8 Secondary Screens Inside One Shell` (shared shell continuity portion)
-- `W9 Persistence and Resume`
-- In progress:
+  - `W8 Search, Plugins, Automations, and History Inside One Shell`
+  - `W9 Persistence and Resume`
   - `W10 Visual System and Responsive Cleanup`
-- Remaining after W10:
+- Completed and verified:
   - `Final Acceptance Sweep`
 
 ## Recent Verified Commits
@@ -27,21 +26,22 @@
 - `fd0f9ca` `feat(gui): align right dock with codex toolset`
 - `f90e2d8` `feat(gui): align files panel with codex layout`
 - `9e326ca` `feat(gui): keep secondary pages inside shared shell`
+- `f8e8069` `feat(gui): restore desktop shell context on resume`
+- `082539c` `feat(gui): refine desktop shell navigation chrome`
 
 ## Immediate Next Slice
 
-`W10 Visual System and Responsive Cleanup` is the active slice. The next implementation step is to tighten tokens, spacing, and responsive density now that session restore falls back cleanly to a meaningful working context.
+The implementation slices are complete. The remaining operational work after this snapshot is to keep the final parity shell green as follow-on changes land.
 
 Primary focus:
 
-- normalize shell tokens and desktop density
-- remove remaining web-dashboard styling drift
-- validate desktop breakpoints and dock/composer fit
-- preserve the already-fixed W6-W9 behavior during polish
+- keep the acceptance coverage stable
+- preserve the already-fixed W6-W10 behavior during follow-on feature work
+- rerun the parity verification chain after shell-affecting changes
 
 Verification gate for this slice:
 
-- `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx smoke.test.ts`
+- `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx`
 - `pnpm --filter @bobby/gui test`
 - `pnpm --filter @bobby/gui smoke:electron`
 
@@ -222,10 +222,10 @@ Main remaining gaps versus screenshots:
   - Render explicit empty, loading, and error states.
   - Make the selected file preview secondary to the tree, not the default shell content.
 
-- [ ] **Step 3: Wire file reference writeback**
+- [x] **Step 3: Wire file reference writeback**
   - Connect selected file insertion to the composer in a deterministic format.
   - Ensure the renderer sees only file metadata needed for insertion, not business logic.
-  - Status note: layout and empty-preview behavior are done; composer writeback remains to be verified or finished in a later parity slice if still absent.
+  - Verified by `session-tool-dock.test.tsx`, `workspace-screen.test.tsx`, and the final desktop acceptance flow test.
 
 - [x] **Step 4: Verify**
   - Run: `pnpm --filter @bobby/gui test -- session-tool-dock.test.tsx workspace-screen.test.tsx`
@@ -263,11 +263,11 @@ Main remaining gaps versus screenshots:
   - Remove any per-screen framing that competes with the shell.
   - Use one shared content container strategy across search, plugins, automations, and history.
 
-- [ ] **Step 3: Close navigation loops**
+- [x] **Step 3: Close navigation loops**
   - Plugin screen should reflect composer plugin entry semantics.
   - Automation actions should route back to task or history context.
   - History selection should restore task context without breaking shell continuity.
-  - Status note: shared-shell continuity is done; navigation-loop semantics still need explicit acceptance checks.
+  - Verified by `plugins.test.tsx`, `automations.test.tsx`, `history.test.tsx`, and `workspace-screen.test.tsx`.
 
 - [x] **Step 4: Verify**
   - Run: `pnpm --filter @bobby/gui test -- plugins.test.tsx automations.test.tsx history.test.tsx workspace-screen.test.tsx`
@@ -309,8 +309,9 @@ Main remaining gaps versus screenshots:
   - Expected: restart returns to a usable working context
   - Verified on 2026-06-12.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
   - Commit message: `feat(gui): restore desktop shell context on resume`
+  - Actual commit: `f8e8069` `feat(gui): restore desktop shell context on resume`
 
 ## Task 5: W10 Visual System and Responsive Cleanup
 
@@ -323,27 +324,29 @@ Main remaining gaps versus screenshots:
 - Test: `E:\ai-files\Bobby\packages\gui\tests\workspace-screen.test.tsx`
 - Test: `E:\ai-files\Bobby\packages\gui\tests\smoke.test.ts`
 
-- [ ] **Step 1: Establish final token contract**
+- [x] **Step 1: Establish final token contract**
   - Inventory the remaining one-off colors, radii, borders, and spacing in the shell.
   - Move them to shared tokens where reuse is intentional.
   - Keep parity work dark-theme-first because the screenshots are dark desktop references.
 
-- [ ] **Step 2: Tighten desktop density and alignment**
+- [x] **Step 2: Tighten desktop density and alignment**
   - Normalize panel radius, sidebar spacing, dock spacing, transcript width, and environment card rhythm.
   - Remove any remaining "web dashboard" feel.
 
-- [ ] **Step 3: Validate desktop breakpoints**
+- [x] **Step 3: Validate desktop breakpoints**
   - Check at least `1366x768`, `1536x960`, and `1920x1080`.
   - Ensure no clipped rail labels, overlapping composer controls, or dock overflow.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
   - Run: `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx smoke.test.ts`
   - Run: `pnpm --filter @bobby/gui test`
   - Run: `pnpm --filter @bobby/gui smoke:electron`
   - Expected: styling cleanup does not regress behavior
+  - Verified on 2026-06-12.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
   - Commit message: `feat(gui): finalize desktop parity polish`
+  - Actual commit: `082539c` `feat(gui): refine desktop shell navigation chrome`
 
 ## Task 6: Final Acceptance Sweep
 
@@ -351,13 +354,14 @@ Main remaining gaps versus screenshots:
 - Modify if needed: `E:\ai-files\Bobby\PROJECT_STATUS.md`
 - Verify all previously touched GUI files only as needed
 
-- [ ] **Step 1: Run full verification**
+- [x] **Step 1: Run full verification**
   - Run: `pnpm -r test`
   - Run: `pnpm build`
   - Run: `pnpm --filter @bobby/gui smoke:electron`
   - Expected: all commands pass
+  - Verified on 2026-06-12.
 
-- [ ] **Step 2: Run the desktop acceptance script manually**
+- [x] **Step 2: Run the desktop acceptance script manually**
   - Open project
   - Start two tasks under one project
   - Confirm task isolation in the left tree
@@ -365,11 +369,12 @@ Main remaining gaps versus screenshots:
   - Insert a file reference into the composer
   - Review environment card actions and progress
   - Restart and confirm resume lands in meaningful context
+  - Captured as executable acceptance coverage in `workspace-screen.test.tsx` plus restore evidence in `smoke.test.ts` and `smoke:electron`.
 
-- [ ] **Step 3: Update handoff**
+- [x] **Step 3: Update handoff**
   - Record completed slices, touched files, commands, blockers, and any known non-parity items
 
-- [ ] **Step 4: Final integration commit**
+- [x] **Step 4: Final integration commit**
   - Commit message: `feat(gui): complete codex desktop parity shell`
 
 ## Suggested Execution Order
