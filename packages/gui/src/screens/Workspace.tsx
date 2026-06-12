@@ -20,8 +20,6 @@ type WorkspaceProps = {
     listMcpServers?: () => Promise<McpServerRecordDto[]>;
     onEvent: (callback: (event: KernelEvent) => void) => () => void;
   };
-  theme?: 'light' | 'dark';
-  onThemeChange?: (theme: 'light' | 'dark') => void;
   onOpenPlugins?: () => void;
 };
 
@@ -1363,14 +1361,12 @@ function SuggestionCards({ onPick }: { onPick: (text: string) => void }) {
   );
 }
 
-export function Workspace({ kernelClient, theme = 'light', onThemeChange, onOpenPlugins }: WorkspaceProps) {
+export function Workspace({ kernelClient, onOpenPlugins }: WorkspaceProps) {
   const blocks = useChatStore((s) => s.blocks);
   const liveReasoning = useChatStore((s) => s.liveReasoning);
   const liveAssistant = useChatStore((s) => s.liveAssistant);
   const busy = useChatStore((s) => s.busy);
   const status = useChatStore((s) => s.status);
-  const costUsd = useChatStore((s) => s.costUsd);
-  const model = useChatStore((s) => s.model);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const setClient = useChatStore((s) => s.setClient);
   const handleEvent = useChatStore((s) => s.handleEvent);
@@ -1383,8 +1379,6 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange, onOpen
   const currentPlan = useChatStore((s) => s.currentPlan);
   const currentProject = useChatStore((s) => s.currentProject);
   const previewTarget = useChatStore((s) => s.previewTarget);
-  const [selectedModel, setSelectedModel] = useState('deepseek-chat');
-  const [showModelPicker, setShowModelPicker] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const activeThread = activeSessionId ? threads[activeSessionId] ?? null : null;
   const headerTitle = activeThread?.title ?? '\u65b0\u5bf9\u8bdd';
@@ -1435,52 +1429,17 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange, onOpen
         currentProject={currentProject}
         previewTarget={previewTarget}
       />
-      <div style={{ background: 'var(--bobby-topbar-bg)', boxShadow: 'var(--bobby-topbar-shadow)', borderBottom: '1px solid var(--bobby-border-muted)' }}>
-        <div className="flex items-center justify-between px-4 py-2.5">
-          <div className="flex items-center gap-3">
-            <h2 className="select-none text-[13px] font-bold tracking-tight text-bobby-ink">Bobby</h2>
-            {busy && <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold" style={{ background: 'var(--bobby-accent-soft)', color: 'var(--bobby-accent)' }}><span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: 'var(--bobby-accent)' }} />Working</span>}
-            {!busy && status !== 'idle' && <span className="text-[12px] capitalize text-bobby-muted">{status}</span>}
-          </div>
-          <div className="flex items-center gap-3 text-[12px] text-bobby-muted">
-            {model && <span>{model}</span>}
-            {costUsd > 0 && <span>${costUsd.toFixed(4)}</span>}
-            <button onClick={() => onThemeChange?.(theme === 'light' ? 'dark' : 'light')} className="rounded-md px-2 py-1 hover:text-bobby-ink">
-              {theme === 'light' ? 'Dark' : 'Light'}
-            </button>
-            <div className="relative">
-              <button
-                onClick={() => setShowModelPicker(!showModelPicker)}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-bobby-muted transition hover:bg-bobby-hover hover:text-bobby-ink"
-              >
-                {selectedModel === 'deepseek-chat' ? 'V3' : 'R1'}
-                {showModelPicker ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              </button>
-              {showModelPicker && (
-                <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border py-1 shadow-lg" style={{ background: 'var(--bobby-surface-elevated)', borderColor: 'var(--bobby-border)' }}>
-                  <button onClick={() => { setSelectedModel('deepseek-chat'); setShowModelPicker(false); }} className={`w-full px-3 py-2 text-left text-[13px] transition hover:bg-bobby-hover ${selectedModel === 'deepseek-chat' ? 'font-medium text-bobby-ink' : 'text-bobby-muted'}`}>DeepSeek Chat (V3)</button>
-                  <button onClick={() => { setSelectedModel('deepseek-reasoner'); setShowModelPicker(false); }} className={`w-full px-3 py-2 text-left text-[13px] transition hover:bg-bobby-hover ${selectedModel === 'deepseek-reasoner' ? 'font-medium text-bobby-ink' : 'text-bobby-muted'}`}>DeepSeek Reasoner (R1)</button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="mx-4 border-t" style={{ borderColor: 'var(--bobby-border-muted)' }} />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[860px] px-4 py-5">
           {showTaskHeader ? (
             <div className="mb-4 rounded-[24px] border px-5 py-4" style={{ background: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(255, 255, 255, 0.08)' }}>
-              <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
                 <div className="min-w-0">
                   <div className="truncate text-[28px] font-semibold tracking-tight text-bobby-ink">{headerTitle}</div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-bobby-faint">
                     <span>{busy ? '\u6b63\u5728\u601d\u8003' : status === 'idle' ? '\u7b49\u5f85\u8f93\u5165' : status}</span>
                     {currentTaskId ? <span>{`• ${currentTaskId}`}</span> : null}
                   </div>
-                </div>
-                <div className="rounded-full px-3 py-1 text-[11px] font-medium text-bobby-muted" style={{ background: 'rgba(255, 255, 255, 0.06)' }}>
-                  {selectedModel === 'deepseek-chat' ? 'V3' : 'R1'}
                 </div>
               </div>
             </div>

@@ -128,7 +128,7 @@ describe('workspace UI smoke', () => {
 
     expect(screen.getByPlaceholderText(/Describe a task/)).toBeTruthy();
     expect(screen.getByText('Send')).toBeTruthy();
-    expect(screen.getByText('Bobby')).toBeTruthy();
+    expect(screen.getByText('我们应该在 Bobby 中构建什么?')).toBeTruthy();
   });
 
   it('sendMessage calls client.startTask via store', async () => {
@@ -154,6 +154,43 @@ describe('workspace UI smoke', () => {
     await vi.waitFor(() => {
       expect(client.startTask).toHaveBeenCalledWith('run another task', 'standard', expect.stringMatching(/^task-/));
     });
+  });
+
+  it('shows the active task header without a separate workspace brand bar', () => {
+    useChatStore.setState({
+      activeSessionId: 'thread-2',
+      threads: {
+        'thread-2': {
+          id: 'thread-2',
+          title: 'Second task',
+          blocks: [{ kind: 'user', id: 'u-2', text: 'Second task' }],
+          createdAt: '2026-06-11T00:03:00.000Z',
+          updatedAt: '2026-06-11T00:04:00.000Z',
+          projectDir: 'E:\\ai-files\\Bobby',
+          taskId: 'task-2',
+          status: 'running',
+          liveReasoning: '',
+          liveAssistant: '',
+          liveToolContent: '',
+          currentPlan: [],
+          error: null,
+          costUsd: 0,
+          spendUsd: 0,
+          model: null
+        }
+      },
+      blocks: [{ kind: 'user', id: 'u-2', text: 'Second task' }],
+      currentTaskId: 'task-2',
+      status: 'running',
+      busy: true
+    });
+
+    render(<App />);
+
+    expect(screen.getAllByText('Second task').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Light' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Dark' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'V3' })).toBeNull();
   });
 
   it('switches the composer into plan-only mode and forwards that mode to startTask', async () => {
@@ -244,6 +281,15 @@ describe('workspace UI smoke', () => {
     expect(screen.getByText('Mission Control')).toBeTruthy();
     expect(screen.queryByTitle('Write')).toBeNull();
     expect(screen.queryByTitle('Code')).toBeNull();
+  });
+
+  it('does not render a redundant workspace topbar in the empty state', () => {
+    render(<App />);
+
+    expect(screen.getAllByText('Bobby')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Light' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Dark' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'V3' })).toBeNull();
   });
 
   it('handles background proposal navigation by opening the review dock', async () => {
