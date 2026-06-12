@@ -262,7 +262,7 @@ function DiffPanel() {
 
   React.useEffect(() => {
     void refreshSnapshots();
-  }, [refreshSnapshots]);
+  }, [refreshSnapshots, currentTaskId, blocks.length]);
 
   async function restoreSnapshot(snapshotId?: string) {
     const label = snapshotId ? `Restore checkpoint ${snapshotId}?` : 'Restore the latest checkpoint?';

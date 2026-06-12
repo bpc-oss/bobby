@@ -174,6 +174,19 @@ describe('SessionToolDock', () => {
     expect(screen.queryByText('snap-2')).toBeNull();
   });
 
+  it('refreshes the checkpoint timeline when the active task changes', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Diff/));
+    expect(await screen.findByText('#1 snap-1')).toBeTruthy();
+    expect(screen.queryByText('snap-2')).toBeNull();
+
+    useChatStore.setState((state) => ({ ...state, currentTaskId: 'task-2' }));
+
+    await screen.findByText('#1 snap-2');
+    expect(screen.queryByText('snap-1')).toBeNull();
+  });
+
   it('orders checkpoint timeline from oldest to newest', async () => {
     (window as any).bobby.listSnapshots = vi.fn().mockResolvedValue([
       {
