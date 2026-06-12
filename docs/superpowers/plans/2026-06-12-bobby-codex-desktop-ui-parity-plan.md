@@ -2,309 +2,272 @@
 
 > 状态：执行中  
 > 日期：2026-06-12  
-> 分支：`codex/bobby-cli-parity`  
-> 目标：基于 2026-06-12 提供的 Codex Desktop 截图，把 Bobby GUI 从“已有功能”推进到“桌面工作台形态、信息架构、操作流接近 Codex Desktop”。
+> 分支：`codex/bobby-cli-parity`
 
-## 1. 计划依据
+## 0. 目的
 
-本计划只基于以下输入：
+本计划用于把 Bobby GUI 从“已有功能页面集合”推进到“接近 Codex Desktop / Claude Code Desktop 的完整桌面工作台”。  
+目标不是逐像素抄界面，而是对齐以下三件事：
 
-1. 仓库既有约束与阶段任务
-   - `docs/superpowers/plans/2026-06-11-bobby-desktop-parity-directive.md`
-   - `docs/superpowers/plans/2026-06-04-bobby-execution-protocol.md`
-2. 2026-06-12 用户提供的 Codex Desktop 截图
-3. 当前 Bobby GUI 已实现能力与已知差距
+1. 信息架构一致：左导航、项目树、任务区、右侧工具区、右上环境卡职责清晰。
+2. 操作流一致：空状态、活跃任务、工具调用、文件查看、环境操作都在同一套 shell 内完成。
+3. 状态语义一致：任务、分支、插件、工具、验证、错误都来自真实数据，不允许假控件和占位交互。
 
-本文件是后续 GUI parity 的唯一落盘计划。后续执行、验收、续做，统一以本文件为准。
+本文件是该阶段唯一主计划。后续 GUI parity 的执行、验收、续做统一以此文件为准。
 
-## 2. 目标定义
+## 1. 依据
 
-目标不是把 Bobby 改成“像聊天页”，而是改成一个完整桌面工作台：
+1. `E:\ai-files\Bobby\docs\superpowers\plans\2026-06-11-bobby-desktop-parity-directive.md`
+2. `E:\ai-files\Bobby\docs\superpowers\plans\2026-06-04-bobby-execution-protocol.md`
+3. 2026-06-12 用户提供的 7 张 Codex Desktop 截图
+4. 当前 Bobby GUI 实现现状与已完成切片
 
-- 左侧是稳定的应用导航和项目/任务树
-- 中间是当前任务的主工作区
-- 底部是控制台式 composer
-- 右侧是稳定存在的工具入口与 dock
-- 右上是环境信息卡，承载 git、分支、进度、浏览器、来源
-- 空状态和任务状态共用同一套 shell，而不是两套页面
+## 2. 当前对标结论
+
+### 2.1 已经接近的部分
+
+1. 已经具备桌面应用的基础壳体。
+2. 已有左侧导航、项目列表、中央任务区、右侧工具 dock、右上环境卡、文件面板等模块雏形。
+3. 已完成一轮 shell 收口：
+   - 去掉了冗余 workspace 顶栏。
+   - 左栏密度已经向 Codex 靠拢。
+   - 中央 transcript 已从纯聊天样式开始向任务流样式过渡。
+   - composer 已拆出控制层、输入层、上下文层基础结构。
+
+### 2.2 仍然明显落后的部分
+
+1. 整体仍更像“页面集合”，不像“持续驻留的桌面工作台”。
+2. 左栏的应用区、项目区、任务区层级还不够明确。
+3. 中央任务流缺少 Codex 那种“请求/执行/推理/工具/结果”一体化阅读感。
+4. composer 还没有达到真正的控制台化，`+` 菜单、插件入口、上下文条都偏弱。
+5. 右上环境卡还没成为真实的“当前工作上下文卡”，更多还是 git 信息卡。
+6. 右侧 dock 的稳定性、持久化和内容密度仍不足。
+7. 文件面板行为与截图差距较大，尤其是默认空预览、树/预览分栏、引用回写。
+8. 搜索、插件、自动化页面还没有完全纳入统一 shell 语义。
 
 ## 3. 从截图抽取的目标界面模型
 
 ### 3.1 顶层窗口结构
 
-截图体现的是“三栏工作台”而不是“单页 dashboard”：
+目标是稳定三栏桌面工作台，而不是 dashboard。
 
-- 顶层保留原生菜单栏
-- 左侧固定导航和项目区长期存在
-- 中间是任务画布
-- 右侧是工具入口和可展开面板
-- 空状态下 shell 仍完整可见，不应只剩一个欢迎页
+- 左侧：一级应用导航 + 二级项目/任务树
+- 中央：当前任务工作区
+- 右侧：固定工具入口与面板
+- 右上：环境信息卡
+- 底部：统一 composer
+
+空状态和活跃任务状态共用同一套 shell，不允许切成两套页面。
 
 ### 3.2 左侧一级导航
 
-截图中的一级导航为：
+按截图，一级导航应稳定承载这些入口：
 
-- `新对话` 或 `快速对话`
-- `搜索`
-- `插件`
-- `自动化`
-- `设置`
-
-要求：
-
-- 一级导航表达“应用区切换”，不是功能卡片集合
-- 图标、文案、选中态、间距、hover/focus 统一
-- 页面切换时 shell 不闪断，右侧 dock 不重置
-
-### 3.3 左侧二级导航：项目与任务树
-
-截图中的二级结构是：
-
-- `项目` 分组常驻
-- 项目节点下直接展示任务条目
-- 当前任务可高亮，任务状态可见
-- 项目列表滚动时仍保持清晰层级
+1. 新对话 / 快速对话
+2. 搜索
+3. 插件
+4. 自动化
+5. 设置
 
 要求：
 
-- 项目是一级实体，任务是项目下属实体
-- 任务状态必须来自 per-task 数据，不能再用全局 busy 替代
-- 并行任务时不能串线
-- 长项目名、长任务名支持截断与 hover 完整展示
+1. 它表达的是“应用区切换”，不是按钮堆。
+2. 图标、文案、选中态、hover、focus 必须统一。
+3. 切换一级页面时，中央 shell 与右侧 dock 不应被重建。
+
+### 3.3 左侧二级区：项目与任务树
+
+截图里的二级区是“项目树下挂任务”，不是平铺的 session 列表。
+
+要求：
+
+1. 项目是一级实体，任务是项目下实体。
+2. 同项目多任务并行时，状态必须严格按 taskId 隔离。
+3. 项目可展开/折叠，任务可高亮，状态可见。
+4. 长名称要做截断并保留 hover 完整信息。
+5. 滚动时层级感不能丢。
 
 ### 3.4 中央工作区
 
-截图中的中央区域有两种共享 shell 的状态：
+中央区域有两种状态，但必须使用同一 shell：
 
 1. 空状态
-   - 中央大标题
-   - 底部 composer 居中悬浮
-   - 左右结构仍存在
+   - 中央欢迎文案
+   - 底部悬浮 composer
+   - 左右结构仍完整存在
 2. 活跃任务状态
-   - 当前任务标题显示在工作区头部
-   - transcript 按任务流呈现
-   - reasoning、工具输出、状态、最终结果在同一条任务流里
+   - 顶部显示当前任务标题
+   - 下方是连续任务流
+   - reasoning、tool output、status、error、final result 都在同一条任务链路里
 
 要求：
 
-- 去掉冗余 workspace 顶栏品牌条
-- transcript 不是普通聊天气泡堆叠，而是任务执行流
-- message / reasoning / tool / status / error 五类块层级清晰
-- 阅读宽度、留白、正文密度接近桌面工作台
+1. 去掉任何仍像 dashboard 的容器感。
+2. transcript 阅读体验要接近执行流，而不是气泡聊天流。
+3. message / reasoning / tool / status / error 分层清晰。
+4. 正文宽度、留白、密度按桌面工作台优化。
 
 ### 3.5 Composer
 
-截图中的 composer 不是单一输入框，而是控制台：
+截图里的 composer 是控制台，不是普通输入框。
 
-- 有 `+` 菜单
-- 有计划模式、目标开关、插件入口
-- 有权限级别、模型档位、语音、发送等控制
-- 有项目、执行目标、本地模式、分支等上下文条
+目标结构：
+
+1. 输入层：提示词输入、发送、语音等。
+2. 控制层：权限、计划模式、目标、模型档位、插件入口、`+` 菜单。
+3. 上下文层：项目、本地模式、分支、目标上下文。
 
 要求：
 
-- composer 拆为三层
-  - 输入层
-  - 控制层
-  - 上下文层
-- 空状态与活跃任务状态共用同一 composer 组件合同
-- `+` 菜单要体现可调用能力，而不是跳页占位
-- 插件入口既能进入插件页，也要保留“已安装/可调用”的上下文感
+1. 空状态与任务状态共用同一 composer 组件契约。
+2. `+` 菜单承载真实能力入口，不是跳页占位。
+3. 插件入口既能跳转插件页，也要保留“当前可调用能力”的上下文感。
+4. 项目 / 模式 / 分支这些上下文必须稳定、可理解、可测试。
 
 ### 3.6 右上环境信息卡
 
-截图中的环境卡包含：
+截图里它不是纯 git 卡，而是“当前执行上下文卡”。
 
-- `环境信息`
-- git 变更统计
-- 本地环境标签
-- 分支选择器
-- `提交或推送`
-- `创建拉取请求`
-- 进度 checklist
-- 浏览器目标
-- 来源
+应包含：
 
-要求：
-
-- 这张卡是“当前任务上下文卡”，不是纯 git 卡
-- 分支切换器支持展开、搜索、高亮当前分支
-- `提交或推送` 要么可用，要么显式禁用并说明原因
-- `创建拉取请求` 同理，不能伪装可用
-- checklist 与当前任务/计划状态联动
-
-### 3.7 右侧稳定工具入口与 dock
-
-截图中的右侧入口为：
-
-- `审查`
-- `终端`
-- `浏览器`
-- `文件`
+1. 变更统计
+2. 本地环境标识
+3. 当前分支与切换器
+4. 提交或推送
+5. 创建拉取请求
+6. 进度 checklist
+7. 浏览器目标
+8. 来源信息
 
 要求：
 
-- 入口常驻，不随页面切换消失
-- 快捷键文案可见
-- 打开后出现真正可用的面板，不是占位
-- dock 的开关、当前 tab、内容状态应持久化
+1. 所有动作都必须链接真实能力。
+2. 不可用状态必须显式禁用并说明原因。
+3. checklist 要来自真实任务/计划状态，而不是静态文案。
+4. 分支切换器要支持展开、搜索、高亮当前分支。
+
+### 3.7 右侧固定 dock
+
+截图对标的右侧固定入口为：
+
+1. 审查
+2. 终端
+3. 浏览器
+4. 文件
+
+要求：
+
+1. 入口常驻，页面切换不消失。
+2. 快捷键文案可见。
+3. 对应面板是真可用，不是占位。
+4. 当前 tab、开关态、面板内容需持久化恢复。
 
 ### 3.8 文件面板
 
-截图中的文件面板行为：
+截图对应的文件面板行为：
 
-- 左侧文件树，右侧预览
-- 初始为空预览，不自动打开第一个文件
-- 顶部有过滤框
-- 目录支持展开/折叠
-- 选中文件后才预览
+1. 左树右预览的双栏结构。
+2. 默认空预览，不自动打开第一个文件。
+3. 顶部有过滤框。
+4. 目录支持展开/折叠。
+5. 选中文件后才加载预览。
 
 要求：
 
-- 默认空预览
-- 树和预览分栏明确
-- 读取失败显示错误卡
-- 选中文件后可插入引用回写到 composer
+1. 读取失败必须显示错误卡。
+2. 选中文件后可以回写引用到 composer。
+3. 整体布局和密度接近截图，不走 IDE 式过重设计。
 
 ### 3.9 视觉系统
 
-截图体现的视觉方向：
+截图体现的是高密度深色桌面工作台：
 
-- 近黑背景
-- 深灰面板
-- 较大的圆角
-- 很细的边框
-- 高密度列表
-- 清晰的文字层级
+1. 深色基底
+2. 深灰面板
+3. 较大圆角
+4. 极细边框
+5. 清晰的文本层级
+6. 稳定的一致性交互 token
 
 要求：
 
-- 建立统一 token，不再零碎补样式
-- spacing、radius、border、hover、focus、active 全局一致
-- 在 1366px 到 1920px 桌面宽度下都稳定
+1. 建立统一 token，而不是零散补样式。
+2. spacing、radius、border、hover、focus、active 全局一致。
+3. 在 1366px 到 1920px 桌面宽度下表现稳定。
 
-## 4. 当前 Bobby 已有基础
+## 4. 开发原则
 
-当前不是从零开始，已具备：
+1. 先稳 shell，再做局部 polish。
+2. 先保证真实行为，再对齐视觉。
+3. 每个 slice 都必须带测试与手工验收。
+4. UI 不承载业务真相，真实状态继续以 store / IPC / kernel 为准。
+5. 每个 slice 验收通过必须立即 `commit + push`。
+6. 不允许用假按钮、假 badge、假状态来制造“看起来像”的错觉。
 
-- 左侧导航与项目列表基础
-- 中央 transcript 基础
-- 右侧 `review / terminal / browser / files` 基础
-- 搜索、插件、自动化页面基础
-- 环境卡基础
-- 文件面板基础
+## 5. 分阶段实施路线
 
-当前主要问题不是“有没有功能”，而是：
+### W1. Shell 骨架收口
 
-- shell 结构还不够像桌面工作台
-- 模块像拼接，不像统一系统
-- 多数区域的交互密度、状态归属、视觉一致性仍明显落后于目标截图
-
-## 5. 开发原则
-
-1. 先 shell，后局部面板  
-   不先稳定结构，局部 polish 会反复返工。
-2. 先行为正确，再做视觉对齐  
-   禁止用假控件制造错误预期。
-3. 每个 slice 必须带测试与验收  
-   不接受“看起来差不多”。
-4. UI 零业务逻辑继续成立  
-   任务、计划、git、工具能力仍以 store / IPC / kernel 为准。
-5. 每个验收通过的 slice 立即 `commit + push`  
-   不再积压大批未推送改动。
-
-## 6. 工单拆解
-
-### W1. Shell 骨架重构
-
-目标：先把 Bobby 固定成三栏工作台骨架。
+目标：把 Bobby 稳定成三栏桌面工作台 shell。
 
 范围文件：
 
-- `packages/gui/src/main.tsx`
-- `packages/gui/src/components/Sidebar.tsx`
-- `packages/gui/src/screens/Workspace.tsx`
-- `packages/gui/src/components/SessionToolDock.tsx`
-- `packages/gui/src/app.css`
-- `packages/gui/src/styles/tokens.css`
+- `E:\ai-files\Bobby\packages\gui\src\main.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\components\Sidebar.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\screens\Workspace.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\components\SessionToolDock.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\app.css`
+- `E:\ai-files\Bobby\packages\gui\src\styles\tokens.css`
 
-实施项：
+结果要求：
 
-- 固定 shell 四区：
-  - 左一级导航
-  - 左项目/任务区
-  - 中央工作区
-  - 右工具区
-- 去掉仍像 dashboard 的多余顶栏和容器包装
-- 空状态与任务状态共用同一 shell
-- 右侧工具入口在空状态下也保持可见
+1. 空状态和任务状态使用同一 shell。
+2. 左中右结构稳定，切任务不重建整体布局。
+3. 右侧工具入口在空状态也可见。
+4. 不再存在独立的 workspace 品牌顶栏。
 
-验收标准：
+当前状态：已基本完成，但还需继续作为后续所有切片的约束基线。
 
-- 打开 GUI 未选任务时仍能看见完整 shell
-- 进入任务后 shell 结构不重排
-- 不再存在独立 workspace 品牌顶栏
+### W2. 左侧导航与项目树收口
 
-### W2. 左侧导航与项目树对齐
-
-目标：把左侧从“页面目录”变成“应用区 + 项目树”。
+目标：把左侧从“目录栏”提升为“应用区 + 项目树”。
 
 范围文件：
 
-- `packages/gui/src/components/Sidebar.tsx`
-- `packages/gui/src/store/chat-store.ts`
-- `packages/gui/src/store/app-store.ts`
-- `packages/gui/tests/chat-store.test.ts`
-- `packages/gui/tests/workspace-screen.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\components\Sidebar.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\store\chat-store.ts`
+- `E:\ai-files\Bobby\packages\gui\src\store\app-store.ts`
+- `E:\ai-files\Bobby\packages\gui\tests\chat-store.test.ts`
+- `E:\ai-files\Bobby\packages\gui\tests\workspace-screen.test.tsx`
 
-实施项：
+结果要求：
 
-- 一级导航只保留：
-  - 新对话
-  - 搜索
-  - 插件
-  - 自动化
-  - 设置
-- 项目区和任务区层级明确
-- 项目节点支持展开/折叠
-- 项目下任务高密度展示
-- 状态改为严格 per-task 派生
+1. 一级应用导航稳定并统一。
+2. 项目与任务层级更清晰。
+3. 并行任务状态严格按 taskId 隔离。
+4. 任务列表密度和高亮语义接近截图。
 
-验收标准：
-
-- 同项目两个任务并行时状态不串线
-- 左侧能稳定看见项目及其任务
-- 滚动时层级关系仍清晰
+当前状态：已完成第一轮密度对齐，但项目树表达仍不够强。
 
 ### W3. 中央 transcript 重构
 
-目标：把中间区域从聊天页读感改成任务流读感。
+目标：把中央工作区从聊天流改成任务执行流。
 
 范围文件：
 
-- `packages/gui/src/screens/Workspace.tsx`
-- `packages/gui/src/components/MarkdownRenderer.tsx`
-- `packages/gui/src/app.css`
-- `packages/gui/tests/workspace-screen.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\screens\Workspace.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\components\MarkdownRenderer.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\app.css`
+- `E:\ai-files\Bobby\packages\gui\tests\workspace-screen.test.tsx`
 
-实施项：
+结果要求：
 
-- 当前任务标题固定在主工作区头部
-- 统一 transcript block 层级：
-  - 用户请求
-  - assistant 回复
-  - reasoning
-  - 工具输出
-  - 状态卡
-  - 错误卡
-- “正在思考”“已运行 N 条命令”“审查”等状态自然挂在任务流上
-- 控制正文最大宽度，减少满屏铺开
+1. 当前任务标题与执行流关系明确。
+2. request / response / reasoning / tool / status / error 分层清楚。
+3. streaming 与 final result 只更新当前任务。
+4. 阅读宽度、留白和密度接近桌面工作台。
 
-验收标准：
-
-- 空状态标题和 composer 居中，但 shell 不消失
-- 任务执行时 transcript 连续可读
-- streaming、reasoning、final result 只更新当前任务
+当前状态：已完成基础分层，仍需继续压缩为更强的执行流阅读体验。
 
 ### W4. Composer 控制台化
 
@@ -312,157 +275,98 @@
 
 范围文件：
 
-- `packages/gui/src/screens/Workspace.tsx`
-- `packages/gui/src/store/chat-store.ts`
-- `packages/gui/src/ipc/contract.ts`
-- `packages/gui/tests/workspace-screen.test.tsx`
-- `packages/gui/tests/plugins.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\screens\Workspace.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\store\chat-store.ts`
+- `E:\ai-files\Bobby\packages\gui\src\ipc\contract.ts`
+- `E:\ai-files\Bobby\packages\gui\tests\workspace-screen.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\tests\plugins.test.tsx`
 
-实施项：
+结果要求：
 
-- composer 重构为三层：
-  - 输入层
-  - 控制层
-  - 上下文层
-- `+` 菜单按截图顺序组织：
-  - 添加照片和文件
-  - 创建
-  - 计划模式
-  - 追求目标
-  - 插件
-- 明确显示：
-  - 权限级别
-  - 目标开关
-  - 模型档位
-  - 语音/发送
-- 项目、本地模式、分支、目标等上下文统一排布
+1. `+` 菜单按截图的能力顺序组织。
+2. 计划模式、目标、权限、模型档位语义清晰。
+3. 项目 / 本地模式 / 分支 / 目标上下文在底部形成稳定一行。
+4. 插件入口既可跳页，也体现当前已安装能力。
 
-验收标准：
+当前状态：三层结构已落地，下一阶段重点应放在能力组织和交互语义。
 
-- plus 菜单顺序稳定
-- 项目 picker 可搜索
-- 插件入口能进入插件页且保留上下文一致性
-- 计划模式/目标控制在空状态与任务状态都可见
+### W5. 环境信息卡完成态
 
-### W5. 环境信息卡完成度
-
-目标：把右上卡片收敛成统一的上下文卡。
+目标：把右上角环境卡做成真实工作上下文卡。
 
 范围文件：
 
-- `packages/gui/src/screens/Workspace.tsx`
-- `packages/gui/src/ipc/contract.ts`
-- `packages/gui/tests/workspace-screen.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\screens\Workspace.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\ipc\contract.ts`
+- `E:\ai-files\Bobby\packages\gui\tests\workspace-screen.test.tsx`
 
-实施项：
+结果要求：
 
-- 稳定展示：
-  - 新增/删除统计
-  - 本地环境标签
-  - 当前分支
-  - 分支切换器
-  - 提交或推送
-  - 创建拉取请求
-  - 进度 checklist
-  - 浏览器目标
-  - 来源
-- 分支切换器支持搜索和当前分支高亮
-- `提交或推送` 联动 review/diff 流
-- `创建拉取请求` 未接线前显式禁用并说明原因
-- checklist 来自真实计划状态
+1. git summary 来自真实数据。
+2. 当前分支高亮正确，分支切换器可用。
+3. 提交/推送与 PR 动作状态真实。
+4. progress checklist 与真实任务计划状态联动。
+5. 浏览器目标与来源信息表达清楚。
 
-验收标准：
-
-- git 统计来自真实 summary
-- 当前分支高亮正确
-- `提交或推送` 点击后产生明确行为
-- `创建拉取请求` 的禁用态与原因可见
+当前状态：已有骨架，但仍明显弱于截图。
 
 ### W6. 右侧 dock 一体化
 
-目标：把右侧从“工具抽屉”改成“长期驻留工作区”。
+目标：把右侧从工具抽屉改成长期驻留工作区。
 
 范围文件：
 
-- `packages/gui/src/components/SessionToolDock.tsx`
-- `packages/gui/src/store/app-store.ts`
-- `packages/gui/src/screens/Workspace.tsx`
-- `packages/gui/tests/session-tool-dock.test.tsx`
-- `packages/gui/tests/workspace-screen.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\components\SessionToolDock.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\store\app-store.ts`
+- `E:\ai-files\Bobby\packages\gui\src\screens\Workspace.tsx`
+- `E:\ai-files\Bobby\packages\gui\tests\session-tool-dock.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\tests\workspace-screen.test.tsx`
 
-实施项：
+结果要求：
 
-- 固定入口：
-  - 审查
-  - 终端
-  - 浏览器
-  - 文件
-- 入口文案、快捷键、选中态统一
-- dock 当前 tab 保持
-- 页面切换后 dock 状态可恢复
-- review、terminal、browser、files 的空状态与错误态统一
-
-验收标准：
-
-- 切换 tab 不丢状态
-- 页面切换不会异常关闭 dock
-- 空状态下仍能打开各工具
+1. 审查 / 终端 / 浏览器 / 文件四个入口稳定可切。
+2. 快捷键、选中态、空态、错误态统一。
+3. 页面切换后当前 tab 和开关状态可恢复。
 
 ### W7. 文件面板精修
 
-目标：把文件面板行为与截图彻底对齐。
+目标：把文件面板行为对齐截图。
 
 范围文件：
 
-- `packages/gui/src/components/SessionToolDock.tsx`
-- `packages/gui/src/ipc/contract.ts`
-- `packages/gui/tests/session-tool-dock.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\components\SessionToolDock.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\ipc\contract.ts`
+- `E:\ai-files\Bobby\packages\gui\tests\session-tool-dock.test.tsx`
 
-实施项：
+结果要求：
 
-- 保持默认空预览
-- 左树右预览布局固定
-- 文件筛选可用且稳定
-- 目录展开/折叠清晰
-- 选中高亮统一
-- 读取失败显示错误卡
-- 插入引用继续回写 composer
+1. 默认空预览。
+2. 左树右预览稳定分栏。
+3. 文件过滤可用。
+4. 选中文件后才能预览。
+5. 可把文件引用写回 composer。
 
-验收标准：
+### W8. 搜索 / 插件 / 自动化纳入统一 shell
 
-- 初始显示 `Open file` 空状态
-- 选中文件后才出现预览
-- 筛选结果能缩小树内容
-- 读取失败走错误卡
-
-### W8. 搜索、插件、自动化纳入统一 shell
-
-目标：避免这些页面像“跳出主应用”。
+目标：避免这些页面看起来像切到另一套应用。
 
 范围文件：
 
-- `packages/gui/src/screens/Search.tsx`
-- `packages/gui/src/screens/PluginMarketplace.tsx`
-- `packages/gui/src/screens/ScheduleTasks.tsx`
-- `packages/gui/src/screens/History.tsx`
-- `packages/gui/src/main.tsx`
-- `packages/gui/tests/plugins.test.tsx`
-- `packages/gui/tests/automations.test.tsx`
-- `packages/gui/tests/history.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\screens\Search.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\screens\PluginMarketplace.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\screens\ScheduleTasks.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\screens\History.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\main.tsx`
+- `E:\ai-files\Bobby\packages\gui\tests\plugins.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\tests\automations.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\tests\history.test.tsx`
 
-实施项：
+结果要求：
 
-- 搜索页保留同一 shell
-- 插件页与 composer 插件入口语义一致
-- 自动化页提升结果可见性
-- 自动化到历史/任务结果有明确跳转路径
-- 历史记录回到任务上下文的路径清楚
-
-验收标准：
-
-- 插件菜单可正确跳转插件页
-- 自动化结果能回到任务或历史
-- 从主工作区切到搜索/插件/自动化时不显得是另一套应用
+1. 这些页面保留统一 shell。
+2. 插件页与 composer 插件入口语义一致。
+3. 自动化结果可回到任务或历史语境。
+4. 历史与任务上下文关联清晰。
 
 ### W9. 持久化与恢复
 
@@ -470,172 +374,151 @@
 
 范围文件：
 
-- `packages/gui/src/store/app-store.ts`
-- `packages/gui/src/store/chat-store.ts`
-- `packages/gui/tests/app-store.test.ts`
-- `packages/gui/tests/smoke.test.ts`
+- `E:\ai-files\Bobby\packages\gui\src\store\app-store.ts`
+- `E:\ai-files\Bobby\packages\gui\src\store\chat-store.ts`
+- `E:\ai-files\Bobby\packages\gui\tests\app-store.test.ts`
+- `E:\ai-files\Bobby\packages\gui\tests\smoke.test.ts`
 
-实施项：
+结果要求：
 
-- 持久化：
-  - 当前项目
-  - 当前任务
-  - dock 开关
-  - 当前 dock tab
-  - 必要的 shell 布局状态
-- 恢复后避免状态错配
+1. 当前项目、当前任务、dock 状态、当前 tab 能恢复。
+2. 恢复后不出现状态串线和视觉错位。
 
-验收标准：
+### W10. 视觉系统与响应式收口
 
-- 重载后恢复当前项目和任务
-- dock tab 恢复正确
-- shell 关键区域恢复可见
-
-### W10. 最终视觉系统与响应式收口
-
-目标：把最后的“看起来不统一”差距收掉。
+目标：把最后剩下的“结构已对，气质不对”差距收掉。
 
 范围文件：
 
-- `packages/gui/src/styles/tokens.css`
-- `packages/gui/src/app.css`
-- `packages/gui/src/screens/Workspace.tsx`
-- `packages/gui/src/components/Sidebar.tsx`
-- `packages/gui/src/components/SessionToolDock.tsx`
-- `packages/gui/tests/smoke.test.ts`
+- `E:\ai-files\Bobby\packages\gui\src\styles\tokens.css`
+- `E:\ai-files\Bobby\packages\gui\src\app.css`
+- `E:\ai-files\Bobby\packages\gui\src\screens\Workspace.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\components\Sidebar.tsx`
+- `E:\ai-files\Bobby\packages\gui\src\components\SessionToolDock.tsx`
+- `E:\ai-files\Bobby\packages\gui\tests\smoke.test.ts`
 
-实施项：
+结果要求：
 
-- 统一色板、圆角、边框、阴影、文字层级
-- 统一 hover / focus / active
-- 拉开高密度列表与正文阅读区节奏差
-- 保证常见桌面宽度下不破版
+1. 颜色、边框、圆角、阴影、层级统一。
+2. hover / focus / active 一致。
+3. 常见桌面宽度下不破版。
 
-验收标准：
-
-- 核心区域 DOM 与交互都稳定
-- 视觉差距缩小到“品牌风格差异”，不再是结构差异
-
-## 7. 建议执行顺序
+## 6. 执行顺序
 
 严格按以下顺序推进：
 
-1. `W1 Shell 骨架重构`
-2. `W2 左侧导航与项目树对齐`
-3. `W3 中央 transcript 重构`
-4. `W4 Composer 控制台化`
-5. `W5 环境信息卡完成度`
-6. `W6 右侧 dock 一体化`
-7. `W7 文件面板精修`
-8. `W8 搜索、插件、自动化纳入统一 shell`
-9. `W9 持久化与恢复`
-10. `W10 最终视觉系统与响应式收口`
+1. W1 Shell 骨架收口
+2. W2 左侧导航与项目树收口
+3. W3 中央 transcript 重构
+4. W4 Composer 控制台化
+5. W5 环境信息卡完成态
+6. W6 右侧 dock 一体化
+7. W7 文件面板精修
+8. W8 搜索 / 插件 / 自动化纳入统一 shell
+9. W9 持久化与恢复
+10. W10 视觉系统与响应式收口
 
 说明：
 
-- `W5`、`W7` 当前已有部分实现，但仍按上述顺序纳入统一收口。
-- 若某个 slice 需要先补 store / IPC 契约，在该 slice 内前置完成，不单独拆出并打乱顺序。
+1. W1-W4 是当前最高优先级，因为它们决定整体工作台形态。
+2. W5-W7 属于核心体验强化，必须在 shell 收口后推进。
+3. W8-W10 属于一致性与完成度收口，不能前置替代结构问题。
 
-## 8. 当前优先级判断
+## 7. 每个切片的固定纪律
 
-基于截图差距，当前最高优先的不是继续补局部按钮，而是先完成以下结构收口：
+每个切片必须遵守：
 
-1. `W1` 去掉冗余 workspace 顶栏，稳定 shell
-2. `W2` 把左侧改成 Codex 风格的导航 + 项目树
-3. `W3` 让中间区域读起来像任务流而不是聊天流
-4. `W4` 把 composer 做成控制台
-
-这四项做完后，再推进环境卡、dock、文件面板，否则后续样式和行为会持续返工。
-
-## 9. 每个 slice 的固定执行纪律
-
-每个 slice 必须遵守：
-
-1. 先补或调整测试，先看见失败或缺口
-2. 再改实现
-3. 跑 focused tests
-4. 跑 `pnpm --filter @bobby/gui test`
-5. 若涉及 shell / composer / dock / IPC，再跑 `pnpm --filter @bobby/gui smoke:electron`
-6. 测试全绿后立即 `commit + push`
+1. 先补测试或调整测试，先显露缺口。
+2. 再改实现。
+3. 跑 focused tests。
+4. 跑 `pnpm --filter @bobby/gui test`。
+5. 若涉及 shell / composer / dock / IPC，再跑 `pnpm --filter @bobby/gui smoke:electron`。
+6. 验收通过立即 `commit + push`。
 7. 在 handoff 记录：
    - 目标
-   - 变更文件
+   - 修改文件
    - 验证命令
    - 未完成项
 
-## 10. 自动化验收矩阵
+## 8. 自动化验收矩阵
 
 ### 必跑测试
 
-- `packages/gui/tests/workspace-screen.test.tsx`
-- `packages/gui/tests/session-tool-dock.test.tsx`
-- `packages/gui/tests/chat-store.test.ts`
-- `packages/gui/tests/plugins.test.tsx`
-- `packages/gui/tests/automations.test.tsx`
-- `packages/gui/tests/history.test.tsx`
-- `packages/gui/tests/app-store.test.ts`
-- `packages/gui/tests/smoke.test.ts`
+- `E:\ai-files\Bobby\packages\gui\tests\workspace-screen.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\tests\session-tool-dock.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\tests\chat-store.test.ts`
+- `E:\ai-files\Bobby\packages\gui\tests\plugins.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\tests\automations.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\tests\history.test.tsx`
+- `E:\ai-files\Bobby\packages\gui\tests\app-store.test.ts`
+- `E:\ai-files\Bobby\packages\gui\tests\smoke.test.ts`
 
-### 阶段验收命令
+### 阶段命令
 
-每个 GUI slice：
+每个 GUI 切片至少执行：
 
 ```powershell
 pnpm --filter @bobby/gui test
 ```
 
-涉及 shell / composer / dock / IPC：
+涉及 shell / composer / dock / IPC 的切片额外执行：
 
 ```powershell
 pnpm --filter @bobby/gui smoke:electron
 ```
 
-里程碑验收：
+阶段里程碑验收执行：
 
 ```powershell
 pnpm -r test
 pnpm build
 ```
 
-## 11. 人工验收脚本
+## 9. 手工验收脚本
 
-最终必须按以下脚本走通：
+最终至少完整走通以下脚本：
 
-1. 打开项目
-2. 在同一项目下启动两个任务
-3. 确认左侧项目树中两个任务状态互不串线
-4. 在中央任务流中看到 reasoning、工具输出和最终结果
-5. 打开文件面板，选中文件，再插入引用
-6. 打开环境卡，检查分支、git 统计、progress checklist
-7. 打开右侧 `审查 / 终端 / 浏览器 / 文件`
-8. 从 composer 打开插件菜单并进入插件页
-9. 运行一个自动化任务并跳到结果/历史
-10. 重启应用并恢复到原上下文
-11. 跑完整测试与 smoke
+1. 打开项目。
+2. 在同一项目下启动两个任务。
+3. 确认左侧任务状态互不串线。
+4. 在中央任务流中看到 reasoning、工具输出和最终结果。
+5. 打开文件面板，选中文件，并把引用插回 composer。
+6. 打开环境卡，检查分支、git 统计、progress checklist。
+7. 打开右侧 `审查 / 终端 / 浏览器 / 文件` 四个入口。
+8. 从 composer 打开插件菜单并进入插件页。
+9. 运行一个自动化任务并跳转到结果或历史。
+10. 重启应用并恢复到原工作上下文。
+11. 跑完整测试与 smoke。
 
-## 12. 完成定义
+## 10. 完成定义
 
-以下条件同时满足，才算本计划完成：
+只有以下条件同时满足，才算本计划完成：
 
-- Bobby GUI 已是稳定三栏工作台
-- 空状态与活跃任务状态共用同一 shell
-- 左侧项目/任务树达到 Codex Desktop 的阅读方式
-- 中央 transcript、底部 composer、右上环境卡、右侧 dock 四个核心区全部收口
-- 文件面板行为与截图一致
-- 搜索、插件、自动化页面纳入统一 shell
-- 持久化与恢复可用
-- `pnpm -r test` 全绿
-- `pnpm build` 通过
-- `pnpm --filter @bobby/gui smoke:electron` 通过
-- 人工验收脚本逐项通过
+1. Bobby GUI 已是稳定三栏桌面工作台。
+2. 空状态与活跃任务状态共用同一 shell。
+3. 左侧项目/任务树达到截图级的信息架构清晰度。
+4. 中央 transcript、底部 composer、右上环境卡、右侧 dock 四个核心区全部收口。
+5. 文件面板行为与截图目标一致。
+6. 搜索、插件、自动化已纳入统一 shell。
+7. 持久化与恢复可用。
+8. `pnpm -r test` 全绿。
+9. `pnpm build` 通过。
+10. `pnpm --filter @bobby/gui smoke:electron` 通过。
+11. 手工验收脚本逐项通过。
 
-## 13. 非目标
+## 11. 当前建议的下一开发切片
 
-本计划暂不单独扩展以下能力，除非上游指令另行要求：
+基于现状，下一步应优先做：
 
-- 新模型能力扩展
-- 与截图无关的全新信息架构
-- 非桌面版特有的大改版
-- 重新定义 Bobby 的产品品牌视觉方向
+1. W4 深化：把 composer 的 `+` 菜单、插件入口、上下文条做成更接近 Codex 的控制台交互。
+2. W5 收口：把环境信息卡从“显示信息”升级为“真实工作上下文卡”。
+3. 然后进入 W6/W7：把右侧 dock 与文件面板做成稳定长期驻留能力。
 
-后续所有 GUI parity 开发，统一在本文件基础上推进，不再把主计划停留在对话里。
+## 12. 非目标
+
+本阶段不单独扩展以下能力，除非上游指令另行要求：
+
+1. 与截图无关的新模型能力。
+2. 与截图无关的全新信息架构。
+3. 非桌面版特有的大改版。
+4. 重做 Bobby 品牌系统。

@@ -1013,7 +1013,7 @@ describe('workspace UI smoke', () => {
     render(<Workspace kernelClient={client} />);
 
     expect(await screen.findByText('环境信息')).toBeTruthy();
-    expect(screen.getByText('feature/env-card')).toBeTruthy();
+    expect(within(screen.getByTestId('environment-branch-toggle')).getByText('feature/env-card')).toBeTruthy();
     expect(screen.getByText('+7')).toBeTruthy();
     expect(screen.getByText('-3')).toBeTruthy();
     expect(screen.getByText('Inspect shell parity')).toBeTruthy();
@@ -1033,7 +1033,8 @@ describe('workspace UI smoke', () => {
 
     render(<Workspace kernelClient={client} />);
 
-    expect(await screen.findByText('feature/env-card')).toBeTruthy();
+    await screen.findByTestId('environment-branch-toggle');
+    expect(within(screen.getByTestId('environment-branch-toggle')).getByText('feature/env-card')).toBeTruthy();
     fireEvent.click(screen.getByTestId('environment-branch-toggle'));
     fireEvent.change(screen.getByPlaceholderText('搜索分支'), { target: { value: 'main' } });
     fireEvent.click(screen.getByText('main'));
@@ -1097,6 +1098,29 @@ describe('workspace UI smoke', () => {
     expect(screen.getByText('AI XIAOSHUO')).toBeTruthy();
     expect(screen.getByText('添加新项目')).toBeTruthy();
     expect(screen.getByText('不使用项目')).toBeTruthy();
+  });
+
+  it('shows the current git branch in the composer context row for an active project', async () => {
+    useChatStore.setState({
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      },
+      recentProjects: [
+        {
+          name: 'Bobby',
+          path: 'E:\\ai-files\\Bobby',
+          lastOpenedAt: '2026-06-12T00:00:00.000Z'
+        }
+      ]
+    });
+
+    render(<Workspace kernelClient={makeKernelClientMock()} />);
+
+    const contextRow = screen.getByTestId('composer-context-row');
+    expect(await within(contextRow).findByText('feature/env-card')).toBeTruthy();
+    expect(within(contextRow).queryByText('无分支')).toBeNull();
   });
 
   it('toggles plan mode from the composer control bar and forwards plan-only to startTask', async () => {

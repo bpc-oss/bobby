@@ -569,6 +569,7 @@ function Composer({ onSend, busy, onAbort, kernelClient, onOpenPlugins }: { onSe
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [projectQuery, setProjectQuery] = useState('');
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const [composerGitSummary, setComposerGitSummary] = useState<GitStatusSummary | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filteredProjects = React.useMemo(() => {
@@ -677,6 +678,32 @@ function Composer({ onSend, busy, onAbort, kernelClient, onOpenPlugins }: { onSe
       active = false;
     };
   }, [kernelClient, refreshMcpServers]);
+
+  useEffect(() => {
+    let active = true;
+    if (!currentProject || !kernelClient?.getGitStatusSummary) {
+      setComposerGitSummary(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    void kernelClient.getGitStatusSummary()
+      .then((summary) => {
+        if (active) {
+          setComposerGitSummary(summary);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setComposerGitSummary(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentProject, kernelClient]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1056,6 +1083,11 @@ function Composer({ onSend, busy, onAbort, kernelClient, onOpenPlugins }: { onSe
   const permissionLabel = '\u5b8c\u5168\u8bbf\u95ee';
   const projectLabel = currentProject?.name ?? '\u4e0d\u4f7f\u7528\u9879\u76ee';
   const modeLabel = sessionMode === 'plan-only' ? '\u8ba1\u5212\u6a21\u5f0f' : '\u6807\u51c6\u6a21\u5f0f';
+  const branchLabel = composerGitSummary?.branch?.trim()
+    ? composerGitSummary.branch
+    : composerGitSummary && !composerGitSummary.isRepo
+      ? '\u975e Git \u9879\u76ee'
+      : '\u65e0\u5206\u652f';
 
   const createActions = [
     {
@@ -1339,8 +1371,13 @@ function Composer({ onSend, busy, onAbort, kernelClient, onOpenPlugins }: { onSe
             )}
           </div>
           <span className="rounded-full px-3 py-1.5 text-[12px] text-bobby-muted" style={{ background: 'rgba(255, 255, 255, 0.06)' }}>{'\u672c\u5730\u6a21\u5f0f'}</span>
-          <span className="rounded-full px-3 py-1.5 text-[12px] text-bobby-muted" style={{ background: 'rgba(255, 255, 255, 0.06)' }}>
-            {currentProject?.path?.split(/[\\/]/).filter(Boolean).at(-1) ?? '\u65e0\u5206\u652f'}
+          <span
+            data-testid="composer-branch-context"
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] text-bobby-muted"
+            style={{ background: 'rgba(255, 255, 255, 0.06)' }}
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            {branchLabel}
           </span>
           <span className="ml-auto inline-flex items-center gap-2 text-[12px] text-bobby-faint">
             <Mic className="h-3.5 w-3.5" />
