@@ -275,5 +275,10 @@ export function App() {
   );
 }
 
-const root = document.getElementById('root');
-if (root) createRoot(root).render(<App />);
+type BobbyRootElement = HTMLElement & { __bobbyRoot?: ReturnType<typeof createRoot> };
+
+const root = document.getElementById('root') as BobbyRootElement | null;
+if (root) {
+  root.__bobbyRoot ??= createRoot(root);
+  root.__bobbyRoot.render(<App />);
+}
