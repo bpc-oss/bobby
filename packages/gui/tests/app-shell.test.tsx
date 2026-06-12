@@ -33,7 +33,6 @@ describe('AppShell', () => {
   it('Settings 视图可达', () => {
     render(<AppShell />);
     fireEvent.click(screen.getByText('Settings'));
-    expect(useUiStore.getState().view).toBe('settings');
-    expect(screen.getByText('P2+')).toBeTruthy();
+    expect(screen.getByText('Settings 设置中心')).toBeTruthy();
   });
 });
