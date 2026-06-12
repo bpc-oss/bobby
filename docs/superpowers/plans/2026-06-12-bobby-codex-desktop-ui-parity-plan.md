@@ -1,897 +1,417 @@
-# Bobby Codex Desktop UI Parity Plan
+# Bobby Codex Desktop UI Follow-up Implementation Plan
 
-> Date: 2026-06-12
-> Scope: Follow-up UI/IA development plan derived from the user's Codex Desktop screenshots.
-> Parent directive: `docs/superpowers/plans/2026-06-11-bobby-desktop-parity-directive.md`
-> Execution discipline: `docs/superpowers/plans/2026-06-04-bobby-execution-protocol.md`
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-## 0. Purpose
+**Goal:** Close the remaining Bobby GUI gap against the provided Codex Desktop screenshots by converging the shell layout, left navigation, task transcript, composer, environment popover, right dock tools, automations, and visual system into one coherent desktop workbench.
 
-Bobby's current GUI has made functional progress, but its product shape is still far from Codex Desktop. The gap is not just visual styling. Codex Desktop is a desktop agent workbench with a strong spatial model:
+**Architecture:** Rework the GUI around Codex-style shell primitives instead of layering more one-off widgets onto the current dashboard. Keep all business authority in typed store and IPC layers, and treat the renderer as a composition layer that renders project/task state, tool state, and review state without inventing new backend rules.
 
-1. A left-side project and conversation navigation system.
-2. A central task stream with structured agent turns.
-3. A right-side tool dock for review, terminal, browser, files, and side panels.
-4. Floating environment/context surfaces for git, progress, browser, and sources.
-5. A bottom composer that acts as a task control console, not just a text input.
+**Tech Stack:** Electron, React, TypeScript, Vite, Zustand (`chat-store`, `app-store`), Vitest, typed IPC/Zod contracts, existing Bobby kernel host APIs.
 
-This plan converts the screenshot observations into concrete implementation workstreams and acceptance gates for Bobby.
+---
 
-## 0.1 Current Delivery Snapshot
+## 1. Why This Follow-up Plan Exists
 
-As of 2026-06-12, the following parity slices have already landed in the GUI branch and should be treated as completed baseline work, not future scope:
+The current GUI is functionally better than before, but the user is correct: it still does not read like Codex Desktop.
 
-- `P7: Terminal Panel`
-- `P8: Browser Panel`
-- `P9: Review, Diff, Apply, And Commit`
+The screenshots show that the parity gap is now primarily in:
 
-These completed slices do not close the parity program. The remaining structural gap is still significant in left navigation, shell hierarchy, composer integration, global search, plugin surface, automation surface, and final visual-system alignment.
+- shell hierarchy
+- spatial information architecture
+- project/task navigation density
+- centered task transcript composition
+- composer-as-console behavior
+- context surfaces like environment and branch state
+- right-dock cohesion
+- final visual system
 
-## 0.2 Required Execution Order From This Point
+This plan is the authoritative next-phase UI program for the Bobby GUI branch after the already landed P7-P11 slices.
 
-To avoid further one-off GUI edits, the remaining work should be executed in the following order:
+## 2. Screenshot-Derived Product Model
 
-1. `P10 Global Search`
-2. `P11 Plugins And MCP Workbench`
-3. `P12 Automations`
-4. `P13 Shortcuts And Window State`
-5. `P14 Visual System`
+The provided screenshots define the target product model:
 
-This order assumes `P7` to `P9` remain stable and that no new shell refactor is started unless it directly supports one of the remaining workstreams above.
+1. Left icon rail for top-level app areas.
+2. Separate left project/task navigator under that rail.
+3. Center column for the active task transcript.
+4. Floating environment card in the top-right of the center workspace.
+5. Persistent right tool launcher and dock panels.
+6. Large bottom composer that behaves like a task control console, not a plain chat box.
+7. Empty-state mode that still preserves shell context, dock shortcuts, and project selection.
 
-## 1. Reference Screenshot Observations
+If a future GUI change does not strengthen one of those seven areas, it is probably not helping parity.
 
-The user provided seven Codex Desktop screenshots on 2026-06-12. The screenshots should be treated as the visual and interaction reference for this plan.
+## 3. Current Bobby Baseline
 
-### Image 1: Main Running Task Workbench
+These areas are already materially implemented and should be treated as baseline, not greenfield:
 
-- Left rail contains primary app areas: quick/new chat, search, plugins, automations, pinned, project, conversation, settings.
-- Central panel is a task transcript, not a generic chat page.
-- Agent text uses high-density typography with inline code chips.
-- Running status appears as "thinking" / active progress.
-- Bottom composer floats above the bottom edge and includes permission, target, model, voice, send/stop, and attachment controls.
-- Right side has a docked quick panel with Review, Terminal, Browser, Files, Sidebar shortcuts.
-- A floating environment popover shows git changes, branch, commit/push, PR creation, progress steps, browser target, and sources.
+- `P7` terminal panel
+- `P8` browser panel
+- `P9` review/diff/apply/commit dock
+- `P10` global search page
+- `P11` plugin menu to plugins page inventory sync
 
-### Image 2: Files Panel
+These slices are useful, but they currently live inside a shell that still feels like a Bobby-specific dashboard instead of a Codex-style workbench.
 
-- Files panel is split: left side empty/open-file preview, right side workspace file tree.
-- File tree has search/filter, folder expansion, file icons, selected-row focus, and compact spacing.
-- Empty state explicitly says to select a file from the workspace tree.
-- Files are part of the right tool workspace, not a separate full-page navigation area.
+## 4. File Map And Ownership
 
-### Image 3: Branch And Environment Popover
+The remaining work should concentrate in these files first:
 
-- Environment popover is compact, rounded, and floating.
-- Git branch selector opens an inline branch search/list popover.
-- Current branch is checked.
-- Dirty state is visible.
-- Actions include create/check out branch, commit/push, and PR.
-- Progress list is integrated into the same context surface.
+### Shell and routing
 
-### Image 4: Terminal Panel
+- Modify: `packages/gui/src/main.tsx`
+- Modify: `packages/gui/src/components/Sidebar.tsx`
+- Modify: `packages/gui/src/screens/Workspace.tsx`
+- Modify: `packages/gui/src/components/SessionToolDock.tsx`
+- Modify: `packages/gui/src/app.css`
+- Modify: `packages/gui/src/styles/tokens.css`
 
-- Terminal opens in the right tool area.
-- Terminal tab shows a shell icon and current path.
-- It uses the active project working directory.
-- The environment popover can remain visible while the terminal is open.
+### State and behavior
 
-### Image 5: Composer Menus
+- Modify: `packages/gui/src/store/chat-store.ts`
+- Modify: `packages/gui/src/store/app-store.ts`
+- Modify: `packages/gui/src/ipc/contract.ts`
 
-- Composer has a plus menu with:
-  - Add photos and files.
-  - Create submenu.
-  - Plan mode toggle.
-  - Goal tracking toggle.
-  - Plugins submenu.
-- Plugins submenu lists installed plugins, including Browser, Chrome, Computer, and LaTeX.
-- Permission mode is visible in orange.
-- Model selector and send button are embedded in the same composer shell.
+### Existing screens that need shell-level integration
 
-### Image 6: Left Project Tree And Conversation List
+- Modify: `packages/gui/src/screens/Search.tsx`
+- Modify: `packages/gui/src/screens/PluginMarketplace.tsx`
+- Modify: `packages/gui/src/screens/ScheduleTasks.tsx`
+- Modify: `packages/gui/src/screens/History.tsx`
+- Modify: `packages/gui/src/screens/ProjectHome.tsx`
 
-- Left rail has top-level actions and a project tree.
-- Projects appear as folders.
-- Selected task/conversation is nested under its project.
-- Running task shows an activity spinner.
-- Settings is anchored at the bottom.
-- The panel is scrollable and dense.
+### Tests that must carry parity acceptance
 
-### Image 7: New Task Empty State And Project Picker
+- Modify: `packages/gui/tests/workspace-screen.test.tsx`
+- Modify: `packages/gui/tests/chat-store.test.ts`
+- Modify: `packages/gui/tests/session-tool-dock.test.tsx`
+- Modify: `packages/gui/tests/plugins.test.tsx`
+- Modify: `packages/gui/tests/automations.test.tsx`
+- Modify: `packages/gui/tests/history.test.tsx`
+- Modify: `packages/gui/tests/smoke.test.ts`
 
-- Empty state centers the question "What should we build?"
-- Composer is centered and prominent.
-- Project selector opens a searchable project picker.
-- Picker includes recent projects, add new project, and no-project mode.
-- Right tool shortcuts remain available in the empty state.
+## 5. Authoritative Gap Matrix
 
-## 2. Target Information Architecture
-
-### Shell
-
-The Bobby GUI should be organized as:
-
-```text
-Desktop Window
-  Top Menu Bar
-  Left Activity Rail
-  Left Project/Task Navigation
-  Main Task Workspace
-  Right Tool Dock
-  Floating Environment Popover
-  Bottom Composer Console
-```
-
-### Primary Regions
-
-| Region | Responsibility | Current Bobby Gap |
+| Screenshot surface | Current Bobby state | Required follow-up |
 |---|---|---|
-| Activity rail | New chat, search, plugins, automations, settings | Current sidebar mixes navigation and session list |
-| Project tree | Recent projects and per-project tasks | Needs Codex-style project grouping |
-| Main task stream | Active thread transcript, live reasoning, evidence, results | Current chat is serviceable but not Codex-like |
-| Composer console | Input plus permissions, model, mode, target, plugins, attachments | Current composer is simpler and less integrated |
-| Right dock | Review, terminal, browser, files, side panels | Current dock exists but needs Codex-style integration |
-| Environment popover | Git, progress, browser, sources | Missing as a unified surface |
-
-## 2.1 Screenshot-To-Module Mapping
-
-This plan treats each visible Codex Desktop region as an explicit Bobby module. Work should not proceed as generic "polish"; every screenshot-observed region must map to a stable owner in code.
-
-| Screenshot area | Bobby target module | Primary files likely involved |
-|---|---|---|
-| Left icon rail | `ActivityRail` | `packages/gui/src/components/Sidebar.tsx`, shell layout files |
-| Project tree + task rows | `ProjectTaskNavigator` | `packages/gui/src/components/Sidebar.tsx`, `packages/gui/src/store/chat-store.ts` |
-| Center transcript | `MainTaskWorkspace` | `packages/gui/src/screens/Workspace.tsx`, chat block components |
-| Task header bar | `TaskHeader` | `packages/gui/src/screens/Workspace.tsx` |
-| Floating composer | `ComposerConsole` | `packages/gui/src/screens/Workspace.tsx`, composer-related components/store wiring |
-| Environment info card | `EnvironmentPopover` | GUI shell files, IPC bridge, git/progress/browser/source state |
-| Right tool shortcuts | `ToolDockLauncher` | workspace shell and dock components |
-| Review panel | `ReviewPanel` | proposal/review UI, dispatch/apply components |
-| Terminal panel | `TerminalPanel` | terminal IPC surface and dock UI |
-| Browser panel | `BrowserPanel` | preview/browser state and dock UI |
-| Files panel | `FilesPanel` | workspace tree IPC, file viewer UI |
-| Plugins menu/page | `PluginsWorkbench` | plugin settings page, composer menu, MCP status views |
-
-## 2.2 Current Gap Matrix
-
-The screenshots show that Bobby is still behind Codex Desktop in both structure and behavior. The following matrix is the authoritative gap list for the next implementation wave.
-
-| Area | Codex screenshot behavior | Bobby current state | Gap class | Required outcome |
-|---|---|---|---|---|
-| Shell hierarchy | Three-column workbench with floating overlays | Partially split, still reads as custom dashboard | Structural | Land stable Codex-style shell primitives |
-| Left navigation | Activity rail separate from project/task tree | Mixed sidebar responsibilities | IA | Split rail vs navigator cleanly |
-| Project model | Tasks nested under projects, searchable picker | Basic project handling, not first-class in navigation | Product | Make project selection and grouping central |
-| Task transcript | Dense task stream with explicit command/evidence blocks | Chat stream exists, but still simplified | Behavioral | Upgrade transcript semantics without hiding evidence |
-| Composer | Unified control console with modes, plugins, permissions, project, branch | Partially redesigned, not yet feature-complete parity | Product | Finish integrated console contract |
-| Environment card | Unified git/progress/browser/sources surface | Missing as a first-class surface | Structural | Add floating context popover |
-| Files tool | Docked split view with tree + preview | Presently not parity-grade | Functional | Build right-side files workspace |
-| Terminal tool | Docked terminal bound to project root | Limited/current placeholder behavior | Functional | Provide command execution panel with evidence |
-| Review flow | Review is a visible first-class dock path | Present but not yet Codex-grade workflow | High-risk | Keep gate authority and upgrade UX |
-| Plugin surface | Composer plugin menu and plugin management page | Fragmented | Product | Unify menu, page, and evidence surfacing |
-| Automation surface | Left entry with runnable history and jump-back | Not yet parity-grade | Product | Integrate automations into shell and history |
-| Desktop persistence | Dock/tool/project/task state persists | Partial | Usability | Persist and restore full workspace state |
-
-## 2.3 Guardrails For This UI Program
-
-These rules apply to every parity slice:
-
-1. No screenshot-only rewrites. Every visual change must preserve or improve the current typed state model.
-2. No fake controls. Buttons or menus visible in the UI must either work end-to-end or be explicitly marked unavailable.
-3. No renderer-owned business rules. Gate authority, git actions, session state, apply/rewind, and automation constraints stay outside presentational components.
-4. No evidence regression. Command output, reasoning, review status, and source visibility remain inspectable after any redesign.
-5. No broad refactor without slice acceptance. Each module lands behind passing tests and smoke coverage, then commit and push.
-
-## 3. Non-Negotiable Product Invariants
-
-1. Completion gate remains the only authority for Apply, rewind, automation, and finish states.
-2. Evidence visibility must not regress.
-3. API keys never appear in renderer state; renderer only sees `hasApiKey`.
-4. UI errors must surface as error cards.
-5. New IPC must use Zod validation.
-6. UI must not contain core business logic; renderer orchestrates display and calls typed IPC.
-7. DeepSeek vision and streaming must be probe-backed before UI claims support.
-8. Every accepted work item must be committed and pushed immediately.
-
-## 4. Workstreams
-
-### P0: Codex Shell Layout
-
-Goal: Convert Bobby from a dashboard-like GUI into a Codex-style desktop workbench.
-
-Scope:
-
-- Add top menu visual area where needed.
-- Split current sidebar into activity rail and project/task navigation.
-- Preserve central task workspace.
-- Add right tool dock host.
-- Add floating environment popover host.
-- Rework composer positioning into a bottom floating console.
-
-Implementation notes:
-
-- Keep existing data sources where possible.
-- Avoid a big-bang rewrite of all panels.
-- Introduce layout primitives first:
-  - `AppShell`
-  - `ActivityRail`
-  - `ProjectTaskNavigator`
-  - `MainTaskWorkspace`
-  - `ToolDockHost`
-  - `EnvironmentPopover`
-  - `ComposerConsole`
-
-Acceptance:
-
-- 1366, 1440, and 1920 px widths remain usable.
-- Left, center, and right regions are visually distinct.
-- Existing workspace send flow still works.
-- `pnpm -r test` passes.
-- Electron smoke passes after layout lands.
-
-### P1: Left Activity Rail And Project Task Navigation
-
-Goal: Match Codex's left navigation model.
-
-Scope:
-
-- Activity rail entries:
-  - New chat / quick chat.
-  - Search.
-  - Plugins.
-  - Automations.
-  - Settings.
-- Project tree:
-  - Recent projects as folders.
-  - Tasks grouped by `projectDir`.
-  - Active task highlight.
-  - Running spinner.
-  - Done / failed / blocked icons.
-- Project selector:
-  - Search recent projects.
-  - Add new project.
-  - No-project mode.
-
-Implementation notes:
-
-- Extend current `Sidebar` instead of duplicating navigation.
-- Derive task rows from `threads`, not global `busy`.
-- Group threads by `projectDir`.
-- Keep `activeSessionId` as active thread identity.
-
-Acceptance:
-
-- Switching task changes active transcript.
-- Running task remains visible while another task is active.
-- One failed task does not change another task's visual status.
-- Project grouping survives reload through sessions.
-
-### P2: Main Task Stream Redesign
-
-Goal: Make the center column feel like a Codex task transcript.
-
-Scope:
-
-- Add task header:
-  - Title.
-  - More menu.
-  - Optional tool toggles.
-- Redesign block rendering:
-  - User turn.
-  - Assistant turn.
-  - Reasoning turn.
-  - Command summary.
-  - Evidence card.
-  - Gate card.
-  - Error card.
-  - Final result card.
-- Add "ran N commands" summary blocks.
-- Add centered empty state for new chats.
-
-Implementation notes:
-
-- Keep `ChatBlock` as the render contract initially.
-- Add renderer components before changing the store shape.
-- Avoid hiding evidence inside decorative UI.
-
-Acceptance:
-
-- Live assistant/reasoning output remains visible while running.
-- Tool/evidence blocks are clickable or expandable.
-- Final result updates only the owning thread.
-- Empty state matches Codex's large centered prompt pattern.
-
-### P3: Composer Console
-
-Goal: Replace the simple composer with a Codex-style task control console.
-
-Scope:
-
-- Main input:
-  - Multiline input.
-  - Enter send.
-  - Shift+Enter newline.
-  - Send/stop button.
-- Bottom controls:
-  - Attach files/images.
-  - Create menu.
-  - Permission mode.
-  - Plan mode.
-  - Goal tracking.
-  - Model selector.
-  - Voice placeholder.
-  - Plugins menu.
-- Context row:
-  - Project picker.
-  - Local mode.
-  - Branch picker.
-
-Implementation notes:
-
-- Move existing `SessionModeSwitcher`, permission display, slash command handling, and file reference UI into `ComposerConsole`.
-- `@` file references must continue to use workspace search.
-- `/` command menu must read custom commands.
-- Permission changes must affect backend behavior, not only labels.
-
-Acceptance:
-
-- `@` inserts a real file reference.
-- `/` inserts or executes a real command template.
-- Plan-only mode emits plan without tool execution.
-- Permission mode is visible and enforced.
-- Plugin menu reflects available plugin/tool capability.
-
-### P4: Floating Environment Popover
-
-Goal: Add the Codex-style context card for git, progress, browser, and sources.
-
-Scope:
-
-- Environment info:
-  - Git additions and deletions.
-  - Local/remote state.
-  - Current branch.
-  - Commit/push action.
-  - Create PR action.
-- Progress:
-  - Active plan steps.
-  - Done/running/pending statuses.
-- Browser:
-  - Current local preview/browser target.
-- Sources:
-  - Referenced files.
-  - Attachments.
-  - MCP/tool sources.
-
-Implementation notes:
-
-- Add typed IPC for git status if current coverage is insufficient.
-- Reuse existing `currentPlan` and task source data.
-- Treat missing browser/source info as an explicit empty state.
-
-Acceptance:
-
-- Git counts match `git diff --stat`/porcelain-derived data.
-- Branch dropdown can search and switch branches.
-- Commit/push does not bypass validation discipline.
-- Progress list follows active thread.
-
-### P5: Right Tool Dock Host
-
-Goal: Make Review, Terminal, Browser, Files, and Sidebar first-class docked tools.
-
-Scope:
-
-- Tool entries:
-  - Review (`Ctrl+Shift+G`).
-  - Terminal.
-  - Browser (`Ctrl+T`).
-  - Files (`Ctrl+P`).
-  - Sidebar (`Ctrl+Alt+S`).
-- Dock behavior:
-  - Open/close.
-  - Resize.
-  - Tab header.
-  - Per-tool empty states.
-  - Persist open tool across reload.
-
-Implementation notes:
-
-- Decompose current `SessionToolDock` into:
-  - `ToolDockHost`
-  - `ReviewPanel`
-  - `TerminalPanel`
-  - `BrowserPanel`
-  - `FilesPanel`
-  - `SourcesPanel`
-- Keep panel state per active project/thread where appropriate.
-
-Acceptance:
-
-- Keyboard shortcuts open the right tool.
-- Dock context follows active project/thread.
-- Tool failures show error cards.
-
-### P6: Files Panel
-
-Goal: Match Codex's right-side file browser.
-
-Scope:
-
-- Search/filter input.
-- Folder expand/collapse.
-- File icons by type.
-- Selected file focus state.
-- Empty preview state.
-- File content viewer.
-- Insert file reference into composer.
-
-Implementation notes:
-
-- Reuse existing workspace tree IPC.
-- Add lazy loading or virtualization if needed.
-- Protect large/binary files with clear UI states.
-
-Acceptance:
-
-- Tree matches disk.
-- Search returns real files.
-- Selected file content is accurate.
-- File reference insertion works.
-
-### P7: Terminal Panel
-
-Goal: Provide a real terminal-like project tool panel.
-
-Status:
-
-- Completed on 2026-06-12.
-- Implemented with current project path, project-root command execution, local rerun control, local clear-history control, and preserved task evidence stream.
-- Verified with focused GUI tests, GUI package tests, Electron smoke, and full workspace tests.
-
-Scope:
-
-- Terminal tab with current path.
-- Project-root working directory.
-- Command input.
-- Real output display.
-- Copy/clear/rerun controls.
-- Evidence integration.
-
-Implementation notes:
-
-- Start with existing `runTerminalCommand` IPC if pty is not ready.
-- Later upgrade to real pty tabs.
-- Manual terminal commands must go through permission gates.
-
-Acceptance:
-
-- User can run a command in the project root.
-- Exit code, stdout, and stderr are visible.
-- Command output can become task evidence.
-
-### P8: Browser Panel
-
-Goal: Match Codex's browser/preview dock.
-
-Status:
-
-- Completed on 2026-06-12.
-- Implemented with docked local browser target input, refresh control, iframe-backed preview surface, preview-target synchronization, preview-server handoff, and explicit error cards for unsupported external targets.
-- Verified with focused GUI tests, GUI package tests, Electron smoke, and full workspace tests.
-
-Scope:
-
-- Embedded browser/preview panel.
-- URL input and refresh.
-- Localhost preview support.
-- Preview server launch integration.
-- Browser target in environment popover.
-
-Implementation notes:
-
-- Reuse existing preview server.
-- Start with iframe/webview constrained to local targets.
-- Clearly show blocked external/unsafe targets if unsupported.
-
-Acceptance:
-
-- Bobby can open its local preview target.
-- Preview server launch updates the browser panel.
-- Browser errors are visible.
-
-### P9: Review, Diff, Apply, And Commit
-
-Goal: Make Codex-style review the primary path for proposals and worktree changes.
-
-Status:
-
-- Completed on 2026-06-12.
-- Implemented with review readiness statuses, changed-file listing, proposal diff visibility, gated apply/discard actions, and git commit flow inside the review dock.
-- Verified with focused GUI tests, GUI package tests, Electron smoke, and full workspace tests.
-
-Scope:
-
-- Changed files list.
-- Diff viewer.
-- Proposal summary.
-- Completion gate status.
-- Pro review status.
-- Human confirmation.
-- Apply / Discard.
-- Git commit.
-
-Implementation notes:
-
-- Preserve current proposal merge safety:
-  - `gatePassed`
-  - `proReviewPassed`
-  - `humanConfirmed`
-- Do not add any "skip validation" UI.
-- Worktree tasks should land in Review by default.
-
-Acceptance:
-
-- Worktree proposal does not mutate main tree before Apply.
-- Apply requires all gates.
-- Applied proposal cleans up patch and marks dispatch applied.
-- Commit only works in git projects.
-
-### P10: Global Search
-
-Goal: Add Codex-style search across projects, files, sessions, commands, and tools.
-
-Status:
-
-- Completed on 2026-06-12.
-- Implemented with a left-rail search entry, grouped global results for projects/files/tasks/commands/tools, keyboard navigation, project switching, session resume, file-to-dock routing, and command insertion back into the composer.
-- Verified with focused GUI tests, full GUI package tests, and Electron smoke.
-
-Scope:
-
-- Search panel from left rail.
-- Result groups:
-  - Projects.
-  - Files.
-  - Tasks/sessions.
-  - Commands.
-  - Plugins/tools.
-- Keyboard navigation.
-
-Implementation notes:
-
-- Reuse:
-  - `listProjects`
-  - `searchFiles`
-  - `listSessions`
-  - `listTasks`
-  - `listCommands`
-  - `listMcpServers`
-  - `listSubAgents`
-
-Acceptance:
-
-- Selecting a project switches project.
-- Selecting a task switches thread.
-- Selecting a file opens Files panel.
-- Selecting a command inserts or runs the command template.
-
-### P11: Plugins And MCP Workbench
-
-Goal: Bring plugin/MCP management into the Codex-style surface.
-
-Scope:
-
-- Composer plugins menu.
-- Plugins page.
-- Installed plugin list.
-- MCP server health.
-- Tool inventory.
-- Enable/disable/remove.
-
-Implementation notes:
-
-- Continue using current MCP manager.
-- Expose capability status honestly.
-- Plugin tool calls must produce evidence.
-
-Acceptance:
-
-- Plugin menu and Plugins page agree.
-- Built-in filesystem MCP appears and can be disabled.
-- MCP tool calls are visible in task evidence.
-
-### P12: Automations
-
-Goal: Align the Automations entry with real scheduled/headless Bobby tasks.
-
-Scope:
-
-- Automation list.
-- Create/edit/remove.
-- Run now.
-- Schedule/monitor/reminder types.
-- Notification jump.
-- History/thread artifact.
-
-Implementation notes:
-
-- Build on current automation IPC and timeout protection.
-- A failed automation must generate a visible task/error artifact.
-
-Acceptance:
-
-- 1-minute scheduled automation fires.
-- Notification click jumps to the relevant task/thread.
-- Failure is visible in History and error card.
-
-### P13: Shortcuts And Window State
-
-Goal: Make Bobby feel like a desktop workbench.
-
-Scope:
-
-- `Ctrl+N`: new chat.
-- `Ctrl+K`: global search.
-- `Ctrl+T`: browser.
-- `Ctrl+P`: files.
-- `Ctrl+Shift+G`: review.
-- `Ctrl+Alt+S`: side dock/sidebar.
-- Persist:
-  - Window state.
-  - Left nav width.
-  - Right dock width.
-  - Active tool.
-  - Active project.
-  - Active task.
-
-Acceptance:
-
-- Shortcuts do not conflict with composer typing.
-- Reload restores the last workspace state.
-
-### P14: Visual System
-
-Goal: Make Bobby visibly match the Codex Desktop workbench style.
-
-Scope:
-
-- Dark-first shell.
-- Near-black background.
-- Soft elevated panels.
-- Thin borders.
-- Large rounded composer and popovers.
-- Compact list rows.
-- Inline code chips.
-- Status colors:
-  - Orange for permissions/warnings.
-  - Green for additions/pass.
-  - Red for deletions/failures.
-  - Blue for focus.
-- Motion:
-  - Popover fade/scale.
-  - Dock slide.
-  - Running spinner.
-
-Acceptance:
-
-- Bobby screenshot at 1440 px has the same structural hierarchy as Codex screenshots.
-- Composer and popovers no longer feel like generic dashboard controls.
-- Existing accessibility basics remain: focus states, labels, keyboard navigation.
-
-## 4.1 Cross-Module Dependency Notes
-
-The UI workstreams are not independent. The following dependencies should shape implementation order:
-
-| Depends on | Why it must come first |
-|---|---|
-| Shell layout before tool parity | Review/files/browser/terminal all need a stable dock host and region sizing model |
-| Per-thread session routing before task visuals | Navigator, progress surfaces, and task header state will be wrong if task ownership is still ambiguous |
-| Composer console before plugin/command parity | Plugins, custom commands, plan mode, and permission flows all enter through the composer |
-| Environment popover before git/progress parity claims | Branch, dirty state, progress, and sources need one shared state surface |
-| Review dock before apply/commit UX parity | Completion gate cannot be represented cleanly without a review-first panel |
-
-## 5. Delivery Batches
-
-The work should now be executed as parity batches rather than ad hoc GUI edits.
-
-### Batch A: Shell Foundation
-
-- Activity rail
-- Project/task navigator
-- centered empty state
-- task header framing
-- right dock launcher strip
-- floating composer baseline
-
-Exit criteria:
-
-- Shell regions match screenshot hierarchy at 1366 px and 1440 px
-- Active task switching still works
-- No regression in send flow or transcript rendering
-
-### Batch B: Task And Composer Behavior
-
-- per-thread status rendering
-- command/evidence/reasoning cards
-- plan mode / goal tracking / permissions wiring
-- project picker / branch context row
-- plugin menu surface
-
-Exit criteria:
-
-- Two concurrent tasks remain visually and logically isolated
-- Composer controls affect real store/backend behavior
-- Screenshot parity for the lower-third control area is credible
-
-### Batch C: Right Dock Workspace
-
-- Review panel
-- Terminal panel
-- Browser panel
-- Files panel
-- dock persistence and shortcuts
-
-Exit criteria:
-
-- Every right-side shortcut opens a real working panel
-- Panels follow active project/task context
-- Errors surface as cards, not silent failures
-
-### Batch D: Context And Git Surface
-
-- environment popover
-- branch switcher
-- dirty counts
-- progress list
-- sources list
-- commit/push and PR affordances
-
-Exit criteria:
-
-- Git context is accurate and actionable
-- Progress follows the active task only
-- No action bypasses completion gate discipline
-
-### Batch E: Plugins, Automations, Search, Persistence
-
-- plugin workbench
-- automations page/history/jump
-- global search
-- desktop state restore
-- final visual system pass
-
-Exit criteria:
-
-- Plugin, automation, and search entries are first-class shell citizens
-- App restart restores meaningful workspace state
-- Final screenshot audit is mostly green except explicitly deferred items
-
-## 6. Recommended Execution Order
-
-This UI plan should be layered on top of the existing E0-E10 sequence.
-
-```text
-E1-UIA  Shell layout + left activity/project/task navigation
-E1-UIB  Composer console + strict per-thread active/busy/status derivation
-E2-UI   Task stream persistence and resume visual replay
-E3-UI   Review/diff/apply + checkpoint timeline surfaces
-E4-UI   @file, slash command, attachment, plugin composer menus
-E5-UI   Permission/mode/model controls
-E6-UI   Plugins/MCP workbench
-E7-UI   Subagents/background tasks panel
-E8-UI   Files, terminal, browser, preview right dock
-E9-UI   Custom commands in composer and command manager
-E10-UI  Automations page, notification jump, history artifacts
-Final   Screenshot parity audit + full manual desktop acceptance script
-```
-
-## 7. Immediate Next Slice
-
-### E1-UIA: Shell And Left Navigation Hardening
-
-Task:
-
-- Build the Codex-style shell foundation:
-  - `ActivityRail`
-  - `ProjectTaskNavigator`
-  - task grouping by project
-  - per-thread status display
-  - active/running/done/failed/blocked visual states
-
-Files likely touched:
-
-- `packages/gui/src/components/Sidebar.tsx`
-- `packages/gui/src/screens/Workspace.tsx`
-- `packages/gui/src/store/chat-store.ts`
-- `packages/gui/tests/workspace-screen.test.tsx`
-- `packages/gui/tests/chat-store.test.ts`
-
-Acceptance:
-
-- Two parallel tasks under one project show separate statuses.
-- Failing one task does not change the other task.
-- Switching tasks restores the right blocks and mode.
-- Project grouping works after `loadSessions`.
-- `pnpm --filter @bobby/gui test -- chat-store.test.ts workspace-screen.test.tsx`
-- `pnpm -r test`
-- Commit and push immediately.
-
-### E1-UIB: Center Workspace And Composer Completion
-
-Task:
-
-- Finish the Codex-style center workspace and composer contract:
-  - remove non-parity header clutter from empty-state mode
-  - finalize composer menu structure
-  - ensure project picker, plan mode, goal tracking, and permission chips have correct real behavior
-  - keep right dock shortcuts visible in empty and active states
-
-Files likely touched:
-
-- `packages/gui/src/screens/Workspace.tsx`
-- `packages/gui/tests/workspace-screen.test.tsx`
-- composer-related component files if extracted
-
-Acceptance:
-
-- Empty state has one dominant centered focal prompt
-- Composer controls remain functional in empty and active task states
-- Right dock shortcuts remain visible with or without an active transcript
-- `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx`
-- `pnpm -r test`
-- Electron smoke
-- Commit and push immediately
-
-## 8. Per-Module Acceptance Matrix
-
-This matrix is the working definition of "done enough" for each surface.
-
-| Module | Minimum acceptance |
-|---|---|
-| `ActivityRail` | icons/labels render, active state works, settings stays bottom-anchored |
-| `ProjectTaskNavigator` | project grouping, active task highlight, running state icon, scroll usability |
-| `MainTaskWorkspace` | active transcript correct, empty state distinct, evidence visible |
-| `TaskHeader` | title/status accurate per thread, does not pollute empty-state focal hierarchy |
-| `ComposerConsole` | send, stop, plan mode, goal tracking, permission chip, project picker all wired |
-| `EnvironmentPopover` | git counts, branch, progress, browser, sources render from real state |
-| `ReviewPanel` | diff/proposal state visible, apply respects all gates |
-| `TerminalPanel` | runs command in project root, shows stdout/stderr/exit code |
-| `BrowserPanel` | opens preview target, shows load/error state |
-| `FilesPanel` | searchable tree, preview, file selection, insert reference |
-| `PluginsWorkbench` | installed plugins visible, capability state accurate, tool calls evidenced |
-| `Automations` | list/create/run/history/jump flow works end-to-end |
-
-## 9. Final Desktop Parity Acceptance Script
-
-Full parity remains incomplete until this script passes on the real Electron app:
-
-1. Open a project.
-2. Start two parallel tasks.
-3. Ensure one task uses worktree isolation.
-4. Reference a file with `@`.
-5. Run one task in plan-only mode.
-6. Review a diff proposal.
-7. Apply after completion gate and human confirmation.
-8. Rewind to a middle checkpoint.
-9. Restart app and resume the task.
-10. Call an MCP tool.
-11. Create and run a custom command.
-12. Trigger an automation.
-13. Click notification and jump to the resulting task.
-14. Confirm all evidence remains visible.
-15. Run `pnpm -r test`.
-16. Run Electron smoke.
-
-## 10. Commit Discipline
-
-For every sub-work item:
-
-1. Implement the smallest real capability increment.
-2. Add or update tests.
-3. Run targeted tests.
-4. Run `pnpm -r test` before claiming acceptance.
-5. Run Electron smoke for shell/composer/dock/IPC changes.
-6. Commit and push immediately.
-7. Report exact commands and results.
-
-No work item is accepted based on screenshots, subjective similarity, or "it should work." Evidence must be machine-verifiable where possible and manually reproducible where the feature is visual.
+| Left icon rail | Exists, but still reads as a feature menu rather than a Codex rail | Tighten density, labels, grouping, and active-state behavior |
+| Project/task tree | Exists, but not yet visually or behaviorally aligned with Codex | Make it denser, more scrollable, and more obviously project-first |
+| Center transcript | Functionally present, visually still too Bobby-specific | Reframe as task transcript with stronger header/body/composer separation |
+| Empty state | Present, but still not fully Codex-like | Preserve shell, project, dock, and centered prompt hierarchy |
+| Composer | Broadly capable, but still not a unified control console | Normalize menu structure, context row, permissions, model, target, and branch affordances |
+| Environment card | Present, but still partial and visually rough | Unify branch, dirty counts, progress, browser target, sources, and actions |
+| Right dock launcher | Present, but still more utilitarian than Codex | Make the launcher labels, shortcuts, and panel states feel first-class |
+| Files panel | Functional but not parity-grade | Make split tree/preview flow match the screenshot model |
+| Automations | Has core CRUD/run-now flow, but weak shell integration | Add explicit history/jump/result flow and make it a shell citizen |
+| Visual system | Improved, but inconsistent | Finish dark workbench style and spacing rules across all panels |
+
+## 6. Non-Negotiable Guardrails
+
+1. Apply, rewind, and automation must still obey the completion gate.
+2. Evidence visibility cannot regress.
+3. Secrets remain out of renderer state; renderer sees `hasApiKey`, not raw key material.
+4. Renderer may coordinate view state only; core logic stays in IPC/store/kernel layers.
+5. New IPC must stay Zod-backed.
+6. Every accepted slice must end in commit and push.
+7. No fake parity controls. If a control exists, it must work or be explicitly unavailable.
+
+## 7. Delivery Order
+
+The remaining parity program should execute in this order:
+
+1. Shell cohesion and left-side hierarchy
+2. Center transcript and empty-state cleanup
+3. Composer console completion
+4. Environment popover completion
+5. Files panel parity
+6. Automations shell integration
+7. Desktop persistence and shortcuts polish
+8. Final visual-system pass and screenshot audit
+
+This order matters because the visual/layout problems are structural. Polishing inner panels first would create churn.
+
+## 8. Implementation Batches
+
+### Task 1: Shell Hierarchy Refactor
+
+**Files:**
+- Modify: `packages/gui/src/main.tsx`
+- Modify: `packages/gui/src/components/Sidebar.tsx`
+- Modify: `packages/gui/src/screens/Workspace.tsx`
+- Modify: `packages/gui/src/components/SessionToolDock.tsx`
+- Test: `packages/gui/tests/workspace-screen.test.tsx`
+- Test: `packages/gui/tests/session-tool-dock.test.tsx`
+
+- [ ] Split the shell mentally and structurally into:
+  - activity rail
+  - project/task navigator
+  - main workspace
+  - right dock
+- [ ] Remove remaining dashboard-style framing that makes the workspace look like one flat page.
+- [ ] Ensure the right dock remains visible and usable in both empty and active task states.
+- [ ] Keep current page routing in `main.tsx`, but make `chat` render as a composed workbench instead of sidebar + generic content.
+- [ ] Add focused tests for:
+  - empty-state shell still renders left nav and right dock
+  - active task state still renders all shell regions
+  - switching pages does not destroy dock state unexpectedly
+- [ ] Run:
+  - `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx session-tool-dock.test.tsx`
+
+**Acceptance:**
+- Bobby reads as a three-region desktop workbench at first glance.
+- Empty-state and active-task modes share the same shell.
+- Dock shortcuts remain visible in both modes.
+
+### Task 2: Left Navigation Parity
+
+**Files:**
+- Modify: `packages/gui/src/components/Sidebar.tsx`
+- Modify: `packages/gui/src/store/chat-store.ts`
+- Test: `packages/gui/tests/chat-store.test.ts`
+- Test: `packages/gui/tests/workspace-screen.test.tsx`
+
+- [ ] Tighten the left rail grouping so the top-level entries match the screenshot intent:
+  - new chat
+  - search
+  - plugins
+  - automations
+  - settings
+- [ ] Rework the project/task navigator density so project folders and nested tasks are visually distinct.
+- [ ] Ensure per-task status is always derived from the owning thread rather than a global busy flag.
+- [ ] Add or extend tests for:
+  - project grouping after `loadSessions`
+  - two tasks under one project keep separate statuses
+  - selecting one running task does not corrupt another task
+- [ ] Run:
+  - `pnpm --filter @bobby/gui test -- chat-store.test.ts workspace-screen.test.tsx`
+
+**Acceptance:**
+- Left side feels project-first.
+- Tasks are clearly nested under projects.
+- Running, failed, blocked, and done states stay thread-local.
+
+### Task 3: Center Transcript And Empty-State Parity
+
+**Files:**
+- Modify: `packages/gui/src/screens/Workspace.tsx`
+- Modify: `packages/gui/src/components/MarkdownRenderer.tsx`
+- Test: `packages/gui/tests/workspace-screen.test.tsx`
+
+- [ ] Simplify the center column framing so the transcript becomes the dominant focal area.
+- [ ] Reduce non-parity header clutter in empty state.
+- [ ] Keep the large centered prompt and suggestion cards, but make them subordinate to the real Codex-like shell framing.
+- [ ] Tighten transcript block spacing for:
+  - user turns
+  - assistant turns
+  - reasoning
+  - tools
+  - evidence
+  - status/error cards
+- [ ] Add tests for:
+  - empty-state centered prompt remains visible
+  - transcript stays visible while reasoning and assistant streaming update
+  - final result stays attached to the active thread only
+- [ ] Run:
+  - `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx`
+
+**Acceptance:**
+- The center column reads like an active task stream, not a generic chat page.
+- Empty state is centered and restrained.
+- Evidence stays visible throughout live execution.
+
+### Task 4: Composer Console Completion
+
+**Files:**
+- Modify: `packages/gui/src/screens/Workspace.tsx`
+- Modify: `packages/gui/src/store/chat-store.ts`
+- Modify: `packages/gui/src/ipc/contract.ts`
+- Test: `packages/gui/tests/workspace-screen.test.tsx`
+
+- [ ] Normalize the composer as one console with three layers:
+  - input box
+  - control/menu row
+  - context row
+- [ ] Keep the plus menu as the entry point for:
+  - add files/images
+  - create
+  - plan mode
+  - goal tracking
+  - plugins
+- [ ] Tighten the context row so project, execution target, and branch/project context read like Codex controls rather than ad hoc pills.
+- [ ] Audit current labels and menu affordances for consistency between empty state and active task state.
+- [ ] Add tests for:
+  - plus menu sections render in the expected order
+  - project picker remains searchable
+  - plugin menu still opens the Plugins page
+  - plan/goal controls remain visible in empty and active states
+- [ ] Run:
+  - `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx plugins.test.tsx`
+
+**Acceptance:**
+- Composer feels like a control console, not just an input widget.
+- Empty and active task states share one consistent composer contract.
+- Existing file, command, and plugin entry points continue to work.
+
+### Task 5: Environment Popover Completion
+
+**Files:**
+- Modify: `packages/gui/src/screens/Workspace.tsx`
+- Modify: `packages/gui/src/ipc/contract.ts`
+- Test: `packages/gui/tests/workspace-screen.test.tsx`
+
+- [ ] Finish the floating environment card so it reliably shows:
+  - added/deleted counts
+  - branch and branch switcher
+  - commit/push and PR actions
+  - active progress steps
+  - browser target
+  - sources
+- [ ] Remove placeholder-feeling controls and replace them with honest actions or read-only states.
+- [ ] Make branch selection feel like an inline popover, matching the screenshot pattern.
+- [ ] Add tests for:
+  - git counts render from real summary data
+  - branch list opens and highlights the current branch
+  - progress steps reflect the active thread plan
+- [ ] Run:
+  - `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx`
+
+**Acceptance:**
+- The environment card becomes the unified context surface for git, progress, browser, and sources.
+- Current branch and dirty state are immediately visible.
+
+### Task 6: Files Panel Parity
+
+**Files:**
+- Modify: `packages/gui/src/components/SessionToolDock.tsx`
+- Modify: `packages/gui/src/ipc/contract.ts`
+- Test: `packages/gui/tests/session-tool-dock.test.tsx`
+- Test: `packages/gui/tests/workspace-screen.test.tsx`
+
+- [ ] Rework the files dock into a clearer split tree/preview layout.
+- [ ] Make the empty preview state explicitly tell the user to select a file from the workspace tree.
+- [ ] Tighten tree filtering, selection focus, and folder expansion behavior to better match the screenshot flow.
+- [ ] Ensure file insertion back into the composer still works from the dock.
+- [ ] Add tests for:
+  - file tree filter narrows results
+  - selecting a file updates the preview pane
+  - empty preview state renders before selection
+- [ ] Run:
+  - `pnpm --filter @bobby/gui test -- session-tool-dock.test.tsx workspace-screen.test.tsx`
+
+**Acceptance:**
+- Files panel reads like a real right-side workspace tool, not a utility drawer.
+- Tree and preview panes are clearly separated.
+
+### Task 7: Automations Shell Integration
+
+**Files:**
+- Modify: `packages/gui/src/screens/ScheduleTasks.tsx`
+- Modify: `packages/gui/src/screens/History.tsx`
+- Modify: `packages/gui/src/main.tsx`
+- Test: `packages/gui/tests/automations.test.tsx`
+- Test: `packages/gui/tests/history.test.tsx`
+
+- [ ] Add an explicit jump path from automations into history/task results.
+- [ ] Make the automations page expose result visibility instead of only CRUD/run-now controls.
+- [ ] Ensure notification and history routing agree on where automation output lives.
+- [ ] Add tests for:
+  - run-now failure still surfaces as error card
+  - clicking the automation result/history action opens the expected page
+  - resumed history entry can return to the owning task
+- [ ] Run:
+  - `pnpm --filter @bobby/gui test -- automations.test.tsx history.test.tsx`
+
+**Acceptance:**
+- Automations become part of the shell workflow, not an isolated settings page.
+- Automation output has a visible path back into history/task context.
+
+### Task 8: Desktop Persistence And Visual System
+
+**Files:**
+- Modify: `packages/gui/src/store/app-store.ts`
+- Modify: `packages/gui/src/store/chat-store.ts`
+- Modify: `packages/gui/src/styles/tokens.css`
+- Modify: `packages/gui/src/app.css`
+- Test: `packages/gui/tests/app-store.test.ts`
+- Test: `packages/gui/tests/smoke.test.ts`
+
+- [ ] Persist the remaining high-value shell state:
+  - active project
+  - active task
+  - open dock tab
+  - dock open/closed
+  - left/right widths if introduced
+- [ ] Finish the dark workbench visual pass:
+  - near-black background
+  - softer elevated surfaces
+  - thin borders
+  - larger composer/popover rounding
+  - compact list rows
+  - consistent focus/active colors
+- [ ] Verify keyboard shortcuts still behave around the composer.
+- [ ] Add tests for:
+  - restored dock state
+  - restored active task/project where applicable
+  - smoke-visible shell regions after reload
+- [ ] Run:
+  - `pnpm --filter @bobby/gui test -- app-store.test.ts smoke.test.ts`
+
+**Acceptance:**
+- Bobby reopens into a coherent previous workspace state.
+- The whole app feels visually like one system instead of mixed generations of UI.
+
+## 9. Cross-Batch Verification Rules
+
+After each accepted batch:
+
+- [ ] Run the narrowest relevant GUI tests first.
+- [ ] Run `pnpm --filter @bobby/gui test`.
+- [ ] Run `pnpm --filter @bobby/gui smoke:electron` for shell/composer/dock/IPC changes.
+- [ ] Commit immediately.
+- [ ] Push immediately.
+
+For milestone completion:
+
+- [ ] Run `pnpm -r test`
+- [ ] Run `pnpm build`
+
+## 10. Final Screenshot Parity Audit
+
+The final manual audit must validate all of the following against the screenshot set:
+
+- [ ] Left icon rail and project/task navigator feel like one coherent navigation system.
+- [ ] Empty state keeps left rail, project list, composer, and right shortcuts visible.
+- [ ] The center column keeps task transcript density and hierarchy.
+- [ ] Environment popover exposes git, branch, progress, browser, and sources in one surface.
+- [ ] Files panel behaves as split tree + preview.
+- [ ] Right tool shortcuts remain visible and useful during active task work.
+- [ ] Composer menus and context row match the screenshot structure closely enough that the difference is polish-level, not architecture-level.
+
+## 11. Final Acceptance Script
+
+- [ ] Open a project.
+- [ ] Start two tasks under the same project.
+- [ ] Confirm the left navigator shows both tasks with separate statuses.
+- [ ] Use global search and jump back into one task.
+- [ ] Open the files dock and insert a file reference.
+- [ ] Use the plugin menu and open the Plugins page.
+- [ ] Open the environment popover and inspect branch and git counts.
+- [ ] Open terminal, browser, review, and files from the right dock.
+- [ ] Trigger one automation and jump to its resulting history/task surface.
+- [ ] Restart the app and confirm meaningful shell state is restored.
+- [ ] Run `pnpm -r test`.
+- [ ] Run `pnpm --filter @bobby/gui smoke:electron`.
+
+## 12. Recommended First Execution Slice
+
+Start with **Task 1: Shell Hierarchy Refactor** and **Task 2: Left Navigation Parity** together, because the screenshots show the biggest mismatch on the left side and overall shell composition.
+
+Do not start with more inner-panel work until the shell stops looking structurally different from Codex Desktop.
+
+Plan complete and saved to `docs/superpowers/plans/2026-06-12-bobby-codex-desktop-ui-parity-plan.md`. Two execution options:
+
+**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
+
+**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
+
+Which approach?

@@ -4,6 +4,8 @@ import {
   CalendarClock,
   Circle,
   CircleDot,
+  ChevronDown,
+  ChevronRight,
   Clock3,
   Command,
   FolderOpen,
@@ -34,6 +36,10 @@ function projectLabel(path: string | null): string {
     return 'No project';
   }
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+}
+
+function projectGroupTestId(key: string): string {
+  return key.replace(/[^a-zA-Z0-9_-]+/g, '-');
 }
 
 function projectGroups(
@@ -169,6 +175,24 @@ export function Sidebar({ page, theme, onThemeChange, onPage, onNewSession }: Si
 
   const groups = React.useMemo(() => projectGroups(threads, recentProjects), [threads, recentProjects]);
   const activeProjectPath = currentProject?.path ?? (activeSessionId ? threads[activeSessionId]?.projectDir ?? null : null);
+  const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
+
+  const groupCollapsed = React.useCallback(
+    (group: ProjectGroup) => {
+      if (collapsedGroups[group.key] !== undefined) {
+        return collapsedGroups[group.key];
+      }
+      return false;
+    },
+    [collapsedGroups]
+  );
+
+  const toggleGroup = React.useCallback((groupKey: string) => {
+    setCollapsedGroups((current) => ({
+      ...current,
+      [groupKey]: !current[groupKey]
+    }));
+  }, []);
 
   const primaryItems: Array<{
     key: string;
@@ -295,7 +319,7 @@ export function Sidebar({ page, theme, onThemeChange, onPage, onNewSession }: Si
             {groups.map((group) => (
               <section
                 key={group.key}
-                data-testid={`project-group-${group.key.replace(/[^a-zA-Z0-9_-]+/g, '-')}`}
+                data-testid={`project-group-${projectGroupTestId(group.key)}`}
                 className="rounded-2xl border px-2 py-2"
                 style={{
                   borderColor: group.path === activeProjectPath ? 'var(--bobby-accent)' : 'var(--bobby-sidebar-divider)',
@@ -303,6 +327,16 @@ export function Sidebar({ page, theme, onThemeChange, onPage, onNewSession }: Si
                 }}
               >
                 <div className="flex items-center gap-2 px-2 py-1.5">
+                  <button
+                    type="button"
+                    data-testid={`project-group-toggle-${projectGroupTestId(group.key)}`}
+                    aria-label={`${group.label} task group`}
+                    aria-expanded={!groupCollapsed(group)}
+                    onClick={() => toggleGroup(group.key)}
+                    className="rounded-md p-0.5 text-bobby-faint transition hover:bg-bobby-sidebar-row-hover hover:text-bobby-ink"
+                  >
+                    {groupCollapsed(group) ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
                   <FolderOpen className="h-4 w-4 text-bobby-faint" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] font-semibold text-bobby-ink">{group.label}</div>
@@ -313,50 +347,52 @@ export function Sidebar({ page, theme, onThemeChange, onPage, onNewSession }: Si
                   </div>
                 </div>
 
-                <div className="mt-1 space-y-1">
-                  {group.tasks.length === 0 && (
-                    <div className="px-3 py-2 text-[12px] text-bobby-faint">No task threads yet.</div>
-                  )}
-                  {group.tasks.map((task) => {
-                    const tone = statusTone(task.status);
-                    const StatusIcon = tone.icon;
-                    const active = task.id === activeSessionId;
-                    return (
-                      <button
-                        key={task.id}
-                        type="button"
-                        data-testid={`sidebar-task-${task.id}`}
-                        onClick={() => {
-                          if (task.id !== activeSessionId) {
-                            switchSession(task.id);
-                          }
-                          onPage('chat');
-                        }}
-                        className="flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left transition"
-                        style={{
-                          background: active ? 'var(--bobby-card-strong)' : 'transparent',
-                          boxShadow: active ? 'inset 0 0 0 1px var(--bobby-sidebar-row-ring)' : 'none'
-                        }}
-                        title={task.taskId ? `${task.title} / ${task.taskId}` : task.title}
-                      >
-                        <StatusIcon className={`mt-1 h-3.5 w-3.5 shrink-0 ${tone.iconClass}`} style={{ color: tone.iconColor }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[12px] font-medium text-bobby-ink">{task.title}</div>
-                          <div className="mt-1 flex items-center gap-2 text-[11px] text-bobby-faint">
-                            <span data-testid={`sidebar-task-status-${task.id}`}>{task.status}</span>
-                            <span className="truncate">{task.taskId ?? task.id}</span>
-                          </div>
-                        </div>
-                        <span
-                          className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                          style={{ background: tone.pillBg, color: tone.pillFg }}
+                {!groupCollapsed(group) && (
+                  <div className="mt-1 space-y-1">
+                    {group.tasks.length === 0 && (
+                      <div className="px-3 py-2 text-[12px] text-bobby-faint">No task threads yet.</div>
+                    )}
+                    {group.tasks.map((task) => {
+                      const tone = statusTone(task.status);
+                      const StatusIcon = tone.icon;
+                      const active = task.id === activeSessionId;
+                      return (
+                        <button
+                          key={task.id}
+                          type="button"
+                          data-testid={`sidebar-task-${task.id}`}
+                          onClick={() => {
+                            if (task.id !== activeSessionId) {
+                              switchSession(task.id);
+                            }
+                            onPage('chat');
+                          }}
+                          className="flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left transition"
+                          style={{
+                            background: active ? 'var(--bobby-card-strong)' : 'transparent',
+                            boxShadow: active ? 'inset 0 0 0 1px var(--bobby-sidebar-row-ring)' : 'none'
+                          }}
+                          title={task.taskId ? `${task.title} / ${task.taskId}` : task.title}
                         >
-                          {task.status}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                          <StatusIcon className={`mt-1 h-3.5 w-3.5 shrink-0 ${tone.iconClass}`} style={{ color: tone.iconColor }} />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[12px] font-medium text-bobby-ink">{task.title}</div>
+                            <div className="mt-1 flex items-center gap-2 text-[11px] text-bobby-faint">
+                              <span data-testid={`sidebar-task-status-${task.id}`}>{task.status}</span>
+                              <span className="truncate">{task.taskId ?? task.id}</span>
+                            </div>
+                          </div>
+                          <span
+                            className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                            style={{ background: tone.pillBg, color: tone.pillFg }}
+                          >
+                            {task.status}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             ))}
           </div>

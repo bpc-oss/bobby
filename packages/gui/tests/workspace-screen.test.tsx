@@ -336,6 +336,80 @@ describe('workspace UI smoke', () => {
     expect(screen.getByText('Plugins')).toBeTruthy();
   });
 
+  it('collapses and expands project task groups from the navigator', () => {
+    useChatStore.setState({
+      activeSessionId: 'thread-2',
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-11T00:04:00.000Z'
+      },
+      recentProjects: [
+        {
+          name: 'Bobby',
+          path: 'E:\\ai-files\\Bobby',
+          lastOpenedAt: '2026-06-11T00:04:00.000Z'
+        }
+      ],
+      threads: {
+        'thread-1': {
+          id: 'thread-1',
+          title: 'First task',
+          blocks: [{ kind: 'user', id: 'u-1', text: 'First task' }],
+          createdAt: '2026-06-11T00:00:00.000Z',
+          updatedAt: '2026-06-11T00:02:00.000Z',
+          projectDir: 'E:\\ai-files\\Bobby',
+          taskId: 'task-1',
+          status: 'done',
+          liveReasoning: '',
+          liveAssistant: '',
+          liveToolContent: '',
+          currentPlan: [],
+          error: null,
+          costUsd: 0,
+          spendUsd: 0,
+          model: null
+        },
+        'thread-2': {
+          id: 'thread-2',
+          title: 'Second task',
+          blocks: [{ kind: 'user', id: 'u-2', text: 'Second task' }],
+          createdAt: '2026-06-11T00:03:00.000Z',
+          updatedAt: '2026-06-11T00:04:00.000Z',
+          projectDir: 'E:\\ai-files\\Bobby',
+          taskId: 'task-2',
+          status: 'running',
+          liveReasoning: '',
+          liveAssistant: '',
+          liveToolContent: '',
+          currentPlan: [],
+          error: null,
+          costUsd: 0,
+          spendUsd: 0,
+          model: null
+        }
+      },
+      sessions: [],
+      blocks: [{ kind: 'user', id: 'u-2', text: 'Second task' }],
+      currentTaskId: 'task-2',
+      status: 'running',
+      busy: true
+    });
+
+    render(<App />);
+
+    expect(screen.getByTestId('sidebar-task-thread-1')).toBeTruthy();
+    expect(screen.getByTestId('sidebar-task-thread-2')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('project-group-toggle-E-ai-files-Bobby'));
+    expect(screen.queryByTestId('sidebar-task-thread-1')).toBeNull();
+    expect(screen.queryByTestId('sidebar-task-thread-2')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('project-group-toggle-E-ai-files-Bobby'));
+    expect(screen.getByTestId('sidebar-task-thread-1')).toBeTruthy();
+    expect(screen.getByTestId('sidebar-task-thread-2')).toBeTruthy();
+  });
+
   it('opens global search from the rail and switches projects from the results', async () => {
     const selectProject = vi.fn().mockResolvedValue(undefined);
     useChatStore.setState({
@@ -544,6 +618,31 @@ describe('workspace UI smoke', () => {
     expect(screen.queryByText('新对话')).toBeNull();
     expect(screen.queryByText('等待输入')).toBeNull();
     expect(screen.getByText('目标')).toBeTruthy();
+  });
+
+  it('keeps the full shell visible around the empty state workbench', () => {
+    useChatStore.setState({
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      },
+      recentProjects: [
+        {
+          name: 'Bobby',
+          path: 'E:\\ai-files\\Bobby',
+          lastOpenedAt: '2026-06-12T00:00:00.000Z'
+        }
+      ]
+    });
+
+    render(<App />);
+
+    expect(screen.getByTestId('activity-rail')).toBeTruthy();
+    expect(screen.getByTestId('project-task-navigator')).toBeTruthy();
+    expect(screen.getByTestId('chat-workbench')).toBeTruthy();
+    expect(screen.getByTestId('dock-active-tab')).toBeTruthy();
+    expect(screen.getAllByText('我们应该在 Bobby 中构建什么?').length).toBeGreaterThan(0);
   });
 
   it('opens the plus menu with create, mode, and plugin sections', async () => {
