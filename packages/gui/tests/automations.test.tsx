@@ -133,4 +133,15 @@ describe('ScheduleTasks', () => {
       expect(window.bobby.removeAutomation).toHaveBeenCalled();
     });
   });
+
+  it('shows automation action failures as an error card', async () => {
+    window.bobby.runAutomationNow = vi.fn().mockRejectedValueOnce(new Error('runner unavailable'));
+
+    render(<ScheduleTasks />);
+
+    expect(await screen.findByText('Daily check-in')).toBeTruthy();
+    fireEvent.click(screen.getAllByTitle('Run now')[0]);
+
+    expect(await screen.findByText('runner unavailable')).toBeTruthy();
+  });
 });

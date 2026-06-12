@@ -25,6 +25,10 @@ function formatDateTime(value: string | null): string {
   return new Date(value).toLocaleString();
 }
 
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function ScheduleTasks() {
   const client = React.useMemo(resolveClient, []);
   const [items, setItems] = React.useState<AutomationRecord[]>([]);
@@ -90,20 +94,35 @@ export function ScheduleTasks() {
 
   const toggleAutomation = React.useCallback(async (id: string) => {
     if (!client?.toggleAutomation) return;
-    await client.toggleAutomation({ id });
-    await refresh();
+    setError(null);
+    try {
+      await client.toggleAutomation({ id });
+      await refresh();
+    } catch (nextError) {
+      setError(formatError(nextError));
+    }
   }, [client, refresh]);
 
   const removeAutomation = React.useCallback(async (id: string) => {
     if (!client?.removeAutomation) return;
-    await client.removeAutomation({ id });
-    await refresh();
+    setError(null);
+    try {
+      await client.removeAutomation({ id });
+      await refresh();
+    } catch (nextError) {
+      setError(formatError(nextError));
+    }
   }, [client, refresh]);
 
   const runAutomationNow = React.useCallback(async (id: string) => {
     if (!client?.runAutomationNow) return;
-    await client.runAutomationNow({ id });
-    await refresh();
+    setError(null);
+    try {
+      await client.runAutomationNow({ id });
+      await refresh();
+    } catch (nextError) {
+      setError(formatError(nextError));
+    }
   }, [client, refresh]);
 
   return (
