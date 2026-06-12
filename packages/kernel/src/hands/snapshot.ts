@@ -207,6 +207,45 @@ async function readManifest(snapshotPath: string): Promise<SnapshotManifest> {
   return JSON.parse(rawManifest) as SnapshotManifest;
 }
 
+function manifestPathSet(manifest: SnapshotManifest): Set<string> {
+  return new Set([
+    ...manifest.copied.map((entry) => entry.path),
+    ...manifest.skipped.map((entry) => entry.path)
+  ]);
+}
+
+async function removeEntriesNotInSnapshot(
+  workspaceRoot: string,
+  currentPath: string,
+  preservedPaths: Set<string>
+): Promise<void> {
+  const entries = await readdir(currentPath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory() && EXCLUDED_DIRS.has(entry.name)) {
+      continue;
+    }
+
+    const absolutePath = resolve(currentPath, entry.name);
+    const relativePath = normalizeToRelPosix(relative(workspaceRoot, absolutePath));
+    if (!isSafeRelativePath(relativePath)) {
+      throw new Error(`Invalid workspace entry path during restore: ${relativePath}`);
+    }
+
+    if (entry.isDirectory()) {
+      await removeEntriesNotInSnapshot(workspaceRoot, absolutePath, preservedPaths);
+      const remaining = await readdir(absolutePath);
+      if (remaining.length === 0 && !preservedPaths.has(relativePath)) {
+        await rm(absolutePath, { recursive: true, force: true });
+      }
+      continue;
+    }
+
+    if (!preservedPaths.has(relativePath)) {
+      await rm(absolutePath, { force: true });
+    }
+  }
+}
+
 export async function listSnapshots(workspaceRoot: string): Promise<SnapshotListEntry[]> {
   const workspace = new Workspace(workspaceRoot);
   const snapshotRoot = workspace.resolveInside(SNAPSHOT_ROOT);
@@ -248,6 +287,9 @@ export async function restoreSnapshot(workspaceRoot: string, snapshotId: string)
   const absoluteRoot = workspace.resolveInside('.');
   const snapshotDir = resolve(absoluteRoot, SNAPSHOT_ROOT, snapshotId);
   const manifest = await readManifest(snapshotDir);
+  const preservedPaths = manifestPathSet(manifest);
+
+  await removeEntriesNotInSnapshot(absoluteRoot, absoluteRoot, preservedPaths);
 
   for (const entry of manifest.copied) {
     if (!isSafeRelativePath(entry.path)) {

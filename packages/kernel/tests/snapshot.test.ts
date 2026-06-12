@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 
@@ -93,6 +93,26 @@ it('restoreSnapshot rewinds to a middle checkpoint with matching file hash', asy
   expect(restored).toBe('middle');
   expect(restoredHash).toBe(expectedHash);
   expect(first.id).toBe('snap-before');
+});
+
+it('restoreSnapshot removes files created after the checkpoint while preserving skipped files', async () => {
+  const workspaceRoot = createWorkspace();
+  const sourcePath = join(workspaceRoot, 'hello.txt');
+  const createdLaterPath = join(workspaceRoot, 'created-later.txt');
+  const skippedBinaryPath = join(workspaceRoot, 'binary.png');
+
+  writeFileSync(sourcePath, 'before', 'utf8');
+  writeFileSync(skippedBinaryPath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  const snapshot = await createSnapshot(workspaceRoot, { id: 'snap-before-extra' });
+
+  writeFileSync(sourcePath, 'after', 'utf8');
+  writeFileSync(createdLaterPath, 'remove me', 'utf8');
+
+  await restoreSnapshot(workspaceRoot, snapshot.id);
+
+  expect(readFileSync(sourcePath, 'utf8')).toBe('before');
+  expect(existsSync(createdLaterPath)).toBe(false);
+  expect(existsSync(skippedBinaryPath)).toBe(true);
 });
 
 it('snapshot skips node_modules/.git/.bobby and records skipped files', async () => {
