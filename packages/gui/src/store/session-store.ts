@@ -44,6 +44,19 @@ function appendTimeline(state: SessionState, sessionId: string, event: KernelEve
   };
 }
 
+function setSessionStatus(
+  sessions: Record<string, SessionMeta>,
+  sessionId: string,
+  status: SessionStatus
+): Record<string, SessionMeta> {
+  const current = sessions[sessionId];
+  if (!current) return sessions;
+  return {
+    ...sessions,
+    [sessionId]: { ...current, status }
+  };
+}
+
 function applyKernelEvent(
   state: SessionState,
   sessionId: string,
@@ -67,14 +80,17 @@ function applyKernelEvent(
       [sessionId]: { gateId: kernelEvent.gateId, reason: kernelEvent.reason }
     };
     next.statuses = { ...state.statuses, [sessionId]: 'gate' };
+    next.sessions = setSessionStatus(state.sessions, sessionId, 'gate');
   }
 
   if (kernelEvent.type === 'final_result') {
+    const finalStatus = kernelEvent.status === 'done' ? 'done' : 'failed';
     next.pendingGates = { ...state.pendingGates, [sessionId]: undefined };
     next.statuses = {
       ...state.statuses,
-      [sessionId]: kernelEvent.status === 'done' ? 'done' : 'failed'
+      [sessionId]: finalStatus
     };
+    next.sessions = setSessionStatus(state.sessions, sessionId, finalStatus);
   }
 
   return next;
@@ -100,7 +116,8 @@ export const useSessionStore = create<SessionState>()((set) => ({
         ...state.timelines,
         [sessionId]: [...(state.timelines[sessionId] ?? []), { kind: 'user', text }]
       },
-      statuses: { ...state.statuses, [sessionId]: 'running' }
+      statuses: { ...state.statuses, [sessionId]: 'running' },
+      sessions: setSessionStatus(state.sessions, sessionId, 'running')
     })),
 
   applyGuiEvent: (event) =>

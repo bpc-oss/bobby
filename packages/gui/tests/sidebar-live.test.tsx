@@ -1,5 +1,5 @@
 /* eslint-disable max-lines-per-function */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -69,5 +69,39 @@ describe('Sidebar（live 列表）', () => {
 
     expect(useSessionStore.getState().activeSessionId).toBe('a');
     expect(useUiStore.getState().view).toBe('session');
+  });
+
+  it('kernel lifecycle mirrors into sidebar status dots', () => {
+    useSessionStore.getState().setSessions([
+      { id: 'a', mode: 'code', title: 'code-gate', pinned: false, status: 'idle', updatedAt: '' }
+    ]);
+    useUiStore.getState().setMode('code');
+    render(<Sidebar />);
+
+    const dotClass = () => screen.getByText('code-gate').closest('button')?.querySelector('.dot')?.className ?? '';
+    expect(dotClass()).toContain('none');
+
+    act(() => {
+      useSessionStore.getState().addUserMessage('a', 'start');
+    });
+    expect(dotClass()).toContain('run');
+
+    act(() => {
+      useSessionStore.getState().applyGuiEvent({
+        kind: 'kernel',
+        sessionId: 'a',
+        event: { type: 'gate_request', taskId: 't1', gateId: 'g1', reason: 'need approval' }
+      });
+    });
+    expect(dotClass()).toContain('gate');
+
+    act(() => {
+      useSessionStore.getState().applyGuiEvent({
+        kind: 'kernel',
+        sessionId: 'a',
+        event: { type: 'final_result', taskId: 't1', status: 'failed' }
+      });
+    });
+    expect(dotClass()).toContain('err');
   });
 });
