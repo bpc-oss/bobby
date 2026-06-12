@@ -108,6 +108,8 @@ function installBobby() {
 
 beforeEach(() => {
   installBobby();
+  vi.spyOn(window, 'open').mockImplementation(() => null);
+  window.localStorage.clear();
   useChatStore.setState({
     blocks: [
       { kind: 'user', id: 'u-1', text: 'Run this through Mission Control' },
@@ -419,5 +421,35 @@ describe('SessionToolDock', () => {
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('pnpm dev'));
     expect(startPreviewServer).toHaveBeenCalledWith({ command: 'pnpm dev', url: 'http://localhost:5173', confirmed: true });
     expect(await screen.findByText(/Active preview: http:\/\/localhost:5173/)).toBeTruthy();
+  });
+
+  it('opens browser targets inside the dock and updates the shared preview target', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Browser/));
+    fireEvent.change(screen.getByPlaceholderText(/https:\/\/example.com or http:\/\/localhost:5174/i), {
+      target: { value: 'http://localhost:4173' }
+    });
+    fireEvent.click(screen.getByText('Open'));
+
+    expect(window.open).not.toHaveBeenCalled();
+    expect(window.bobby.send).toHaveBeenCalledWith({
+      type: 'startTask',
+      input: 'Open and inspect this web page, then report visible evidence: http://localhost:4173'
+    });
+    expect(await screen.findByText(/Active browser target: http:\/\/localhost:4173/)).toBeTruthy();
+    expect(useChatStore.getState().previewTarget).toBe('http://localhost:4173');
+  });
+
+  it('restores the last open dock tab after remount', async () => {
+    const firstRender = render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Terminal/));
+    expect((await screen.findByTestId('dock-active-tab')).textContent).toBe('Terminal');
+
+    firstRender.unmount();
+
+    render(<SessionToolDock />);
+    expect((await screen.findByTestId('dock-active-tab')).textContent).toBe('Terminal');
   });
 });

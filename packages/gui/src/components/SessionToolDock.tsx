@@ -33,6 +33,9 @@ import {
 export type DockTab = 'mission' | 'plan' | 'review' | 'diff' | 'terminal' | 'files' | 'browser' | 'sidechat' | 'preview' | 'tasks';
 export type DockTabRequest = { id: DockTab; nonce: number };
 
+const DOCK_TAB_STORAGE_KEY = 'bobby:dock:tab';
+const DOCK_OPEN_STORAGE_KEY = 'bobby:dock:open';
+
 const TABS: Array<{ id: DockTab; label: string; shortcut?: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: 'mission', label: 'Mission Control', icon: ClipboardList },
   { id: 'plan', label: 'Plan', icon: Route },
@@ -337,9 +340,6 @@ function ToolCommand({
   async function run() {
     const trimmed = value.trim();
     if (!trimmed) return;
-    if (kind === 'browser') {
-      window.open(trimmed, '_blank', 'noopener,noreferrer');
-    }
     await client?.startTask(buildPrompt(trimmed));
     setValue('');
   }
@@ -906,6 +906,73 @@ function PreviewPanel() {
   );
 }
 
+function BrowserPanel() {
+  const previewTarget = useChatStore((s) => s.previewTarget);
+  const setPreviewTarget = useChatStore((s) => s.setPreviewTarget);
+  const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
+  const [url, setUrl] = React.useState(previewTarget ?? 'http://localhost:5174');
+  const [activeUrl, setActiveUrl] = React.useState(previewTarget ?? 'http://localhost:5174');
+
+  React.useEffect(() => {
+    if (!previewTarget) {
+      return;
+    }
+    setUrl(previewTarget);
+    setActiveUrl(previewTarget);
+  }, [previewTarget]);
+
+  async function openTarget() {
+    const trimmed = url.trim();
+    if (!trimmed) {
+      return;
+    }
+    setActiveUrl(trimmed);
+    setPreviewTarget(trimmed);
+    await client?.startTask(`Open and inspect this web page, then report visible evidence: ${trimmed}`);
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border p-2.5" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+        <label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-bobby-faint">
+          <Globe className="h-3.5 w-3.5" />
+          Browser
+        </label>
+        <div className="flex gap-2">
+          <input
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                void openTarget();
+              }
+            }}
+            placeholder="https://example.com or http://localhost:5174"
+            className="min-w-0 flex-1 rounded-md border bg-transparent px-2.5 py-1.5 text-[12px] text-bobby-ink outline-none placeholder:text-bobby-faint"
+            style={{ borderColor: 'var(--bobby-border)' }}
+          />
+          <button
+            type="button"
+            onClick={() => void openTarget()}
+            disabled={!url.trim()}
+            className="rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white disabled:opacity-40"
+          >
+            Open
+          </button>
+        </div>
+      </div>
+      <iframe
+        title="Browser"
+        src={activeUrl}
+        className="min-h-[520px] w-full rounded-lg border"
+        style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}
+      />
+      <div className="text-[11px] text-bobby-faint">Active browser target: {activeUrl || 'none'}</div>
+    </div>
+  );
+}
+
 function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'tasks' | 'sidechat' | 'preview' | 'files' }) {
   const blocks = useChatStore((s) => s.blocks);
   const [dispatches, setDispatches] = React.useState<SubAgentDispatchRecordDto[]>([]);
@@ -941,6 +1008,7 @@ function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'tasks' | 'sidecha
 
   if (kind === 'terminal') return <TerminalPanel />;
   if (kind === 'files') return <FilesPanel />;
+  if (kind === 'browser') return <BrowserPanel />;
   if (kind === 'preview') return <PreviewPanel />;
   if (kind === 'tasks') {
     return (
@@ -956,7 +1024,6 @@ function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'tasks' | 'sidecha
     );
   }
   const command =
-    kind === 'browser' ? <ToolCommand kind="Browser" icon={Globe} placeholder="https://example.com or http://localhost:5174" button="Open" buildPrompt={(value) => `Open and inspect this web page, then report visible evidence: ${value}`} /> :
     kind === 'sidechat' ? <ToolCommand kind="Side Chat" icon={MessageCircle} placeholder="Ask a side question without changing the main mission..." button="Ask" buildPrompt={(value) => `Side chat for the current session: ${value}`} /> :
     null;
   const filtered = blocks.filter((block) => {
@@ -969,8 +1036,19 @@ function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'tasks' | 'sidecha
 }
 
 export function SessionToolDock({ requestedTab }: { requestedTab?: DockTabRequest | null }) {
-  const [open, setOpen] = React.useState(true);
-  const [tab, setTab] = React.useState<DockTab>('mission');
+  const [open, setOpen] = React.useState(() => {
+    if (typeof window === 'undefined') {
+      return true;
+    }
+    return window.localStorage.getItem(DOCK_OPEN_STORAGE_KEY) !== 'false';
+  });
+  const [tab, setTab] = React.useState<DockTab>(() => {
+    if (typeof window === 'undefined') {
+      return 'mission';
+    }
+    const stored = window.localStorage.getItem(DOCK_TAB_STORAGE_KEY);
+    return TABS.some((item) => item.id === stored) ? (stored as DockTab) : 'mission';
+  });
   const [proposals, setProposals] = React.useState<ProposalSummary[]>([]);
   const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
 
@@ -995,6 +1073,20 @@ export function SessionToolDock({ requestedTab }: { requestedTab?: DockTabReques
       void refreshProposals();
     }
   }, [refreshProposals, requestedTab]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.localStorage.setItem(DOCK_TAB_STORAGE_KEY, tab);
+  }, [tab]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.localStorage.setItem(DOCK_OPEN_STORAGE_KEY, open ? 'true' : 'false');
+  }, [open]);
 
   const active = TABS.find((item) => item.id === tab) ?? TABS[0];
   const ActiveIcon = active.icon;
