@@ -17,6 +17,15 @@ interface ParsedCommand {
   mkdirDirectory?: string;
 }
 
+interface SpawnResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  signal: NodeJS.Signals | null;
+  timedOut: boolean;
+  spawnError?: string;
+}
+
 export class ExecTool implements Tool {
   readonly name = 'exec';
   readonly permissionTier = 'L2' as const;
@@ -250,14 +259,7 @@ export class ExecTool implements Tool {
     cmd: string,
     args: string[],
     timeoutMs: number
-  ): Promise<{
-    exitCode: number;
-    stdout: string;
-    stderr: string;
-    signal: NodeJS.Signals | null;
-    timedOut: boolean;
-    spawnError?: string;
-  }> {
+  ): Promise<SpawnResult> {
     let stdout = '';
     let stderr = '';
     let timedOut = false;
@@ -282,26 +284,39 @@ export class ExecTool implements Tool {
       const close = await this.waitForProcessClose(child, timer);
       signal = close.terminationSignal;
       const exitCode = close.code === null && timedOut ? 143 : close.code ?? 1;
-      return {
-        exitCode,
-        stdout,
-        stderr,
-        signal,
-        timedOut
-      };
+      return this.createSpawnSuccess(exitCode, stdout, stderr, signal, timedOut);
     } catch (error: unknown) {
       // A spawn failure (e.g. ENOENT for a missing binary) MUST become
       // evidence, never a thrown exception that crashes the agent (M3 §7).
       const message = error instanceof Error ? error.message : String(error);
-      return {
-        exitCode: 127,
-        stdout,
-        stderr: stderr.length > 0 ? stderr : message,
-        signal: null,
-        timedOut,
-        spawnError: message
-      };
+      return this.createSpawnFailure(stdout, stderr, timedOut, message);
     }
+  }
+
+  private createSpawnSuccess(
+    exitCode: number,
+    stdout: string,
+    stderr: string,
+    signal: NodeJS.Signals | null,
+    timedOut: boolean
+  ): SpawnResult {
+    return { exitCode, stdout, stderr, signal, timedOut };
+  }
+
+  private createSpawnFailure(
+    stdout: string,
+    stderr: string,
+    timedOut: boolean,
+    message: string
+  ): SpawnResult {
+    return {
+      exitCode: 127,
+      stdout,
+      stderr: stderr.length > 0 ? stderr : message,
+      signal: null,
+      timedOut,
+      spawnError: message
+    };
   }
 
   private bindOutputBuffer(
