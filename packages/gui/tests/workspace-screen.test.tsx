@@ -380,6 +380,52 @@ describe('workspace UI smoke', () => {
     expect(screen.getByTestId('dock-active-tab').textContent).toBe('Review');
   });
 
+  it('keeps the shared workbench shell when switching to Search', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTitle('Search'));
+
+    expect(await screen.findByTestId('chat-workbench')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Search everything')).toBeTruthy();
+    expect(screen.getByTestId('dock-active-tab')).toBeTruthy();
+  });
+
+  it('keeps the shared workbench shell when switching to Plugins', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTitle('Plugins'));
+
+    expect(await screen.findByTestId('chat-workbench')).toBeTruthy();
+    expect(screen.getByText('MCP Servers')).toBeTruthy();
+    expect(screen.getByTestId('dock-active-tab')).toBeTruthy();
+  });
+
+  it('keeps the shared workbench shell when switching to Automations', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTitle('Automations'));
+
+    expect(await screen.findByTestId('chat-workbench')).toBeTruthy();
+    expect(screen.getByText('Enabled list')).toBeTruthy();
+    expect(screen.getByTestId('dock-active-tab')).toBeTruthy();
+  });
+
+  it('keeps the shared workbench shell when switching to History', async () => {
+    render(<App />);
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('bobby:navigate', {
+        detail: {
+          page: 'history'
+        }
+      }));
+    });
+
+    expect(await screen.findByTestId('chat-workbench')).toBeTruthy();
+    expect(screen.getByText('History')).toBeTruthy();
+    expect(screen.getByTestId('dock-active-tab')).toBeTruthy();
+  });
+
   it('renders the activity rail and project-grouped task navigator', () => {
     useChatStore.setState({
       activeSessionId: 'thread-2',

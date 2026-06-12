@@ -247,47 +247,61 @@ export function App() {
   }
 
   let content: React.ReactNode = null;
-  if (page === 'settings') content = <Settings />;
-  else if (page === 'history') content = <History onResumeTask={(sessionId) => {
-    resumeSession(sessionId);
-    setPage('chat');
-  }} />;
-  else if (page === 'search') content = (
-    <SearchScreen
-      client={client ?? undefined}
-      onSelectProject={(path) => {
-        void selectProject(path);
-        setPage('chat');
-      }}
-      onSelectSession={(sessionId) => {
+  if (page === 'settings') {
+    content = <Settings />;
+  } else {
+    let workbenchContent: React.ReactNode = null;
+    if (page === 'history') {
+      workbenchContent = <History onResumeTask={(sessionId) => {
         resumeSession(sessionId);
         setPage('chat');
-      }}
-      onOpenFile={(path) => {
-        useChatStore.getState().setComposerInsertion(`@${path}`);
-        setPage('chat');
-        setDockTabRequest({ id: 'files', nonce: Date.now() });
-      }}
-      onInsertCommand={(name) => {
-        useChatStore.getState().setComposerInsertion(`/${name} `);
-        setPage('chat');
-      }}
-    />
-  );
-  else if (page === 'plugins') content = <PluginMarketplace />;
-  else if (page === 'agents') content = <Agents />;
-  else if (page === 'commands') content = <Commands />;
-  else if (page === 'schedule') content = <ScheduleTasks />;
-  else {
+      }} />;
+    } else if (page === 'search') {
+      workbenchContent = (
+        <SearchScreen
+          client={client ?? undefined}
+          onSelectProject={(path) => {
+            void selectProject(path);
+            setPage('chat');
+          }}
+          onSelectSession={(sessionId) => {
+            resumeSession(sessionId);
+            setPage('chat');
+          }}
+          onOpenFile={(path) => {
+            useChatStore.getState().setComposerInsertion(`@${path}`);
+            setPage('chat');
+            setDockTabRequest({ id: 'files', nonce: Date.now() });
+          }}
+          onInsertCommand={(name) => {
+            useChatStore.getState().setComposerInsertion(`/${name} `);
+            setPage('chat');
+          }}
+        />
+      );
+    } else if (page === 'plugins') {
+      workbenchContent = <PluginMarketplace />;
+    } else if (page === 'agents') {
+      workbenchContent = <Agents />;
+    } else if (page === 'commands') {
+      workbenchContent = <Commands />;
+    } else if (page === 'schedule') {
+      workbenchContent = <ScheduleTasks />;
+    } else {
+      workbenchContent = (
+        <Workspace
+          kernelClient={client ?? undefined}
+          theme={theme}
+          onThemeChange={handleTheme}
+          onOpenPlugins={() => setPage('plugins')}
+        />
+      );
+    }
+
     content = (
       <div data-testid="chat-workbench" className="flex h-full min-w-0 overflow-hidden">
         <section className="min-w-0 flex-1">
-          <Workspace
-            kernelClient={client ?? undefined}
-            theme={theme}
-            onThemeChange={handleTheme}
-            onOpenPlugins={() => setPage('plugins')}
-          />
+          {workbenchContent}
         </section>
         <SessionToolDock requestedTab={dockTabRequest} />
       </div>
