@@ -280,7 +280,12 @@ export function App() {
     content = (
       <div data-testid="chat-workbench" className="flex h-full min-w-0 overflow-hidden">
         <section className="min-w-0 flex-1">
-          <Workspace kernelClient={client ?? undefined} theme={theme} onThemeChange={handleTheme} />
+          <Workspace
+            kernelClient={client ?? undefined}
+            theme={theme}
+            onThemeChange={handleTheme}
+            onOpenPlugins={() => setPage('plugins')}
+          />
         </section>
         <SessionToolDock requestedTab={dockTabRequest} />
       </div>

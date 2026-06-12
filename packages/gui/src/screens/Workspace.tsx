@@ -22,6 +22,7 @@ type WorkspaceProps = {
   };
   theme?: 'light' | 'dark';
   onThemeChange?: (theme: 'light' | 'dark') => void;
+  onOpenPlugins?: () => void;
 };
 
 function UserBubble({ text }: { text: string }) {
@@ -484,7 +485,7 @@ function EnvironmentPopover({
   );
 }
 
-function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: string) => void; busy: boolean; onAbort: () => void; kernelClient?: WorkspaceProps['kernelClient'] }) {
+function Composer({ onSend, busy, onAbort, kernelClient, onOpenPlugins }: { onSend: (text: string) => void; busy: boolean; onAbort: () => void; kernelClient?: WorkspaceProps['kernelClient']; onOpenPlugins?: () => void }) {
   const [input, setInput] = useState('');
   const [customCommands, setCustomCommands] = useState<CommandRecordDto[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServerRecordDto[]>([]);
@@ -1134,6 +1135,16 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
                         </div>
                       ))
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPlusMenuOpen(false);
+                        onOpenPlugins?.();
+                      }}
+                      className="block w-full rounded-lg px-2 py-1.5 text-left text-[12px] text-bobby-muted transition hover:bg-bobby-hover hover:text-bobby-ink"
+                    >
+                      {'\u7ba1\u7406\u63d2\u4ef6'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1338,7 +1349,7 @@ function SuggestionCards({ onPick }: { onPick: (text: string) => void }) {
   );
 }
 
-export function Workspace({ kernelClient, theme = 'light', onThemeChange }: WorkspaceProps) {
+export function Workspace({ kernelClient, theme = 'light', onThemeChange, onOpenPlugins }: WorkspaceProps) {
   const blocks = useChatStore((s) => s.blocks);
   const liveReasoning = useChatStore((s) => s.liveReasoning);
   const liveAssistant = useChatStore((s) => s.liveAssistant);
@@ -1472,7 +1483,7 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange }: Work
           <div ref={bottomRef} />
         </div>
       </div>
-      <Composer kernelClient={kernelClient} onSend={sendMessage} busy={busy} onAbort={abort} />
+      <Composer kernelClient={kernelClient} onSend={sendMessage} busy={busy} onAbort={abort} onOpenPlugins={onOpenPlugins} />
     </div>
   );
 }

@@ -546,10 +546,10 @@ describe('workspace UI smoke', () => {
     expect(screen.getByText('目标')).toBeTruthy();
   });
 
-  it('opens the plus menu with create, mode, and plugin sections', () => {
+  it('opens the plus menu with create, mode, and plugin sections', async () => {
     render(<Workspace kernelClient={makeKernelClientMock()} />);
 
-    fireEvent.click(screen.getByTitle('Add photos and files'));
+    fireEvent.click(await screen.findByTitle('Add photos and files'));
 
     expect(screen.getByText('添加照片和文件')).toBeTruthy();
     expect(screen.getByText('创建')).toBeTruthy();
@@ -593,11 +593,98 @@ describe('workspace UI smoke', () => {
 
     render(<Workspace kernelClient={client} />);
 
-    fireEvent.click(screen.getByTitle('Add photos and files'));
+    fireEvent.click(await screen.findByTitle('Add photos and files'));
 
     expect(await screen.findByText('2 个已安装插件')).toBeTruthy();
     expect(screen.getByText('Filesystem')).toBeTruthy();
     expect(screen.getByText('Browser')).toBeTruthy();
+  });
+
+  it('opens the Plugins page from the composer plugin menu and shows the same MCP inventory', async () => {
+    (window as unknown as {
+      bobby: Record<string, unknown>;
+    }).bobby = {
+      send: vi.fn().mockResolvedValue(undefined),
+      onEvent: vi.fn().mockReturnValue(() => undefined),
+      onAppCommand: vi.fn().mockReturnValue(() => undefined),
+      getSetupStatus: vi.fn().mockResolvedValue({
+        homeDir: 'C:\\Users\\Administrator',
+        bobbyDir: 'C:\\Users\\Administrator\\.bobby',
+        keyPath: 'C:\\Users\\Administrator\\.bobby\\key',
+        capabilitiesPath: 'C:\\Users\\Administrator\\.bobby\\capabilities.json',
+        hasKey: true,
+        hasCapabilities: true,
+        hasEnvKey: false
+      }),
+      getCurrentProject: vi.fn().mockResolvedValue({
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      }),
+      listProjects: vi.fn().mockResolvedValue([
+        { name: 'Bobby', path: 'E:\\ai-files\\Bobby', lastOpenedAt: '2026-06-12T00:00:00.000Z' }
+      ]),
+      listSessions: vi.fn().mockResolvedValue([]),
+      listTasks: vi.fn().mockResolvedValue([]),
+      searchFiles: vi.fn().mockResolvedValue([]),
+      saveAttachment: vi.fn().mockResolvedValue({ path: '.bobby/uploads/saved.png' }),
+      listCommands: vi.fn().mockResolvedValue([]),
+      listSubAgents: vi.fn().mockResolvedValue([]),
+      listMcpServers: vi.fn().mockResolvedValue([
+        {
+          id: 'filesystem',
+          name: 'Filesystem',
+          enabled: true,
+          transport: { kind: 'stdio', command: 'npx', args: ['-y'], cwd: 'E:\\ai-files\\Bobby' },
+          tools: [{ name: 'read_file', permissionTier: 'L2', description: 'Read file', evidenceType: 'command_output' }],
+          health: 'healthy',
+          lastCheckedAt: '2026-06-12T00:00:00.000Z',
+          lastError: null,
+          createdAt: '2026-06-12T00:00:00.000Z',
+          updatedAt: '2026-06-12T00:00:00.000Z'
+        },
+        {
+          id: 'browser',
+          name: 'Browser',
+          enabled: false,
+          transport: { kind: 'url', url: 'http://localhost:3010/mcp' },
+          tools: [{ name: 'open_page', permissionTier: 'L2', description: 'Open page', evidenceType: 'command_output' }],
+          health: 'disabled',
+          lastCheckedAt: '2026-06-12T00:00:00.000Z',
+          lastError: null,
+          createdAt: '2026-06-12T00:00:00.000Z',
+          updatedAt: '2026-06-12T00:00:00.000Z'
+        }
+      ]),
+      toggleMcpServer: vi.fn().mockResolvedValue(undefined),
+      removeMcpServer: vi.fn().mockResolvedValue(true),
+      upsertMcpServer: vi.fn().mockResolvedValue(undefined)
+    };
+
+    useChatStore.setState({
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      },
+      recentProjects: [
+        {
+          name: 'Bobby',
+          path: 'E:\\ai-files\\Bobby',
+          lastOpenedAt: '2026-06-12T00:00:00.000Z'
+        }
+      ]
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByTitle('Add photos and files'));
+    expect(await screen.findByText('2 个已安装插件')).toBeTruthy();
+    fireEvent.click(screen.getByText('管理插件'));
+
+    expect(await screen.findByText('MCP Servers')).toBeTruthy();
+    expect(screen.getAllByText('Filesystem').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Browser').length).toBeGreaterThan(0);
   });
 
   it('shows an environment popover with git, progress, browser, and sources', async () => {
