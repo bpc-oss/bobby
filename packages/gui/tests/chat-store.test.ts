@@ -252,6 +252,39 @@ describe('chat session store', () => {
     ]));
   });
 
+  it('isolates unknown task events instead of routing them into the active visible session', () => {
+    const visible = session('visible', 'Visible task', [userBlock('u-visible', 'Visible task')]);
+    visible.taskId = 'task-visible';
+    visible.status = 'running';
+
+    useChatStore.setState({
+      sessions: [visible],
+      threads: { visible },
+      activeSessionId: 'visible',
+      blocks: visible.blocks as ChatBlock[],
+      currentTaskId: 'task-visible',
+      status: 'running',
+      busy: true,
+      taskThreadIds: { 'task-visible': 'visible' }
+    });
+
+    useChatStore.getState().handleEvent({ type: 'assistant_delta', taskId: 'external-task', content: 'background output', sequence: 0 });
+    useChatStore.getState().handleEvent({ type: 'final_result', taskId: 'external-task', status: 'done' });
+
+    const state = useChatStore.getState();
+    expect(state.blocks).toEqual(visible.blocks);
+    expect(state.currentTaskId).toBe('task-visible');
+    expect(state.taskThreadIds['external-task']).toBe('task-external-task');
+    expect(state.threads['task-external-task']).toMatchObject({
+      taskId: 'external-task',
+      status: 'done'
+    });
+    expect(state.threads['task-external-task']?.blocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'assistant', text: 'background output' }),
+      expect.objectContaining({ kind: 'status', status: 'done' })
+    ]));
+  });
+
   it('keeps two parallel task threads isolated by taskId', async () => {
     const startTask = vi.fn().mockResolvedValue(undefined);
     useChatStore.setState({ _client: { startTask } });

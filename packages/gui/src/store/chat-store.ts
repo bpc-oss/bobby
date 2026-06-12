@@ -577,13 +577,7 @@ function resolveEventThreadId(state: ChatState, taskId: string): string {
   if (resolved) {
     return resolved;
   }
-  if (state.activeSessionId) {
-    const active = state.threads[state.activeSessionId];
-    if (active && (!active.taskId || active.taskId === taskId)) {
-      return active.id;
-    }
-  }
-  return state.activeSessionId ?? uid();
+  return `task-${taskId}`;
 }
 
 function mergeThreadEvent(
@@ -601,7 +595,7 @@ function mergeThreadEvent(
     createdAt: baseThread.createdAt,
     updatedAt: nowIso(),
     projectDir: threadState.currentProject?.path ?? baseThread.projectDir ?? null,
-    taskId: partial.currentTaskId ?? threadState.currentTaskId ?? baseThread.taskId ?? (event.type === 'intent_proposed' ? event.taskId : null),
+    taskId: partial.currentTaskId ?? threadState.currentTaskId ?? baseThread.taskId ?? event.taskId,
     status: partial.status ?? threadState.status,
     liveReasoning: partial.liveReasoning ?? threadState.liveReasoning,
     liveAssistant: partial.liveAssistant ?? threadState.liveAssistant,
