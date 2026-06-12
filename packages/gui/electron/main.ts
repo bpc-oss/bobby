@@ -750,6 +750,39 @@ function proposalPath(proposalId: string): string | null {
   return join(root, `${proposalId}.patch`);
 }
 
+function readyDispatchForProposal(proposalId: string, expectedProposalPath: string): SubAgentDispatchRecordDto | null {
+  const expected = resolve(expectedProposalPath);
+  return listSubAgentDispatches(currentWorkspaceRoot()).find((record) =>
+    record.proposalId === proposalId &&
+    record.status === 'completed' &&
+    record.mergeState === 'ready' &&
+    record.error === null &&
+    record.proposalPath !== null &&
+    resolve(record.proposalPath) === expected
+  ) ?? null;
+}
+
+function proposalMergeCheckFromMainProcess(input: {
+  proposalId: string;
+  proposalPath: string;
+  humanConfirmed: boolean;
+}): { gatePassed: boolean; proReviewPassed: boolean; humanConfirmed: boolean } {
+  if (!input.humanConfirmed) {
+    throw new Error('Proposal merge denied: human confirmation is required');
+  }
+
+  const dispatch = readyDispatchForProposal(input.proposalId, input.proposalPath);
+  if (!dispatch) {
+    throw new Error('Proposal merge denied: proposal must come from a completed ready background task');
+  }
+
+  return {
+    gatePassed: dispatch.mergeState === 'ready',
+    proReviewPassed: dispatch.status === 'completed',
+    humanConfirmed: true
+  };
+}
+
 function readProposalSummary(path: string): ProposalSummary | null {
   try {
     const patch = readFileSync(path, 'utf8');
@@ -1456,7 +1489,12 @@ ipcMain.handle('proposals:apply', async (_event, input) => {
   if (!path || !currentProjectDir || !existsSync(path)) {
     return null;
   }
-  applySubAgentProposal(path, parsed, currentProjectDir);
+  const mergeCheck = proposalMergeCheckFromMainProcess({
+    proposalId: parsed.proposalId,
+    proposalPath: path,
+    humanConfirmed: parsed.humanConfirmed
+  });
+  applySubAgentProposal(path, mergeCheck, currentProjectDir);
   markProposalApplied(currentWorkspaceRoot(), parsed.proposalId);
   const summary = readProposalSummary(path);
   unlinkSync(path);

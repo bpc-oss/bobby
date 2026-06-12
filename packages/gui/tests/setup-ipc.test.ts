@@ -148,6 +148,7 @@ const dispatchSubAgent = vi.fn(async (_agent: unknown, _task: string, options: {
     worktreePath
   };
 });
+const applySubAgentProposal = vi.fn();
 const mcpToolToBobbyTool = vi.fn((name: string, transport: { call: (tool: string, args: unknown) => Promise<unknown> }, options?: { serverId?: string; permissionTier?: string; description?: string; evidenceType?: string }) => ({
   name: options?.serverId ? `mcp:${options.serverId}:${name}` : `mcp:${name}`,
   permissionTier: options?.permissionTier ?? 'L3',
@@ -232,6 +233,7 @@ vi.mock('@bobby/kernel', () => ({
   createMcpTransport,
   loadSubAgents,
   dispatchSubAgent,
+  applySubAgentProposal,
   mcpToolToBobbyTool,
   listSnapshots,
   makeDeepSeekClient,
@@ -261,6 +263,7 @@ async function loadMain(initialAutomations: AutomationRecord[] = [], initialProj
   safeStorageDecryptString.mockImplementation((value: Buffer) => value.toString('utf8').replace(/^encrypted:/, ''));
   makeDeepSeekClient.mockClear();
   loadDeepSeekConfig.mockClear();
+  applySubAgentProposal.mockClear();
 
   await import('../electron/main');
   await appWhenReady.mock.results[0]?.value;
@@ -559,6 +562,86 @@ describe('agent IPC handlers', () => {
     expect(records.some((record) => record.proposalId === 'proposal-1' && record.status === 'completed')).toBe(true);
 
     expect(await remove(undefined, { sourcePath: created.sourcePath })).toBe(true);
+  });
+});
+
+describe('proposal IPC handlers', () => {
+  beforeEach(() => {
+    handlers.clear();
+  });
+
+  it('does not trust renderer-supplied merge booleans without a ready background dispatch', async () => {
+    await loadMain();
+    const projectRoot = mkdtempSync(join(tempHome, 'proposal-project-'));
+    const proposalDir = join(projectRoot, '.bobby', 'proposals');
+    mkdirSync(proposalDir, { recursive: true });
+    const proposalPath = join(proposalDir, 'proposal-1.patch');
+    writeFileSync(proposalPath, 'diff --git a/target.txt b/target.txt\n', 'utf8');
+
+    const selectProject = handlers.get('project:select');
+    const apply = handlers.get('proposals:apply');
+    if (!selectProject || !apply) {
+      throw new Error('proposal handlers not registered');
+    }
+
+    await selectProject(undefined, { projectDir: projectRoot });
+
+    await expect(apply(undefined, {
+      proposalId: 'proposal-1',
+      gatePassed: true,
+      proReviewPassed: true,
+      humanConfirmed: true
+    })).rejects.toThrow(/completed ready background task/);
+    expect(applySubAgentProposal).not.toHaveBeenCalled();
+    expect(existsSync(proposalPath)).toBe(true);
+  });
+
+  it('applies proposals only when the main process finds a ready dispatch record', async () => {
+    await loadMain();
+    const projectRoot = mkdtempSync(join(tempHome, 'proposal-ready-project-'));
+    const bobbyDir = join(projectRoot, '.bobby');
+    const proposalDir = join(bobbyDir, 'proposals');
+    mkdirSync(proposalDir, { recursive: true });
+    const proposalPath = join(proposalDir, 'proposal-1.patch');
+    writeFileSync(proposalPath, 'diff --git a/target.txt b/target.txt\n', 'utf8');
+    writeFileSync(join(bobbyDir, 'subagent-dispatches.json'), JSON.stringify([
+      {
+        id: 'dispatch-1',
+        agentSourcePath: join(projectRoot, '.bobby', 'agents', 'writer.md'),
+        agentName: 'Writer',
+        task: 'Update target',
+        status: 'completed',
+        mergeState: 'ready',
+        createdAt: '2026-06-12T00:00:00.000Z',
+        updatedAt: '2026-06-12T00:01:00.000Z',
+        worktreePath: join(tempHome, 'worktree'),
+        proposalId: 'proposal-1',
+        proposalPath,
+        error: null
+      }
+    ], null, 2), 'utf8');
+
+    const selectProject = handlers.get('project:select');
+    const apply = handlers.get('proposals:apply');
+    if (!selectProject || !apply) {
+      throw new Error('proposal handlers not registered');
+    }
+
+    await selectProject(undefined, { projectDir: projectRoot });
+    const summary = await apply(undefined, {
+      proposalId: 'proposal-1',
+      gatePassed: false,
+      proReviewPassed: false,
+      humanConfirmed: true
+    }) as { proposalId: string };
+
+    expect(summary.proposalId).toBe('proposal-1');
+    expect(applySubAgentProposal).toHaveBeenCalledWith(proposalPath, {
+      gatePassed: true,
+      proReviewPassed: true,
+      humanConfirmed: true
+    }, projectRoot);
+    expect(existsSync(proposalPath)).toBe(false);
   });
 });
 
