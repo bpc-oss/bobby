@@ -30,7 +30,8 @@ import {
   type WorkspaceTreeNode
 } from '../ipc/contract';
 
-type DockTab = 'mission' | 'plan' | 'review' | 'diff' | 'terminal' | 'files' | 'browser' | 'sidechat' | 'preview' | 'tasks';
+export type DockTab = 'mission' | 'plan' | 'review' | 'diff' | 'terminal' | 'files' | 'browser' | 'sidechat' | 'preview' | 'tasks';
+export type DockTabRequest = { id: DockTab; nonce: number };
 
 const TABS: Array<{ id: DockTab; label: string; shortcut?: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: 'mission', label: 'Mission Control', icon: ClipboardList },
@@ -933,7 +934,7 @@ function ToolPanel({ kind }: { kind: 'terminal' | 'browser' | 'tasks' | 'sidecha
   return <div className="space-y-2">{command}{filtered.length === 0 ? <Empty title="No session data for this panel yet." /> : filtered.map((block) => <Row key={block.id} icon={icon} title={blockText(block)} meta={block.kind} />)}</div>;
 }
 
-export function SessionToolDock() {
+export function SessionToolDock({ requestedTab }: { requestedTab?: DockTabRequest | null }) {
   const [open, setOpen] = React.useState(true);
   const [tab, setTab] = React.useState<DockTab>('mission');
   const [proposals, setProposals] = React.useState<ProposalSummary[]>([]);
@@ -951,6 +952,15 @@ export function SessionToolDock() {
   React.useEffect(() => {
     void refreshProposals();
   }, [refreshProposals]);
+
+  React.useEffect(() => {
+    if (!requestedTab) return;
+    setTab(requestedTab.id);
+    setOpen(true);
+    if (requestedTab.id === 'review') {
+      void refreshProposals();
+    }
+  }, [refreshProposals, requestedTab]);
 
   const active = TABS.find((item) => item.id === tab) ?? TABS[0];
   const ActiveIcon = active.icon;

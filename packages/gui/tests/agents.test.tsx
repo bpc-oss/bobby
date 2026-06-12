@@ -74,6 +74,27 @@ describe('Agents screen', () => {
     expect(screen.getByText('worktree: C:\\temp\\worktree')).toBeTruthy();
     expect(screen.getByText('proposal: E:\\ai-files\\Bobby\\.bobby\\proposals\\proposal-1.patch')).toBeTruthy();
     expect(screen.getByText('Ready to apply')).toBeTruthy();
+    expect(screen.getByTestId('review-proposal-proposal-1')).toBeTruthy();
+  });
+
+  it('routes ready background proposals to the review/apply dock', async () => {
+    const navigate = vi.fn();
+    window.addEventListener('bobby:navigate', navigate);
+    try {
+      render(<Agents />);
+
+      fireEvent.click(await screen.findByTestId('review-proposal-proposal-1'));
+
+      expect(navigate).toHaveBeenCalledTimes(1);
+      const event = navigate.mock.calls[0]?.[0] as CustomEvent<{ page: string; dockTab: string; proposalId: string }>;
+      expect(event.detail).toEqual({
+        page: 'chat',
+        dockTab: 'review',
+        proposalId: 'proposal-1'
+      });
+    } finally {
+      window.removeEventListener('bobby:navigate', navigate);
+    }
   });
 
   it('saves a new agent and dispatches it as a worktree-backed task', async () => {

@@ -6,7 +6,7 @@ import { useChatStore } from './store/chat-store';
 import { Wizard } from './screens/Wizard';
 import { Workspace } from './screens/Workspace';
 import { Settings } from './screens/Settings';
-import { SessionToolDock } from './components/SessionToolDock';
+import { SessionToolDock, type DockTab, type DockTabRequest } from './components/SessionToolDock';
 import { Sidebar } from './components/Sidebar';
 import { PluginMarketplace } from './screens/PluginMarketplace';
 import { Agents } from './screens/Agents';
@@ -19,6 +19,7 @@ import './styles/tokens.css';
 
 type AppPage = 'chat' | 'history' | 'plugins' | 'agents' | 'commands' | 'schedule' | 'settings';
 type AppCommand = { type: 'new-task' } | { type: 'open-page'; page: AppPage; sessionId?: string };
+type AppNavigateEvent = CustomEvent<{ page?: AppPage; sessionId?: string; dockTab?: DockTab }>;
 
 const ONBOARDING_COMPLETE_KEY = 'bobby-onboarding-complete';
 const LAST_ACTIVE_SESSION_KEY = 'bobby-last-active-session';
@@ -66,6 +67,7 @@ export function App() {
     }
   });
   const [page, setPage] = React.useState<AppPage>('chat');
+  const [dockTabRequest, setDockTabRequest] = React.useState<DockTabRequest | null>(null);
   const [lang] = React.useState<'zh' | 'en'>('zh');
   const [setupStatus, setSetupStatus] = React.useState<OnboardingStatus | null>(null);
   const [setupLoading, setSetupLoading] = React.useState(false);
@@ -133,6 +135,26 @@ export function App() {
     };
     return window.bobby.onAppCommand(handleAppCommand as unknown as (command: { type: string }) => void);
   }, [newSession]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleNavigate = (event: Event) => {
+      const detail = (event as AppNavigateEvent).detail ?? {};
+      if (detail.sessionId) {
+        resumeSession(detail.sessionId);
+      }
+      if (detail.page) {
+        setPage(detail.page);
+      }
+      if (detail.dockTab) {
+        setDockTabRequest({ id: detail.dockTab, nonce: Date.now() });
+      }
+    };
+    window.addEventListener('bobby:navigate', handleNavigate);
+    return () => {
+      window.removeEventListener('bobby:navigate', handleNavigate);
+    };
+  }, [resumeSession]);
 
   React.useEffect(() => {
     if (!client?.getSetupStatus) {
@@ -237,7 +259,7 @@ export function App() {
         <section className="min-w-0 flex-1">
           <Workspace kernelClient={client ?? undefined} theme={theme} onThemeChange={handleTheme} />
         </section>
-        <SessionToolDock />
+        <SessionToolDock requestedTab={dockTabRequest} />
       </div>
     );
   }

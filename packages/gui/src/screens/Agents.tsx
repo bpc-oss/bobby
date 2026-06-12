@@ -51,7 +51,7 @@ function parseCsv(value: string): string[] {
     .filter(Boolean);
 }
 
-function DispatchBadge({ record }: { record: SubAgentDispatchRecordDto }) {
+function DispatchBadge({ record, onReviewProposal }: { record: SubAgentDispatchRecordDto; onReviewProposal?: (record: SubAgentDispatchRecordDto) => void }) {
   const palette = {
     queued: { label: 'Queued', color: 'var(--bobby-muted)', bg: 'var(--bobby-surface-subtle)' },
     running: { label: 'Running', color: 'var(--bobby-accent)', bg: 'var(--bobby-accent-soft)' },
@@ -85,7 +85,19 @@ function DispatchBadge({ record }: { record: SubAgentDispatchRecordDto }) {
             <div className="truncate">error: {record.error ?? '-'}</div>
           </div>
         </div>
-        <div className="shrink-0 text-[11px] text-bobby-faint">{new Date(record.updatedAt).toLocaleString()}</div>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <div className="text-[11px] text-bobby-faint">{new Date(record.updatedAt).toLocaleString()}</div>
+          {record.proposalId && record.mergeState === 'ready' ? (
+            <button
+              type="button"
+              data-testid={`review-proposal-${record.proposalId}`}
+              onClick={() => onReviewProposal?.(record)}
+              className="rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-white"
+            >
+              Review proposal
+            </button>
+          ) : null}
+        </div>
       </div>
     </article>
   );
@@ -216,6 +228,16 @@ export function Agents() {
       setDispatching(false);
     }
   }, [client, refresh, saveDraft, task]);
+
+  const openProposalReview = React.useCallback((record: SubAgentDispatchRecordDto) => {
+    window.dispatchEvent(new CustomEvent('bobby:navigate', {
+      detail: {
+        page: 'chat',
+        dockTab: 'review',
+        proposalId: record.proposalId ?? undefined
+      }
+    }));
+  }, []);
 
   const selectedAgent = agents.find((item) => item.sourcePath === selectedPath) ?? null;
 
@@ -423,7 +445,7 @@ export function Agents() {
                 ) : (
                   <div className="space-y-2">
                     {dispatches.slice(0, 6).map((record) => (
-                      <DispatchBadge key={record.id} record={record} />
+                      <DispatchBadge key={record.id} record={record} onReviewProposal={openProposalReview} />
                     ))}
                   </div>
                 )}

@@ -210,6 +210,23 @@ describe('workspace UI smoke', () => {
     expect(screen.queryByTitle('Code')).toBeNull();
   });
 
+  it('handles background proposal navigation by opening the review dock', async () => {
+    render(<App />);
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('bobby:navigate', {
+        detail: {
+          page: 'chat',
+          dockTab: 'review',
+          proposalId: 'proposal-1'
+        }
+      }));
+    });
+
+    expect(screen.getByTestId('chat-workbench')).toBeTruthy();
+    expect(screen.getByTestId('dock-active-tab').textContent).toBe('Review');
+  });
+
   it('renders the sidebar task list with task status and project name', () => {
     useChatStore.setState({
       activeSessionId: 'thread-2',

@@ -233,6 +233,13 @@ describe('SessionToolDock', () => {
     expect(screen.getByText('Ready')).toBeTruthy();
   });
 
+  it('opens the review panel when a background proposal requests review', async () => {
+    render(<SessionToolDock requestedTab={{ id: 'review', nonce: 1 }} />);
+
+    expect((await screen.findByTestId('dock-active-tab')).textContent).toBe('Review');
+    expect(window.bobby.listProposals).toHaveBeenCalled();
+  });
+
   it('loads workspace files from disk and previews the selected file', async () => {
     render(<SessionToolDock />);
 
