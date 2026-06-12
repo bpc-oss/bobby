@@ -111,6 +111,54 @@ Desktop Window
 | Right dock | Review, terminal, browser, files, side panels | Current dock exists but needs Codex-style integration |
 | Environment popover | Git, progress, browser, sources | Missing as a unified surface |
 
+## 2.1 Screenshot-To-Module Mapping
+
+This plan treats each visible Codex Desktop region as an explicit Bobby module. Work should not proceed as generic "polish"; every screenshot-observed region must map to a stable owner in code.
+
+| Screenshot area | Bobby target module | Primary files likely involved |
+|---|---|---|
+| Left icon rail | `ActivityRail` | `packages/gui/src/components/Sidebar.tsx`, shell layout files |
+| Project tree + task rows | `ProjectTaskNavigator` | `packages/gui/src/components/Sidebar.tsx`, `packages/gui/src/store/chat-store.ts` |
+| Center transcript | `MainTaskWorkspace` | `packages/gui/src/screens/Workspace.tsx`, chat block components |
+| Task header bar | `TaskHeader` | `packages/gui/src/screens/Workspace.tsx` |
+| Floating composer | `ComposerConsole` | `packages/gui/src/screens/Workspace.tsx`, composer-related components/store wiring |
+| Environment info card | `EnvironmentPopover` | GUI shell files, IPC bridge, git/progress/browser/source state |
+| Right tool shortcuts | `ToolDockLauncher` | workspace shell and dock components |
+| Review panel | `ReviewPanel` | proposal/review UI, dispatch/apply components |
+| Terminal panel | `TerminalPanel` | terminal IPC surface and dock UI |
+| Browser panel | `BrowserPanel` | preview/browser state and dock UI |
+| Files panel | `FilesPanel` | workspace tree IPC, file viewer UI |
+| Plugins menu/page | `PluginsWorkbench` | plugin settings page, composer menu, MCP status views |
+
+## 2.2 Current Gap Matrix
+
+The screenshots show that Bobby is still behind Codex Desktop in both structure and behavior. The following matrix is the authoritative gap list for the next implementation wave.
+
+| Area | Codex screenshot behavior | Bobby current state | Gap class | Required outcome |
+|---|---|---|---|---|
+| Shell hierarchy | Three-column workbench with floating overlays | Partially split, still reads as custom dashboard | Structural | Land stable Codex-style shell primitives |
+| Left navigation | Activity rail separate from project/task tree | Mixed sidebar responsibilities | IA | Split rail vs navigator cleanly |
+| Project model | Tasks nested under projects, searchable picker | Basic project handling, not first-class in navigation | Product | Make project selection and grouping central |
+| Task transcript | Dense task stream with explicit command/evidence blocks | Chat stream exists, but still simplified | Behavioral | Upgrade transcript semantics without hiding evidence |
+| Composer | Unified control console with modes, plugins, permissions, project, branch | Partially redesigned, not yet feature-complete parity | Product | Finish integrated console contract |
+| Environment card | Unified git/progress/browser/sources surface | Missing as a first-class surface | Structural | Add floating context popover |
+| Files tool | Docked split view with tree + preview | Presently not parity-grade | Functional | Build right-side files workspace |
+| Terminal tool | Docked terminal bound to project root | Limited/current placeholder behavior | Functional | Provide command execution panel with evidence |
+| Review flow | Review is a visible first-class dock path | Present but not yet Codex-grade workflow | High-risk | Keep gate authority and upgrade UX |
+| Plugin surface | Composer plugin menu and plugin management page | Fragmented | Product | Unify menu, page, and evidence surfacing |
+| Automation surface | Left entry with runnable history and jump-back | Not yet parity-grade | Product | Integrate automations into shell and history |
+| Desktop persistence | Dock/tool/project/task state persists | Partial | Usability | Persist and restore full workspace state |
+
+## 2.3 Guardrails For This UI Program
+
+These rules apply to every parity slice:
+
+1. No screenshot-only rewrites. Every visual change must preserve or improve the current typed state model.
+2. No fake controls. Buttons or menus visible in the UI must either work end-to-end or be explicitly marked unavailable.
+3. No renderer-owned business rules. Gate authority, git actions, session state, apply/rewind, and automation constraints stay outside presentational components.
+4. No evidence regression. Command output, reasoning, review status, and source visibility remain inspectable after any redesign.
+5. No broad refactor without slice acceptance. Each module lands behind passing tests and smoke coverage, then commit and push.
+
 ## 3. Non-Negotiable Product Invariants
 
 1. Completion gate remains the only authority for Apply, rewind, automation, and finish states.
@@ -584,7 +632,95 @@ Acceptance:
 - Composer and popovers no longer feel like generic dashboard controls.
 - Existing accessibility basics remain: focus states, labels, keyboard navigation.
 
-## 5. Recommended Execution Order
+## 4.1 Cross-Module Dependency Notes
+
+The UI workstreams are not independent. The following dependencies should shape implementation order:
+
+| Depends on | Why it must come first |
+|---|---|
+| Shell layout before tool parity | Review/files/browser/terminal all need a stable dock host and region sizing model |
+| Per-thread session routing before task visuals | Navigator, progress surfaces, and task header state will be wrong if task ownership is still ambiguous |
+| Composer console before plugin/command parity | Plugins, custom commands, plan mode, and permission flows all enter through the composer |
+| Environment popover before git/progress parity claims | Branch, dirty state, progress, and sources need one shared state surface |
+| Review dock before apply/commit UX parity | Completion gate cannot be represented cleanly without a review-first panel |
+
+## 5. Delivery Batches
+
+The work should now be executed as parity batches rather than ad hoc GUI edits.
+
+### Batch A: Shell Foundation
+
+- Activity rail
+- Project/task navigator
+- centered empty state
+- task header framing
+- right dock launcher strip
+- floating composer baseline
+
+Exit criteria:
+
+- Shell regions match screenshot hierarchy at 1366 px and 1440 px
+- Active task switching still works
+- No regression in send flow or transcript rendering
+
+### Batch B: Task And Composer Behavior
+
+- per-thread status rendering
+- command/evidence/reasoning cards
+- plan mode / goal tracking / permissions wiring
+- project picker / branch context row
+- plugin menu surface
+
+Exit criteria:
+
+- Two concurrent tasks remain visually and logically isolated
+- Composer controls affect real store/backend behavior
+- Screenshot parity for the lower-third control area is credible
+
+### Batch C: Right Dock Workspace
+
+- Review panel
+- Terminal panel
+- Browser panel
+- Files panel
+- dock persistence and shortcuts
+
+Exit criteria:
+
+- Every right-side shortcut opens a real working panel
+- Panels follow active project/task context
+- Errors surface as cards, not silent failures
+
+### Batch D: Context And Git Surface
+
+- environment popover
+- branch switcher
+- dirty counts
+- progress list
+- sources list
+- commit/push and PR affordances
+
+Exit criteria:
+
+- Git context is accurate and actionable
+- Progress follows the active task only
+- No action bypasses completion gate discipline
+
+### Batch E: Plugins, Automations, Search, Persistence
+
+- plugin workbench
+- automations page/history/jump
+- global search
+- desktop state restore
+- final visual system pass
+
+Exit criteria:
+
+- Plugin, automation, and search entries are first-class shell citizens
+- App restart restores meaningful workspace state
+- Final screenshot audit is mostly green except explicitly deferred items
+
+## 6. Recommended Execution Order
 
 This UI plan should be layered on top of the existing E0-E10 sequence.
 
@@ -603,9 +739,9 @@ E10-UI  Automations page, notification jump, history artifacts
 Final   Screenshot parity audit + full manual desktop acceptance script
 ```
 
-## 6. Next Immediate Work Item
+## 7. Immediate Next Slice
 
-### E1-UIA: Shell And Left Navigation
+### E1-UIA: Shell And Left Navigation Hardening
 
 Task:
 
@@ -634,7 +770,52 @@ Acceptance:
 - `pnpm -r test`
 - Commit and push immediately.
 
-## 7. Final Desktop Parity Acceptance Script
+### E1-UIB: Center Workspace And Composer Completion
+
+Task:
+
+- Finish the Codex-style center workspace and composer contract:
+  - remove non-parity header clutter from empty-state mode
+  - finalize composer menu structure
+  - ensure project picker, plan mode, goal tracking, and permission chips have correct real behavior
+  - keep right dock shortcuts visible in empty and active states
+
+Files likely touched:
+
+- `packages/gui/src/screens/Workspace.tsx`
+- `packages/gui/tests/workspace-screen.test.tsx`
+- composer-related component files if extracted
+
+Acceptance:
+
+- Empty state has one dominant centered focal prompt
+- Composer controls remain functional in empty and active task states
+- Right dock shortcuts remain visible with or without an active transcript
+- `pnpm --filter @bobby/gui test -- workspace-screen.test.tsx`
+- `pnpm -r test`
+- Electron smoke
+- Commit and push immediately
+
+## 8. Per-Module Acceptance Matrix
+
+This matrix is the working definition of "done enough" for each surface.
+
+| Module | Minimum acceptance |
+|---|---|
+| `ActivityRail` | icons/labels render, active state works, settings stays bottom-anchored |
+| `ProjectTaskNavigator` | project grouping, active task highlight, running state icon, scroll usability |
+| `MainTaskWorkspace` | active transcript correct, empty state distinct, evidence visible |
+| `TaskHeader` | title/status accurate per thread, does not pollute empty-state focal hierarchy |
+| `ComposerConsole` | send, stop, plan mode, goal tracking, permission chip, project picker all wired |
+| `EnvironmentPopover` | git counts, branch, progress, browser, sources render from real state |
+| `ReviewPanel` | diff/proposal state visible, apply respects all gates |
+| `TerminalPanel` | runs command in project root, shows stdout/stderr/exit code |
+| `BrowserPanel` | opens preview target, shows load/error state |
+| `FilesPanel` | searchable tree, preview, file selection, insert reference |
+| `PluginsWorkbench` | installed plugins visible, capability state accurate, tool calls evidenced |
+| `Automations` | list/create/run/history/jump flow works end-to-end |
+
+## 9. Final Desktop Parity Acceptance Script
 
 Full parity remains incomplete until this script passes on the real Electron app:
 
@@ -655,7 +836,7 @@ Full parity remains incomplete until this script passes on the real Electron app
 15. Run `pnpm -r test`.
 16. Run Electron smoke.
 
-## 8. Commit Discipline
+## 10. Commit Discipline
 
 For every sub-work item:
 

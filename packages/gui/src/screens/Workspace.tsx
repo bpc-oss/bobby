@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { GateDecision, KernelEvent } from '@bobby/shared';
-import { ChevronDown, ChevronUp, GitBranch, Lightbulb, Route, Search, Send, ShieldCheck, Square } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, GitBranch, Lightbulb, Mic, Plus, Route, Search, Send, ShieldCheck, Square } from 'lucide-react';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { useChatStore, type ChatBlock } from '../store/chat-store';
 import type { CapabilityReport, CommandRecordDto, SessionMode } from '../ipc/contract';
@@ -272,6 +272,26 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
   const pendingSelection = useRef<{ start: number; end: number } | null>(null);
   const requestToken = useRef(0);
   const worktreeRecommended = shouldUseWorktreePrompt(input);
+  const currentProject = useChatStore((s) => s.currentProject);
+  const recentProjects = useChatStore((s) => s.recentProjects);
+  const sessionMode = useChatStore((s) => s.sessionMode);
+  const setSessionMode = useChatStore((s) => s.setSessionMode);
+  const [goalTracking, setGoalTracking] = useState(true);
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const [projectQuery, setProjectQuery] = useState('');
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredProjects = React.useMemo(() => {
+    const normalized = projectQuery.trim().toLowerCase();
+    if (!normalized) {
+      return recentProjects;
+    }
+    return recentProjects.filter((project) => {
+      const haystack = `${project.name} ${project.path}`.toLowerCase();
+      return haystack.includes(normalized);
+    });
+  }, [projectQuery, recentProjects]);
 
   const refreshCustomCommands = useCallback(async () => {
     const listCommands = kernelClient?.listCommands;
@@ -282,6 +302,14 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
       setCustomCommands([]);
     }
   }, [kernelClient]);
+
+  const insertTextAtCursor = useCallback((value: string) => {
+    const start = ref.current?.selectionStart ?? input.length;
+    const end = ref.current?.selectionEnd ?? start;
+    const nextValue = `${input.slice(0, start)}${value}${input.slice(end)}`;
+    setInput(nextValue);
+    pendingSelection.current = { start: start + value.length, end: start + value.length };
+  }, [input]);
 
   useEffect(() => {
     let active = true;
@@ -637,12 +665,28 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
       );
     }
 
-    const insertion = `![${image.name}](${referencePath})`;
-    const cursor = ref.current?.selectionStart ?? input.length;
-    const nextValue = `${input.slice(0, cursor)}${insertion}${input.slice(ref.current?.selectionEnd ?? cursor)}`;
-    setInput(nextValue);
-    pendingSelection.current = { start: cursor + insertion.length, end: cursor + insertion.length };
-  }, [input, kernelClient, visionSupported]);
+    insertTextAtCursor(`![${image.name}](${referencePath})`);
+  }, [insertTextAtCursor, kernelClient, visionSupported]);
+
+  const handlePickedFiles = useCallback(async (fileList: FileList | null) => {
+    const selected = Array.from(fileList ?? []);
+    const file = selected[0] ?? null;
+    if (!file) return;
+
+    const sourcePath = (file as File & { path?: string }).path;
+    if (!sourcePath) {
+      setNotice('Selected file requires a local path. Try adding it from the workspace.');
+      return;
+    }
+
+    if (file.type.startsWith('image/')) {
+      await insertImageReference(file, sourcePath);
+      return;
+    }
+
+    insertTextAtCursor(`@${sourcePath}`);
+    setNotice(`Inserted local file reference: ${sourcePath}`);
+  }, [insertImageReference, insertTextAtCursor]);
 
   const onPaste = useCallback((event: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.clipboardData.files ?? []);
@@ -674,75 +718,299 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
     void insertImageReference(image, path);
   }, [insertImageReference]);
 
+  const permissionLabel = '\u5b8c\u5168\u8bbf\u95ee';
+  const projectLabel = currentProject?.name ?? '\u4e0d\u4f7f\u7528\u9879\u76ee';
+  const modeLabel = sessionMode === 'plan-only' ? '\u8ba1\u5212\u6a21\u5f0f' : '\u6807\u51c6\u6a21\u5f0f';
+
+  const createActions = [
+    {
+      key: 'mission',
+      label: '\u521b\u5efa\u4efb\u52a1',
+      prompt: 'Help me turn this rough request into a concrete task with scope, assumptions, risks, and acceptance criteria.'
+    },
+    {
+      key: 'plan',
+      label: '\u521b\u5efa\u8ba1\u5212',
+      prompt: 'Create a step-by-step execution plan with evidence checkpoints, testing, and final acceptance criteria.'
+    }
+  ] as const;
+
+  const pluginLabels = ['Browser', 'Chrome', 'Computer', 'LaTeX'];
+
+  const togglePlanMode = useCallback(() => {
+    setSessionMode(sessionMode === 'plan-only' ? 'standard' : 'plan-only');
+  }, [sessionMode, setSessionMode]);
+
+  const selectProjectEntry = useCallback((path: string | null) => {
+    if (!path) {
+      useChatStore.setState({ currentProject: null });
+      setProjectPickerOpen(false);
+      return;
+    }
+    const project = recentProjects.find((entry) => entry.path === path) ?? null;
+    if (project) {
+      useChatStore.setState({ currentProject: project });
+    }
+    setProjectPickerOpen(false);
+  }, [recentProjects]);
+
   return (
-    <div style={{ background: 'var(--bobby-bg-canvas)' }}>
-      <div className="mx-auto flex max-w-[740px] items-end gap-2.5 px-4 py-3">
-        <div
-          className="relative flex flex-1 items-end rounded-2xl border transition-shadow focus-within:shadow-md"
-          style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)', boxShadow: 'var(--bobby-shadow-chip)' }}
-        >
-          <textarea
-            ref={ref}
-            value={input}
-            onChange={onChange}
-            onKeyDown={key}
-            onClick={onClick}
-            onPaste={onPaste}
-            onDrop={onDrop}
-            placeholder="Describe a task, or try /help /plan /review..."
-            rows={1}
-            className="min-h-[46px] flex-1 resize-none border-0 bg-transparent px-4 py-3 text-[15px] leading-[1.5] text-bobby-ink outline-none placeholder:text-bobby-faint"
-          />
-          {menuOpen && menuItems.length > 0 && (
-            <div className="absolute left-0 top-full z-20 mt-2 w-full rounded-2xl border p-2 shadow-xl" style={{ background: 'var(--bobby-surface-elevated)', borderColor: 'var(--bobby-border)' }}>
-              {menuItems.map((item, index) => (
+    <div className="px-4 pb-4 pt-2" style={{ background: 'var(--bobby-bg-canvas)' }}>
+      <div
+        data-testid="composer-console"
+        className="mx-auto max-w-[760px] rounded-[28px] border"
+        style={{
+          background: 'rgba(27, 27, 31, 0.94)',
+          borderColor: 'rgba(255, 255, 255, 0.08)',
+          boxShadow: '0 24px 60px rgba(0, 0, 0, 0.35)'
+        }}
+      >
+        <div className="flex flex-wrap items-center gap-2 px-4 pt-3 text-[12px]">
+          <div className="relative">
+            <button
+              type="button"
+              aria-expanded={plusMenuOpen}
+              onClick={() => setPlusMenuOpen((current) => !current)}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full border text-bobby-muted transition hover:text-bobby-ink"
+              style={{ borderColor: 'rgba(255, 255, 255, 0.1)', background: 'rgba(255, 255, 255, 0.04)' }}
+              title="Add photos and files"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+            {plusMenuOpen ? (
+              <div
+                className="absolute left-0 top-full z-20 mt-2 w-[280px] rounded-2xl border p-3 shadow-2xl"
+                style={{ background: 'rgba(28, 28, 33, 0.98)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
+              >
                 <button
-                  key={item.key}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    pickItem(item);
+                  type="button"
+                  onClick={() => {
+                    setPlusMenuOpen(false);
+                    fileInputRef.current?.click();
                   }}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-[13px] transition ${index === menuIndex ? 'bg-bobby-hover text-bobby-ink' : 'text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink'}`}
+                  className="block w-full rounded-xl px-3 py-2 text-left text-[13px] text-bobby-muted transition hover:bg-bobby-hover hover:text-bobby-ink"
                 >
-                  <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
-                  {item.detail && <span className="truncate text-[11px] text-bobby-faint">{item.detail}</span>}
+                  {'\u6dfb\u52a0\u7167\u7247\u548c\u6587\u4ef6'}
                 </button>
-              ))}
-            </div>
-          )}
-        </div>
-        {busy && (
-          <button onClick={onAbort} aria-label="Stop current task" className="inline-flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl text-white hover:opacity-90" style={{ background: 'var(--bobby-danger)' }}>
-            <Square className="h-4 w-4 fill-current" />
+
+                <div className="mt-2 rounded-xl border px-3 py-2" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
+                  <div className="text-[12px] font-medium text-bobby-ink">{'\u521b\u5efa'}</div>
+                  <div className="mt-2 space-y-1">
+                    {createActions.map((action) => (
+                      <button
+                        key={action.key}
+                        type="button"
+                        onClick={() => {
+                          setPlusMenuOpen(false);
+                          setInput(action.prompt);
+                        }}
+                        className="block w-full rounded-lg px-2 py-1.5 text-left text-[12px] text-bobby-muted transition hover:bg-bobby-hover hover:text-bobby-ink"
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-2 rounded-xl border px-3 py-2" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
+                  <div className="text-[12px] font-medium text-bobby-ink">{'\u8ba1\u5212\u6a21\u5f0f'}</div>
+                  <button
+                    type="button"
+                    onClick={() => setSessionMode(sessionMode === 'plan-only' ? 'standard' : 'plan-only')}
+                    className="mt-2 block w-full rounded-lg px-2 py-1.5 text-left text-[12px] text-bobby-muted transition hover:bg-bobby-hover hover:text-bobby-ink"
+                  >
+                    {sessionMode === 'plan-only' ? '\u5173\u95ed\u8ba1\u5212\u6a21\u5f0f' : '\u5f00\u542f\u8ba1\u5212\u6a21\u5f0f'}
+                  </button>
+                </div>
+
+                <div className="mt-2 rounded-xl border px-3 py-2" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
+                  <div className="text-[12px] font-medium text-bobby-ink">{'\u76ee\u6807'}</div>
+                  <button
+                    type="button"
+                    onClick={() => setGoalTracking((current) => !current)}
+                    className="mt-2 block w-full rounded-lg px-2 py-1.5 text-left text-[12px] text-bobby-muted transition hover:bg-bobby-hover hover:text-bobby-ink"
+                  >
+                    {goalTracking ? '\u5173\u95ed\u76ee\u6807\u8ffd\u8e2a' : '\u5f00\u542f\u76ee\u6807\u8ffd\u8e2a'}
+                  </button>
+                </div>
+
+                <div className="mt-2 rounded-xl border px-3 py-2" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
+                  <div className="text-[12px] font-medium text-bobby-ink">{'\u63d2\u4ef6'}</div>
+                  <div className="mt-2 text-[11px] text-bobby-faint">{'4 \u4e2a\u5df2\u5b89\u88c5\u63d2\u4ef6'}</div>
+                  <div className="mt-2 space-y-1">
+                    {pluginLabels.map((label) => (
+                      <div key={label} className="rounded-lg px-2 py-1.5 text-[12px] text-bobby-muted">
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="rounded-full px-2.5 py-1 font-medium"
+            style={{ color: '#fb923c', background: 'rgba(251, 146, 60, 0.12)' }}
+          >
+            {permissionLabel}
           </button>
-        )}
-        <button onClick={send} disabled={!input.trim()} className="inline-flex h-[46px] shrink-0 items-center gap-1.5 rounded-xl px-5 text-[14px] font-semibold text-white shadow-sm hover:brightness-110 disabled:opacity-40" style={{ background: 'var(--bobby-accent)' }}>
-          <Send className="h-4 w-4" />Send
-        </button>
+          <button
+            data-testid="composer-plan-toggle"
+            type="button"
+            aria-pressed={sessionMode === 'plan-only'}
+            onClick={togglePlanMode}
+            className="rounded-full px-2.5 py-1 text-bobby-muted transition hover:text-bobby-ink"
+            style={{ background: sessionMode === 'plan-only' ? 'rgba(255, 255, 255, 0.1)' : 'transparent' }}
+          >
+            计划模式
+          </button>
+          <button
+            data-testid="composer-goal-toggle"
+            type="button"
+            aria-pressed={goalTracking}
+            onClick={() => setGoalTracking((current) => !current)}
+            className="rounded-full px-2.5 py-1 text-bobby-muted transition hover:text-bobby-ink"
+            style={{ background: goalTracking ? 'rgba(255, 255, 255, 0.1)' : 'transparent' }}
+          >
+            {'\u76ee\u6807'}
+          </button>
+          <span className="ml-auto text-[11px] text-bobby-faint">{modeLabel}</span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(event) => {
+              void handlePickedFiles(event.currentTarget.files);
+              event.currentTarget.value = '';
+            }}
+          />
+        </div>
+
+        <div className="px-4 pb-2 pt-2">
+          <div
+            className="relative rounded-[22px] border"
+            style={{ background: 'rgba(255, 255, 255, 0.04)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
+          >
+            <textarea
+              ref={ref}
+              value={input}
+              onChange={onChange}
+              onKeyDown={key}
+              onClick={onClick}
+              onPaste={onPaste}
+              onDrop={onDrop}
+              placeholder="随心输入，或试试 /help /plan /review... / Describe a task..."
+              rows={1}
+              className="min-h-[88px] w-full resize-none border-0 bg-transparent px-5 py-4 text-[16px] leading-[1.55] text-white outline-none placeholder:text-bobby-faint"
+            />
+            {menuOpen && menuItems.length > 0 && (
+              <div className="absolute left-3 right-3 top-full z-20 mt-2 rounded-2xl border p-2 shadow-xl" style={{ background: 'var(--bobby-surface-elevated)', borderColor: 'var(--bobby-border)' }}>
+                {menuItems.map((item, index) => (
+                  <button
+                    key={item.key}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      pickItem(item);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-[13px] transition ${index === menuIndex ? 'bg-bobby-hover text-bobby-ink' : 'text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink'}`}
+                  >
+                    <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
+                    {item.detail && <span className="truncate text-[11px] text-bobby-faint">{item.detail}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-t px-4 pb-3 pt-2" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
+          <div className="relative">
+            <button
+              data-testid="composer-project-picker"
+              type="button"
+              onClick={() => setProjectPickerOpen((current) => !current)}
+              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] text-bobby-muted transition hover:text-bobby-ink"
+              style={{ background: 'rgba(255, 255, 255, 0.06)' }}
+            >
+              {projectLabel}
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {projectPickerOpen && (
+              <div className="absolute bottom-full left-0 z-20 mb-2 w-[320px] rounded-2xl border p-3 shadow-2xl" style={{ background: 'rgba(28, 28, 33, 0.98)', borderColor: 'rgba(255, 255, 255, 0.08)' }}>
+                <input
+                  value={projectQuery}
+                  onChange={(event) => setProjectQuery(event.target.value)}
+                  placeholder="搜索项目"
+                  className="w-full rounded-xl border px-3 py-2 text-[12px] text-white outline-none placeholder:text-bobby-faint"
+                  style={{ background: 'rgba(255, 255, 255, 0.04)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
+                />
+                <div className="mt-3 max-h-[240px] space-y-1 overflow-y-auto">
+                  {filteredProjects.map((project) => (
+                    <button
+                      key={project.path}
+                      type="button"
+                      onClick={() => selectProjectEntry(project.path)}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[13px] text-bobby-muted transition hover:bg-bobby-hover hover:text-bobby-ink"
+                    >
+                      <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                  {currentProject?.path === project.path ? <Check className="h-3.5 w-3.5" /> : null}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 space-y-1 border-t pt-3" style={{ borderColor: 'rgba(255, 255, 255, 0.08)' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProjectPickerOpen(false);
+                      void window.bobby?.openProject?.();
+                    }}
+                    className="block w-full rounded-xl px-3 py-2 text-left text-[13px] text-bobby-muted transition hover:bg-bobby-hover hover:text-bobby-ink"
+                  >
+                    {'\u6dfb\u52a0\u65b0\u9879\u76ee'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectProjectEntry(null)}
+                    className="block w-full rounded-xl px-3 py-2 text-left text-[13px] text-bobby-muted transition hover:bg-bobby-hover hover:text-bobby-ink"
+                  >
+                    {'\u4e0d\u4f7f\u7528\u9879\u76ee'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          <span className="rounded-full px-3 py-1.5 text-[12px] text-bobby-muted" style={{ background: 'rgba(255, 255, 255, 0.06)' }}>{'\u672c\u5730\u6a21\u5f0f'}</span>
+          <span className="rounded-full px-3 py-1.5 text-[12px] text-bobby-muted" style={{ background: 'rgba(255, 255, 255, 0.06)' }}>
+            {currentProject?.path?.split(/[\\/]/).filter(Boolean).at(-1) ?? '\u65e0\u5206\u652f'}
+          </span>
+          <span className="ml-auto inline-flex items-center gap-2 text-[12px] text-bobby-faint">
+            <Mic className="h-3.5 w-3.5" />
+          </span>
+          {busy ? (
+            <button onClick={onAbort} aria-label="Stop current task" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:opacity-90" style={{ background: 'var(--bobby-danger)' }}>
+              <Square className="h-3.5 w-3.5 fill-current" />
+            </button>
+          ) : null}
+          <button onClick={send} disabled={!input.trim()} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[13px] font-semibold text-white shadow-sm hover:brightness-110 disabled:opacity-40" style={{ background: 'var(--bobby-accent)' }}>
+            <Send className="h-3.5 w-3.5" />Send
+          </button>
+        </div>
       </div>
-      <div className="mx-auto flex max-w-[740px] justify-between px-4 pb-2">
+
+      <div className="mx-auto flex max-w-[760px] justify-between px-2 pb-2 pt-2">
         <span className="text-[11px] text-bobby-faint">Ctrl+N new / Ctrl+K clear / /help /plan /review /status /cost /undo</span>
         <span className="text-[11px] text-bobby-faint">Enter to send, Shift+Enter for new line</span>
       </div>
       {worktreeRecommended && (
-        <div className="mx-auto max-w-[740px] px-4 pb-2">
+        <div className="mx-auto max-w-[760px] px-2 pb-2">
           <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] text-bobby-muted" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}>
             <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: 'var(--bobby-accent)' }} />
             Worktree proposal enabled
           </div>
         </div>
       )}
-      {notice && <div className="mx-auto max-w-[740px] px-4 pb-2 text-[11px] text-bobby-muted">{notice}</div>}
-    </div>
-  );
-}
-
-function AnimatedLogo() {
-  return (
-    <div className="mb-6 flex items-center justify-center" style={{ animation: 'bobby-pulse 2s ease-in-out infinite' }}>
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl" style={{ background: 'var(--bobby-accent)', boxShadow: '0 8px 32px rgba(99,102,241,0.3)' }}>
-        <span className="text-2xl font-bold text-white">B</span>
-      </div>
+      {notice && <div className="mx-auto max-w-[760px] px-2 pb-2 text-[11px] text-bobby-muted">{notice}</div>}
     </div>
   );
 }
@@ -756,17 +1024,18 @@ function SuggestionCards({ onPick }: { onPick: (text: string) => void }) {
     { icon: Search, title: 'Audit the session', sub: 'Find gaps against the requested outcome', prompt: 'Review the current session against the original request, identify missing requirements, and propose concrete fixes.' }
   ];
   return (
-    <div className="flex flex-col items-center justify-center py-16">
-      <AnimatedLogo />
-      <div className="mb-2 text-3xl font-bold tracking-tight text-bobby-ink">Hi, I'm Bobby</div>
-      <p className="mb-8 text-[15px] text-bobby-muted">Start with a mission, then let the agent plan, act, and prove it.</p>
-      <div className="grid max-w-[640px] grid-cols-2 gap-3">
+    <div className="flex flex-col items-center justify-center px-4 py-20 text-center">
+      <div className="max-w-[760px]">
+        <div className="text-5xl font-semibold tracking-tight text-bobby-ink">{'\u6211\u4eec\u5e94\u8be5\u5728 Bobby \u4e2d\u6784\u5efa\u4ec0\u4e48?'}</div>
+        <p className="mx-auto mt-4 max-w-[560px] text-[15px] leading-7 text-bobby-muted">{'\u4ece\u4e00\u4e2a\u660e\u786e\u4efb\u52a1\u5f00\u59cb\uff0c\u7136\u540e\u8ba9\u4ee3\u7406\u89c4\u5212\u3001\u6267\u884c\u3001\u4e3e\u8bc1\u5e76\u5b8c\u6210\u9a8c\u6536\u3002'}</p>
+      </div>
+      <div className="mt-12 grid w-full max-w-[720px] grid-cols-2 gap-3 text-left">
         {cards.map((card) => (
           <button
             key={card.title}
             onClick={() => onPick(card.prompt)}
-            className="bobby-empty-hero-card cursor-pointer rounded-2xl border p-4 text-left transition-all hover:border-accent/30 hover:shadow-md"
-            style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border)' }}
+            className="bobby-empty-hero-card cursor-pointer rounded-2xl border p-4 transition-all hover:border-accent/30 hover:shadow-md"
+            style={{ background: 'rgba(255, 255, 255, 0.04)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
           >
             <card.icon className="mb-2 h-5 w-5" style={{ color: 'var(--bobby-accent)' }} />
             <div className="text-[13px] font-semibold text-bobby-ink">{card.title}</div>
@@ -774,52 +1043,6 @@ function SuggestionCards({ onPick }: { onPick: (text: string) => void }) {
           </button>
         ))}
       </div>
-    </div>
-  );
-}
-
-const MODE_CONFIG: Record<SessionMode, { label: string; hint: string; rank: number; ariaLabel: string }> = {
-  'plan-only': { label: '观察', hint: 'plan-only', rank: 0, ariaLabel: '观察' },
-  standard: { label: '标准', hint: 'L2', rank: 1, ariaLabel: '标准' },
-  enhanced: { label: '增强', hint: 'L3', rank: 2, ariaLabel: '增强' },
-  full: { label: '完全', hint: 'L4', rank: 3, ariaLabel: '完全' }
-};
-
-function SessionModeSwitcher({
-  mode,
-  onChange
-}: {
-  mode: SessionMode;
-  onChange: (mode: SessionMode) => void;
-}) {
-  const options: SessionMode[] = ['plan-only', 'standard', 'enhanced', 'full'];
-  return (
-    <div className="mx-auto flex max-w-[740px] items-center gap-2 px-4 pb-2">
-      <span className="text-[11px] text-bobby-faint">Mode</span>
-      <div className="flex flex-wrap gap-2">
-        {options.map((option) => {
-          const active = mode === option;
-          const config = MODE_CONFIG[option];
-          return (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={active}
-              onClick={() => onChange(option)}
-              className={`rounded-full border px-3 py-1 text-[12px] font-medium transition ${active ? 'text-bobby-ink' : 'text-bobby-muted hover:text-bobby-ink'}`}
-              style={{
-                background: active ? 'var(--bobby-accent-soft)' : 'var(--bobby-surface-card)',
-                borderColor: active ? 'var(--bobby-accent)' : 'var(--bobby-border)'
-              }}
-              aria-label={config.ariaLabel}
-              title={`${config.label} (${config.hint})`}
-            >
-              {config.label}
-            </button>
-          );
-        })}
-      </div>
-      <span className="ml-auto text-[11px] text-bobby-faint">{MODE_CONFIG[mode].label} / {MODE_CONFIG[mode].hint}</span>
     </div>
   );
 }
@@ -832,23 +1055,30 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange }: Work
   const status = useChatStore((s) => s.status);
   const costUsd = useChatStore((s) => s.costUsd);
   const model = useChatStore((s) => s.model);
-  const sessionMode = useChatStore((s) => s.sessionMode);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const setClient = useChatStore((s) => s.setClient);
   const handleEvent = useChatStore((s) => s.handleEvent);
   const abort = useChatStore((s) => s.abort);
   const clearBlocks = useChatStore((s) => s.clearBlocks);
   const newSession = useChatStore((s) => s.newSession);
-  const setSessionMode = useChatStore((s) => s.setSessionMode);
+  const currentTaskId = useChatStore((s) => s.currentTaskId);
+  const activeSessionId = useChatStore((s) => s.activeSessionId);
+  const threads = useChatStore((s) => s.threads);
   const [selectedModel, setSelectedModel] = useState('deepseek-chat');
   const [showModelPicker, setShowModelPicker] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const activeThread = activeSessionId ? threads[activeSessionId] ?? null : null;
+  const headerTitle = activeThread?.title ?? '\u65b0\u5bf9\u8bdd';
+  const showTaskHeader = blocks.length > 0 || busy || Boolean(liveAssistant) || Boolean(liveReasoning);
 
   useEffect(() => {
+    if (blocks.length === 0 && !busy && !liveAssistant && !liveReasoning) {
+      return;
+    }
     try {
       bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' });
     } catch {}
-  }, [blocks, liveAssistant, liveReasoning]);
+  }, [blocks, busy, liveAssistant, liveReasoning]);
 
   useEffect(() => {
     if (!kernelClient) return;
@@ -912,7 +1142,23 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange }: Work
       </div>
       <div className="mx-4 border-t" style={{ borderColor: 'var(--bobby-border-muted)' }} />
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[740px] px-4 py-5">
+        <div className="mx-auto max-w-[860px] px-4 py-5">
+          {showTaskHeader ? (
+            <div className="mb-4 rounded-[24px] border px-5 py-4" style={{ background: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(255, 255, 255, 0.08)' }}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="truncate text-[28px] font-semibold tracking-tight text-bobby-ink">{headerTitle}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-bobby-faint">
+                    <span>{busy ? '\u6b63\u5728\u601d\u8003' : status === 'idle' ? '\u7b49\u5f85\u8f93\u5165' : status}</span>
+                    {currentTaskId ? <span>{`• ${currentTaskId}`}</span> : null}
+                  </div>
+                </div>
+                <div className="rounded-full px-3 py-1 text-[11px] font-medium text-bobby-muted" style={{ background: 'rgba(255, 255, 255, 0.06)' }}>
+                  {selectedModel === 'deepseek-chat' ? 'V3' : 'R1'}
+                </div>
+              </div>
+            </div>
+          ) : null}
           {blocks.length === 0 && !busy && <SuggestionCards onPick={sendMessage} />}
           {blocks.map((block) => <ChatRow key={block.id} block={block} />)}
           {busy && (
@@ -925,18 +1171,6 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange }: Work
           <div ref={bottomRef} />
         </div>
       </div>
-      <SessionModeSwitcher
-        mode={sessionMode}
-        onChange={(nextMode) => {
-          const nextConfig = MODE_CONFIG[nextMode as SessionMode];
-          const currentConfig = MODE_CONFIG[sessionMode];
-          if (nextConfig.rank > currentConfig.rank) {
-            const ok = window.confirm('Switching to a higher permission mode will allow more execution. Continue?');
-            if (!ok) return;
-          }
-          setSessionMode(nextMode);
-        }}
-      />
       <Composer kernelClient={kernelClient} onSend={sendMessage} busy={busy} onAbort={abort} />
     </div>
   );

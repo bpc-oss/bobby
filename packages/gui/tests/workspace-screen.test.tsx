@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
@@ -110,7 +110,7 @@ describe('workspace UI smoke', () => {
     useChatStore.setState({ busy: true, status: 'running' });
     render(<Workspace kernelClient={client} />);
 
-    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const input = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
     expect(input.disabled).toBe(false);
 
     fireEvent.change(input, { target: { value: 'run another task' } });
@@ -125,8 +125,8 @@ describe('workspace UI smoke', () => {
     const client = makeKernelClientMock();
     render(<Workspace kernelClient={client} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /观察/i }));
-    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    fireEvent.click(screen.getByTestId('composer-plan-toggle'));
+    const input = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: 'plan this task' } });
     fireEvent.click(screen.getByText('Send'));
 
@@ -139,7 +139,7 @@ describe('workspace UI smoke', () => {
     const client = makeKernelClientMock();
     render(<Workspace kernelClient={client} />);
 
-    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const input = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: 'Edit src/screens/Workspace.tsx to fix the layout' } });
     expect(screen.getByText(/Worktree proposal enabled/)).toBeTruthy();
     fireEvent.click(screen.getByText('Send'));
@@ -161,7 +161,7 @@ describe('workspace UI smoke', () => {
     ]);
     render(<Workspace kernelClient={client} />);
 
-    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const input = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '@wor' } });
     expect(await screen.findByText('Workspace.tsx')).toBeTruthy();
     expect(screen.getByText(/Composer preview/)).toBeTruthy();
@@ -176,7 +176,7 @@ describe('workspace UI smoke', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<Workspace kernelClient={client} />);
 
-    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const input = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '/undo' } });
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter' });
@@ -191,7 +191,7 @@ describe('workspace UI smoke', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<Workspace kernelClient={client} />);
 
-    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const input = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '/undo' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -312,6 +312,99 @@ describe('workspace UI smoke', () => {
     expect(screen.queryByText('Code')).toBeNull();
   });
 
+  it('renders a codex-style empty state and floating composer console', () => {
+    useChatStore.setState({
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      },
+      recentProjects: [
+        {
+          name: 'Bobby',
+          path: 'E:\\ai-files\\Bobby',
+          lastOpenedAt: '2026-06-12T00:00:00.000Z'
+        },
+        {
+          name: 'AI XIAOSHUO',
+          path: 'E:\\ai-files\\AI-XIAOSHUO',
+          lastOpenedAt: '2026-06-11T00:00:00.000Z'
+        }
+      ]
+    });
+
+    render(<Workspace kernelClient={makeKernelClientMock()} />);
+
+    expect(screen.getAllByText('我们应该在 Bobby 中构建什么?').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('composer-console')).toBeTruthy();
+    expect(screen.getByTestId('composer-project-picker')).toBeTruthy();
+    expect(screen.getByTestId('composer-plan-toggle')).toBeTruthy();
+    expect(screen.getByTestId('composer-goal-toggle')).toBeTruthy();
+    expect(screen.getByText('完全访问')).toBeTruthy();
+    expect(screen.queryByText('新对话')).toBeNull();
+    expect(screen.queryByText('等待输入')).toBeNull();
+    expect(screen.getByText('目标')).toBeTruthy();
+  });
+
+  it('opens the plus menu with create, mode, and plugin sections', () => {
+    render(<Workspace kernelClient={makeKernelClientMock()} />);
+
+    fireEvent.click(screen.getByTitle('Add photos and files'));
+
+    expect(screen.getByText('添加照片和文件')).toBeTruthy();
+    expect(screen.getByText('创建')).toBeTruthy();
+    expect(screen.getAllByText('计划模式').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('目标').length).toBeGreaterThan(0);
+    expect(screen.getByText('插件')).toBeTruthy();
+  });
+
+  it('opens the composer project picker and shows recent projects', () => {
+    useChatStore.setState({
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      },
+      recentProjects: [
+        {
+          name: 'Bobby',
+          path: 'E:\\ai-files\\Bobby',
+          lastOpenedAt: '2026-06-12T00:00:00.000Z'
+        },
+        {
+          name: 'AI XIAOSHUO',
+          path: 'E:\\ai-files\\AI-XIAOSHUO',
+          lastOpenedAt: '2026-06-11T00:00:00.000Z'
+        }
+      ]
+    });
+
+    render(<Workspace kernelClient={makeKernelClientMock()} />);
+
+    fireEvent.click(screen.getByTestId('composer-project-picker'));
+
+    expect(screen.getByPlaceholderText('搜索项目')).toBeTruthy();
+    expect(screen.getAllByText('Bobby').length).toBeGreaterThan(0);
+    expect(screen.getByText('AI XIAOSHUO')).toBeTruthy();
+    expect(screen.getByText('添加新项目')).toBeTruthy();
+    expect(screen.getByText('不使用项目')).toBeTruthy();
+  });
+
+  it('toggles plan mode from the composer control bar and forwards plan-only to startTask', async () => {
+    const client = makeKernelClientMock();
+    render(<Workspace kernelClient={client} />);
+
+    fireEvent.click(screen.getByTestId('composer-plan-toggle'));
+
+    const input = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'plan this task' } });
+    fireEvent.click(screen.getByText('Send'));
+
+    await vi.waitFor(() => {
+      expect(client.startTask).toHaveBeenCalledWith('plan this task', 'plan-only', expect.stringMatching(/^task-/));
+    });
+  });
+
   it('separates real side-tool entry points from mission status boards', () => {
     render(<App />);
 
@@ -341,7 +434,7 @@ describe('workspace UI smoke', () => {
     ]);
     render(<Workspace kernelClient={client} />);
 
-    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const input = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '/sum' } });
     expect(await screen.findByText('summarize')).toBeTruthy();
 
@@ -358,7 +451,7 @@ describe('workspace UI smoke', () => {
     client.saveAttachment.mockResolvedValueOnce({ path: '.bobby/uploads/clip.png' });
     render(<Workspace kernelClient={client} />);
 
-    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const input = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
     const image = new File(['image-bytes'], 'clip.png', { type: 'image/png' }) as File & { path?: string };
     Object.defineProperty(image, 'path', { value: 'C:\\temp\\clip.png' });
 
@@ -376,7 +469,7 @@ describe('workspace UI smoke', () => {
     client.saveAttachment.mockResolvedValueOnce({ path: '.bobby/uploads/drop.png' });
     render(<Workspace kernelClient={client} />);
 
-    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const input = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
     const image = new File(['image-bytes'], 'drop.png', { type: 'image/png' }) as File & { path?: string };
     Object.defineProperty(image, 'path', { value: 'C:\\temp\\drop.png' });
 
@@ -415,7 +508,7 @@ describe('workspace UI smoke', () => {
       await Promise.resolve();
     });
 
-    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const input = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
     const image = new File(['image-bytes'], 'vision.png', { type: 'image/png' }) as File & { path?: string };
     Object.defineProperty(image, 'path', { value: 'C:\\temp\\vision.png' });
 
@@ -449,7 +542,7 @@ describe('workspace UI smoke', () => {
 
     render(<Workspace kernelClient={client} />);
 
-    const input = screen.getByPlaceholderText(/Describe a task/) as HTMLTextAreaElement;
+    const input = screen.getByPlaceholderText(/随心输入|Describe a task/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '/rew' } });
     expect(screen.queryByText('rewrite')).toBeNull();
 
