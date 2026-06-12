@@ -172,6 +172,19 @@ describe('SessionToolDock', () => {
     expect(screen.queryByTitle(/Background Tasks/)).toBeNull();
   });
 
+  it('shows dock labels and shortcuts as visible navigation text', () => {
+    render(<SessionToolDock />);
+
+    expect(screen.getAllByText('Review').length).toBeGreaterThan(0);
+    expect(screen.getByText('Terminal')).toBeTruthy();
+    expect(screen.getByText('Browser')).toBeTruthy();
+    expect(screen.getByText('Files')).toBeTruthy();
+    expect(screen.getAllByText('Ctrl+Shift+G').length).toBeGreaterThan(0);
+    expect(screen.getByText('Ctrl+`')).toBeTruthy();
+    expect(screen.getByText('Ctrl+T')).toBeTruthy();
+    expect(screen.getByText('Ctrl+P')).toBeTruthy();
+  });
+
   it('opens the review panel when a background proposal requests review', async () => {
     render(<SessionToolDock requestedTab={{ id: 'review', nonce: 1 }} />);
 

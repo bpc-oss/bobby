@@ -144,7 +144,7 @@ function RailButton({
       aria-disabled={disabled}
       disabled={disabled}
       onClick={onClick}
-      className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-[13px] transition ${
+      className={`flex w-full items-center gap-2 rounded-2xl px-2.5 py-2.5 text-left text-[12px] transition ${
         disabled ? 'cursor-not-allowed opacity-45' : ''
       }`}
       style={{
@@ -240,7 +240,7 @@ export function Sidebar({ page, onPage, onNewSession }: SidebarProps): React.Rea
   return (
     <aside
       data-testid="sidebar"
-      className="flex h-full w-[320px] shrink-0 border-r"
+      className="flex h-full w-[368px] shrink-0 border-r"
       style={{
         background: 'var(--bobby-sidebar-gradient)',
         borderColor: 'var(--bobby-sidebar-border)',
@@ -249,7 +249,7 @@ export function Sidebar({ page, onPage, onNewSession }: SidebarProps): React.Rea
     >
       <div
         data-testid="activity-rail"
-        className="flex w-[88px] shrink-0 flex-col border-r px-3 py-4"
+        className="flex w-[132px] shrink-0 flex-col border-r px-3 py-4"
         style={{ borderColor: 'var(--bobby-sidebar-divider)' }}
       >
         <div className="space-y-1.5">

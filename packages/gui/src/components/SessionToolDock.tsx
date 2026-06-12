@@ -1195,21 +1195,40 @@ export function SessionToolDock({ requestedTab }: { requestedTab?: DockTabReques
 
   return (
     <aside className="flex h-full shrink-0 border-l" style={{ background: 'var(--bobby-bg-canvas)', borderColor: 'var(--bobby-border)' }}>
-      <nav className="flex w-12 flex-col items-center gap-1 overflow-y-auto border-r px-1.5 py-2" style={{ borderColor: 'var(--bobby-border-muted)', background: 'var(--bobby-surface-elevated)' }}>
-        <button type="button" onClick={() => setOpen((value) => !value)} className="mb-1 rounded-md p-1.5 text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink" title={open ? 'Collapse dock' : 'Open dock'}>
+      <nav className="flex w-[156px] flex-col gap-1 overflow-y-auto border-r px-2 py-2" style={{ borderColor: 'var(--bobby-border-muted)', background: 'var(--bobby-surface-elevated)' }}>
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          className="mb-1 inline-flex items-center justify-center self-end rounded-md p-1.5 text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink"
+          title={open ? 'Collapse dock' : 'Open dock'}
+        >
           {open ? <ChevronRight className="h-4 w-4" /> : <PanelRight className="h-4 w-4" />}
         </button>
         {TABS.map((item) => {
           const Icon = item.icon;
           return (
-            <button key={item.id} type="button" onClick={() => { setTab(item.id); setOpen(true); }} title={item.shortcut ? `${item.label} (${item.shortcut})` : item.label} className="rounded-md p-1.5 text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink" style={tab === item.id ? { background: 'var(--bobby-accent-soft)', color: 'var(--bobby-accent)' } : undefined}>
-              <Icon className="h-4 w-4" />
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setTab(item.id);
+                setOpen(true);
+              }}
+              title={item.shortcut ? `${item.label} (${item.shortcut})` : item.label}
+              className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-left text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink"
+              style={tab === item.id ? { background: 'var(--bobby-accent-soft)', color: 'var(--bobby-accent)' } : undefined}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-medium">{item.label}</div>
+                <div className="truncate text-[11px] text-bobby-faint">{item.shortcut ?? 'Current session panel'}</div>
+              </div>
             </button>
           );
         })}
       </nav>
       {open && (
-        <section className="flex w-[380px] min-w-0 flex-col">
+        <section className="flex w-[344px] min-w-0 flex-col">
           <header className="flex items-center gap-2 border-b px-3 py-2.5" style={{ borderColor: 'var(--bobby-border-muted)' }}>
             <ActiveIcon className="h-4 w-4 text-bobby-muted" />
             <div className="min-w-0 flex-1">

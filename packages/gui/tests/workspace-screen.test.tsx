@@ -349,7 +349,7 @@ describe('workspace UI smoke', () => {
     const workbench = screen.getByTestId('chat-workbench');
     expect(workbench.className).toContain('flex');
     expect(workbench.className).toContain('h-full');
-    expect(screen.getByText('Review')).toBeTruthy();
+    expect(screen.getAllByText('Review').length).toBeGreaterThan(0);
     expect(screen.queryByTitle('Write')).toBeNull();
     expect(screen.queryByTitle('Code')).toBeNull();
   });
