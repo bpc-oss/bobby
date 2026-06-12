@@ -118,6 +118,7 @@ export type ChatState = {
   currentProject: ProjectMeta | null;
   recentProjects: ProjectMeta[];
   previewTarget: string | null;
+  composerInsertion: string | null;
 
   // Internal client
   _client: ChatClient | null;
@@ -135,6 +136,7 @@ export type ChatState = {
   resumeSession: (id: string) => void;
   setSessionMode: (mode: SessionMode) => void;
   setPreviewTarget: (target: string | null) => void;
+  setComposerInsertion: (value: string | null) => void;
   loadProjectState: () => Promise<void>;
   openProject: () => Promise<void>;
   selectProject: (projectDir: string) => Promise<void>;
@@ -639,6 +641,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   currentProject: null,
   recentProjects: [],
   previewTarget: null,
+  composerInsertion: null,
 
   _client: null as ChatClient | null,
   setClient: (client) => set({ _client: client }),
@@ -819,6 +822,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
   setPreviewTarget: (target: string | null) => {
     set({ previewTarget: target?.trim() ? target.trim() : null });
+  },
+  setComposerInsertion: (value: string | null) => {
+    set({ composerInsertion: value?.trim() ? value.trim() : null });
   },
 
   clearBlocks: () => set({ blocks: [], liveReasoning: '', liveAssistant: '', liveToolContent: '' }),

@@ -579,14 +579,37 @@ function FileTreeNode({
   );
 }
 
+function filterWorkspaceTree(nodes: WorkspaceTreeNode[], query: string): WorkspaceTreeNode[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
+    return nodes;
+  }
+
+  return nodes.flatMap((node) => {
+    const matchesSelf = node.name.toLowerCase().includes(normalized) || node.path.toLowerCase().includes(normalized);
+    if (node.kind === 'file') {
+      return matchesSelf ? [node] : [];
+    }
+
+    const children = filterWorkspaceTree(node.children ?? [], normalized);
+    if (matchesSelf || children.length > 0) {
+      return [{ ...node, children }];
+    }
+    return [];
+  });
+}
+
 function FilesPanel() {
   const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
+  const setComposerInsertion = useChatStore((s) => s.setComposerInsertion);
   const [tree, setTree] = React.useState<WorkspaceTreeNode[]>([]);
   const [selectedPath, setSelectedPath] = React.useState<string | null>(null);
   const [pathInput, setPathInput] = React.useState('');
+  const [filterQuery, setFilterQuery] = React.useState('');
   const [file, setFile] = React.useState<WorkspaceReadFileResult | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const visibleTree = React.useMemo(() => filterWorkspaceTree(tree, filterQuery), [filterQuery, tree]);
 
   const refresh = React.useCallback(async () => {
     if (!client?.listWorkspaceTree) {
@@ -674,14 +697,37 @@ function FilesPanel() {
         </div>
       </div>
 
+      <div className="rounded-lg border p-2.5" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+        <label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-bobby-faint">
+          <FolderOpen className="h-3.5 w-3.5" />
+          Filter
+        </label>
+        <input
+          value={filterQuery}
+          onChange={(event) => setFilterQuery(event.target.value)}
+          placeholder="Filter files..."
+          className="w-full rounded-md border bg-transparent px-2.5 py-1.5 text-[12px] text-bobby-ink outline-none placeholder:text-bobby-faint"
+          style={{ borderColor: 'var(--bobby-border)' }}
+        />
+      </div>
+
       <div className="grid gap-3 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div data-testid="files-tree" className="max-h-[520px] overflow-y-auto rounded-lg border p-2" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
-          {tree.length === 0 ? <Empty title="No files found." /> : tree.map((node) => <FileTreeNode key={node.path} node={node} selectedPath={selectedPath} onSelect={(path) => void selectPath(path)} />)}
+          {visibleTree.length === 0 ? <Empty title="No files found." /> : visibleTree.map((node) => <FileTreeNode key={node.path} node={node} selectedPath={selectedPath} onSelect={(path) => void selectPath(path)} />)}
         </div>
         <div className="min-w-0 rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
           {file ? (
             <>
-              <div className="mb-2 text-[11px] text-bobby-faint">{file.path}</div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="min-w-0 truncate text-[11px] text-bobby-faint">{file.path}</div>
+                <button
+                  type="button"
+                  onClick={() => setComposerInsertion(`@${file.path}`)}
+                  className="rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white"
+                >
+                  Insert reference
+                </button>
+              </div>
               <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-md bg-bobby-surface-subtle px-3 py-2 text-[12px] leading-5 text-bobby-ink">{file.content}</pre>
             </>
           ) : (

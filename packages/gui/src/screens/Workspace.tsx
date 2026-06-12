@@ -504,6 +504,8 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
   const recentProjects = useChatStore((s) => s.recentProjects);
   const sessionMode = useChatStore((s) => s.sessionMode);
   const setSessionMode = useChatStore((s) => s.setSessionMode);
+  const composerInsertion = useChatStore((s) => s.composerInsertion);
+  const setComposerInsertion = useChatStore((s) => s.setComposerInsertion);
   const [goalTracking, setGoalTracking] = useState(true);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [projectQuery, setProjectQuery] = useState('');
@@ -836,6 +838,16 @@ function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: stri
   useEffect(() => {
     ref.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!composerInsertion) {
+      return;
+    }
+    insertTextAtCursor(`${composerInsertion} `);
+    setNotice(`Inserted workspace file reference: ${composerInsertion}`);
+    setComposerInsertion(null);
+    ref.current?.focus();
+  }, [composerInsertion, insertTextAtCursor, setComposerInsertion]);
 
   useEffect(() => {
     const selection = pendingSelection.current;

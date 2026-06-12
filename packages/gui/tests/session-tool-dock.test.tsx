@@ -280,6 +280,31 @@ describe('SessionToolDock', () => {
     expect(await screen.findByText(/Failed to read workspace file: permission denied/)).toBeTruthy();
   });
 
+  it('filters the workspace tree by file name', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Files/));
+    expect(await screen.findByText('index.ts')).toBeTruthy();
+    expect(screen.getByText('utils.ts')).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText(/Filter files/i), { target: { value: 'utils' } });
+
+    expect(screen.queryByText('index.ts')).toBeNull();
+    expect(screen.getByText('utils.ts')).toBeTruthy();
+  });
+
+  it('inserts a file reference from the files panel into the shared composer state', async () => {
+    render(<SessionToolDock />);
+
+    fireEvent.click(screen.getByTitle(/Files/));
+    expect(await screen.findByText('export const entry = true;')).toBeTruthy();
+    fireEvent.click(screen.getByText('utils.ts'));
+    expect(await screen.findByText('export const answer = 42;')).toBeTruthy();
+    fireEvent.click(screen.getByText('Insert reference'));
+
+    expect(useChatStore.getState().composerInsertion).toBe('@src/utils.ts');
+  });
+
   it('runs real terminal commands through IPC and shows the output', async () => {
     render(<SessionToolDock />);
 
