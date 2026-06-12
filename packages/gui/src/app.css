@@ -33,7 +33,7 @@
 }
 
 .muted {
-  color: #64748b;
+  color: var(--muted);
   font-size: 13px;
 }
 
@@ -46,12 +46,12 @@
   display: grid;
   gap: 6px;
   padding: 8px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--hairline-2);
   border-radius: 6px;
 }
 
 .costbar {
-  border: 1px dashed #94a3b8;
+  border: 1px dashed var(--dim);
   border-radius: 6px;
   padding: 8px 10px;
   min-height: 40px;
