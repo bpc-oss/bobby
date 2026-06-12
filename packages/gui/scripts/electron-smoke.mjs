@@ -21,7 +21,8 @@ const child = spawn(electronPath, ['.'], {
   env: {
     ...process.env,
     BOBBY_ELECTRON_SMOKE: '1',
-    BOBBY_ELECTRON_SMOKE_PROJECT: fileURLToPath(new URL('../../..', import.meta.url))
+    BOBBY_ELECTRON_SMOKE_PROJECT: fileURLToPath(new URL('../../..', import.meta.url)),
+    BOBBY_AUTOMATION_RUN_TIMEOUT_MS: process.env.BOBBY_AUTOMATION_RUN_TIMEOUT_MS ?? '3000'
   },
   stdio: ['ignore', 'pipe', 'pipe']
 });
@@ -62,26 +63,55 @@ child.on('exit', (code) => {
   const missing = requiredMethods.filter((method) => !result.methods.includes(method));
   const terminalOk = result.terminalExitCode === 0 && result.terminalStdout === 'bobby-electron-smoke';
   const projectOk = typeof result.selectedProject === 'string' && result.selectedProject.length > 0;
+  const fixtureOk = typeof result.fixtureProject === 'string' && result.fixtureProject.length > 0;
   const filesOk = result.treeCount > 0 && result.packageJsonBytes > 0;
+  const sessionOk = result.sessionRoundTrip === true;
+  const snapshotOk = result.snapshotRoundTrip === true;
+  const proposalOk = result.proposalApplyRoundTrip === true;
+  const agentOk = result.agentRoundTrip === true;
   const commandOk = result.commandRoundTrip === true;
   const automationOk = result.automationRoundTrip === true;
+  const automationRunNowOk = result.automationRunNowRoundTrip === true;
   const mcpOk = result.mcpServerCount > 0;
-  if (code !== 0 || !result.hasBobbyBridge || missing.length > 0 || !terminalOk || !projectOk || !filesOk || !commandOk || !automationOk || !mcpOk) {
+  if (
+    code !== 0 ||
+    !result.hasBobbyBridge ||
+    missing.length > 0 ||
+    !terminalOk ||
+    !projectOk ||
+    !fixtureOk ||
+    !filesOk ||
+    !sessionOk ||
+    !snapshotOk ||
+    !proposalOk ||
+    !agentOk ||
+    !commandOk ||
+    !automationOk ||
+    !automationRunNowOk ||
+    !mcpOk
+  ) {
     console.error(`Electron smoke failed: ${JSON.stringify({
       code,
       hasBobbyBridge: result.hasBobbyBridge,
       missing,
       selectedProject: result.selectedProject,
+      fixtureProject: result.fixtureProject,
       treeCount: result.treeCount,
       packageJsonBytes: result.packageJsonBytes,
       terminalExitCode: result.terminalExitCode,
       terminalStdout: result.terminalStdout,
+      sessionRoundTrip: result.sessionRoundTrip,
+      snapshotRoundTrip: result.snapshotRoundTrip,
+      proposalApplyRoundTrip: result.proposalApplyRoundTrip,
+      proposalApplyDetails: result.proposalApplyDetails,
+      agentRoundTrip: result.agentRoundTrip,
       commandRoundTrip: result.commandRoundTrip,
       automationRoundTrip: result.automationRoundTrip,
+      automationRunNowRoundTrip: result.automationRunNowRoundTrip,
       mcpServerCount: result.mcpServerCount
     })}`);
     process.exit(1);
   }
 
-  console.log(`Electron smoke verified ${result.methods.length} bridge methods, workspace files, terminal IPC, commands, automations, and MCP list.`);
+  console.log(`Electron smoke verified ${result.methods.length} bridge methods, workspace files, terminal IPC, sessions, snapshots, proposals, agents, commands, automations, and MCP list.`);
 });

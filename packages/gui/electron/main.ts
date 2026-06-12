@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -8,6 +8,7 @@ import {
   applySubAgentProposal,
   CompletionGate,
   CommandExitOracle,
+  createSnapshot,
   ExecTool,
   FileDiffOracle,
   FileExistsOracle,
@@ -22,6 +23,7 @@ import {
   ToolRegistry,
   VerificationEngine,
   Workspace,
+  restoreSnapshot,
   type CapabilityReport,
   WriteFileTool
 } from '@bobby/kernel';
@@ -111,6 +113,7 @@ const KEY_FILE = 'key';
 const CAPABILITIES_FILE = 'capabilities.json';
 const AUTOMATIONS_FILE = 'automations.json';
 const AUTOMATION_TICK_MS = 15_000;
+const DEFAULT_AUTOMATION_RUN_TIMEOUT_MS = 30_000;
 const PROJECTS_FILE = 'projects.json';
 const SETTINGS_FILE = 'settings.json';
 const SECRET_FILE = 'deepseek.key';
@@ -1164,6 +1167,28 @@ function captureFirstTaskEvents(subscribe: (listener: (event: KernelEvent) => vo
   return { observedEvents, getTaskId: () => capturedTaskId, unsubscribe };
 }
 
+function automationRunTimeoutMs(): number {
+  const parsed = Number.parseInt(process.env.BOBBY_AUTOMATION_RUN_TIMEOUT_MS ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_AUTOMATION_RUN_TIMEOUT_MS;
+}
+
+async function sendAutomationCommandWithTimeout(host: KernelHost, automation: AutomationRecord): Promise<void> {
+  const timeoutMs = automationRunTimeoutMs();
+  let timer: NodeJS.Timeout | null = null;
+  try {
+    await Promise.race([
+      host.send({ type: 'startTask', input: automation.prompt, mode: 'full' }).then(() => undefined),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Automation run timed out after ${timeoutMs}ms`)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 async function runAutomation(automation: AutomationRecord): Promise<AutomationRecord> {
   const startedAt = nowIso();
   const updated: AutomationRecord = {
@@ -1182,19 +1207,24 @@ async function runAutomation(automation: AutomationRecord): Promise<AutomationRe
   }
 
   let failedToRun = false;
+  let failureMessage: string | null = null;
   const { observedEvents, getTaskId, unsubscribe } = captureFirstTaskEvents((listener) => host.subscribe(listener));
 
   try {
-    await host.send({ type: 'startTask', input: automation.prompt, mode: 'full' });
+    await sendAutomationCommandWithTimeout(host, automation);
   } catch (error: unknown) {
     failedToRun = true;
     const message = error instanceof Error ? error.message : String(error);
+    failureMessage = message;
     notifySystem(`Automation "${automation.title}" failed: ${message}`, { type: 'open-page', page: 'history' });
   } finally {
     unsubscribe();
   }
 
   const taskId = getTaskId() ?? `automation-${automation.id}-${Date.now()}`;
+  if (failureMessage && !observedEvents.some((event) => event.type === 'error')) {
+    observedEvents.push({ type: 'error', taskId, message: failureMessage });
+  }
   writeAutomationTaskArtifacts(taskId, automation, observedEvents, startedAt);
 
   const status = resolveAutomationStatus(observedEvents);
@@ -1365,19 +1395,85 @@ async function smokeEval<T>(window: BrowserWindow, label: string, script: string
   }
 }
 
+function runSmokeGit(args: string[], cwd: string): void {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  if (result.status !== 0) {
+    throw new Error(`smoke git ${args.join(' ')} failed: ${result.stderr || result.stdout}`);
+  }
+}
+
+function readSmokeGit(args: string[], cwd: string): string {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  if (result.status !== 0) {
+    throw new Error(`smoke git ${args.join(' ')} failed: ${result.stderr || result.stdout}`);
+  }
+  return result.stdout;
+}
+
+function createSmokeWorkspace(): string {
+  const workspaceRoot = join(app.getPath('temp'), `bobby-electron-smoke-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  mkdirSync(join(workspaceRoot, BOBBY_DIR, 'proposals'), { recursive: true });
+  writeFileSync(join(workspaceRoot, 'package.json'), JSON.stringify({ name: 'bobby-electron-smoke', private: true }, null, 2), 'utf8');
+  writeFileSync(join(workspaceRoot, 'target.txt'), 'before\n', 'utf8');
+  writeFileSync(join(workspaceRoot, 'snapshot.txt'), 'snapshot-before\n', 'utf8');
+  runSmokeGit(['init'], workspaceRoot);
+  runSmokeGit(['config', 'user.email', 'smoke@example.local'], workspaceRoot);
+  runSmokeGit(['config', 'user.name', 'Bobby Smoke'], workspaceRoot);
+  runSmokeGit(['add', '.'], workspaceRoot);
+  runSmokeGit(['commit', '-m', 'initial smoke fixture'], workspaceRoot);
+  return workspaceRoot;
+}
+
+function writeSmokeProposalFixture(workspaceRoot: string): void {
+  const proposalId = 'electron-smoke-proposal';
+  const proposalPath = join(workspaceRoot, BOBBY_DIR, 'proposals', `${proposalId}.patch`);
+  writeFileSync(join(workspaceRoot, 'target.txt'), 'after\n', 'utf8');
+  const patch = readSmokeGit(['diff', '--binary', 'HEAD', '--', 'target.txt'], workspaceRoot);
+  runSmokeGit(['checkout', '--', 'target.txt'], workspaceRoot);
+  writeFileSync(proposalPath, patch, 'utf8');
+  writeFileSync(join(workspaceRoot, BOBBY_DIR, 'subagent-dispatches.json'), JSON.stringify([
+    {
+      id: 'electron-smoke-dispatch',
+      agentSourcePath: join(workspaceRoot, BOBBY_DIR, 'agents', 'smoke.md'),
+      agentName: 'Smoke Agent',
+      task: 'Apply smoke proposal',
+      status: 'completed',
+      mergeState: 'ready',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      worktreePath: join(workspaceRoot, '..', 'smoke-worktree'),
+      proposalId,
+      proposalPath,
+      error: null
+    }
+  ], null, 2), 'utf8');
+}
+
 async function runElectronSmoke(window: BrowserWindow): Promise<void> {
   const smokeProjectDir = process.env.BOBBY_ELECTRON_SMOKE_PROJECT ?? process.cwd();
+  let fixtureDir: string | null = null;
   const result = {
     title: await smokeEval<string>(window, 'title', 'document.title'),
     hasBobbyBridge: await smokeEval<boolean>(window, 'bridge', 'Boolean(window.bobby)'),
     methods: await smokeEval<string[]>(window, 'methods', 'window.bobby ? Object.keys(window.bobby).sort() : []'),
     selectedProject: null as string | null,
+    fixtureProject: null as string | null,
     treeCount: 0,
     packageJsonBytes: 0,
     terminalExitCode: null as number | null,
     terminalStdout: '',
+    sessionRoundTrip: false,
+    snapshotRoundTrip: false,
+    proposalApplyRoundTrip: false,
+    proposalApplyDetails: null as null | {
+      summaryId: string | null;
+      fileContent: string | null;
+      proposalIds: string[];
+    },
+    agentRoundTrip: false,
     commandRoundTrip: false,
     automationRoundTrip: false,
+    automationRunNowRoundTrip: false,
     mcpServerCount: 0
   };
 
@@ -1419,39 +1515,131 @@ async function runElectronSmoke(window: BrowserWindow): Promise<void> {
   );
   result.terminalExitCode = terminal.exitCode;
   result.terminalStdout = terminal.stdout;
-  result.commandRoundTrip = await smokeEval<boolean>(
-    window,
-    'commandsRoundTrip',
-    `window.bobby.upsertCommand({
-      name: 'electron-smoke',
-      description: 'Temporary Electron smoke command',
-      promptTemplate: 'Smoke {{input}}'
-    }).then(async (command) => {
-      const commands = await window.bobby.listCommands();
-      await window.bobby.removeCommand({ sourcePath: command.sourcePath });
-      return commands.some((item) => item.sourcePath === command.sourcePath);
-    })`
-  );
-  result.automationRoundTrip = await smokeEval<boolean>(
-    window,
-    'automationsRoundTrip',
-    `window.bobby.createAutomation({
-      title: 'Electron smoke automation',
-      kind: 'schedule',
-      prompt: 'No-op smoke automation.',
-      intervalMinutes: 9999
-    }).then(async (automation) => {
-      const automations = await window.bobby.listAutomations();
-      await window.bobby.removeAutomation({ id: automation.id });
-      return automations.some((item) => item.id === automation.id);
-    })`
-  );
-  result.mcpServerCount = await smokeEval<number>(
-    window,
-    'listMcpServers',
-    'window.bobby.listMcpServers().then((servers) => Array.isArray(servers) ? servers.length : 0)',
-    15_000
-  );
+  try {
+    fixtureDir = createSmokeWorkspace();
+    result.fixtureProject = await smokeEval<string | null>(
+      window,
+      'selectFixtureProject',
+      `window.bobby.selectProject(${JSON.stringify(fixtureDir)}).then((selected) => selected?.project?.path ?? null)`
+    );
+    result.sessionRoundTrip = await smokeEval<boolean>(
+      window,
+      'sessionRoundTrip',
+      `window.bobby.saveSession({
+        id: 'electron-smoke-session',
+        title: 'Electron smoke session',
+        blocks: [{ kind: 'user', id: 'u1', text: 'smoke' }],
+        createdAt: '2026-06-12T00:00:00.000Z',
+        updatedAt: '2026-06-12T00:00:00.000Z',
+        projectDir: ${JSON.stringify(fixtureDir)},
+        taskId: 'electron-smoke-task',
+        mode: 'plan-only',
+        status: 'done',
+        liveReasoning: '',
+        liveAssistant: '',
+        liveToolContent: '',
+        currentPlan: [{ id: 'S1', desc: 'Smoke', satisfiesAcIds: ['AC1'], dependsOn: [] }],
+        error: null,
+        costUsd: 0,
+        spendUsd: 0,
+        model: null
+      }).then(async () => {
+        const restored = await window.bobby.readSession('electron-smoke-session');
+        return restored?.taskId === 'electron-smoke-task' && restored?.currentPlan?.[0]?.id === 'S1';
+      })`
+    );
+    const snapshot = await createSnapshot(fixtureDir, { id: 'electron-smoke-snapshot', taskId: 'electron-smoke-task', stepId: 'S1' });
+    writeFileSync(join(fixtureDir, 'snapshot.txt'), 'snapshot-after\n', 'utf8');
+    await restoreSnapshot(fixtureDir, snapshot.id);
+    const snapshotFile = readFileSync(join(fixtureDir, 'snapshot.txt'), 'utf8');
+    const snapshotListCount = await smokeEval<number>(
+      window,
+      'listSnapshots',
+      'window.bobby.listSnapshots().then((snapshots) => Array.isArray(snapshots) ? snapshots.length : 0)'
+    );
+    result.snapshotRoundTrip = snapshotFile === 'snapshot-before\n' && snapshotListCount > 0;
+    writeSmokeProposalFixture(fixtureDir);
+    result.proposalApplyDetails = await smokeEval<typeof result.proposalApplyDetails>(
+      window,
+      'proposalApplyRoundTrip',
+      `window.bobby.applyProposal({
+        proposalId: 'electron-smoke-proposal',
+        gatePassed: false,
+        proReviewPassed: false,
+        humanConfirmed: true
+      }).then(async (summary) => {
+        const file = await window.bobby.readWorkspaceFile('target.txt');
+        const proposals = await window.bobby.listProposals();
+        return {
+          summaryId: summary?.proposalId ?? null,
+          fileContent: file?.content ?? null,
+          proposalIds: proposals.map((proposal) => proposal.proposalId)
+        };
+      })`
+    );
+    result.proposalApplyRoundTrip = result.proposalApplyDetails?.summaryId === 'electron-smoke-proposal' &&
+      result.proposalApplyDetails.fileContent?.replace(/\r\n/g, '\n') === 'after\n' &&
+      !result.proposalApplyDetails.proposalIds.includes('electron-smoke-proposal');
+    result.agentRoundTrip = await smokeEval<boolean>(
+      window,
+      'agentRoundTrip',
+      `window.bobby.upsertSubAgent({
+        name: 'Electron Smoke Agent',
+        description: 'Temporary smoke agent',
+        tools: ['write_file'],
+        triggers: ['smoke'],
+        systemPrompt: 'You are a smoke agent.'
+      }).then(async (agent) => {
+        const agents = await window.bobby.listSubAgents();
+        await window.bobby.removeSubAgent({ sourcePath: agent.sourcePath });
+        return agents.some((item) => item.sourcePath === agent.sourcePath);
+      })`
+    );
+    result.commandRoundTrip = await smokeEval<boolean>(
+      window,
+      'commandsRoundTrip',
+      `window.bobby.upsertCommand({
+        name: 'electron-smoke',
+        description: 'Temporary Electron smoke command',
+        promptTemplate: 'Smoke {{input}}'
+      }).then(async (command) => {
+        const commands = await window.bobby.listCommands();
+        await window.bobby.removeCommand({ sourcePath: command.sourcePath });
+        return commands.some((item) => item.sourcePath === command.sourcePath);
+      })`
+    );
+    const automationRoundTrip = await smokeEval<{ listed: boolean; ran: boolean }>(
+      window,
+      'automationsRoundTrip',
+      `window.bobby.createAutomation({
+        title: 'Electron smoke automation',
+        kind: 'schedule',
+        prompt: 'No-op smoke automation.',
+        intervalMinutes: 9999
+      }).then(async (automation) => {
+        const automations = await window.bobby.listAutomations();
+        const ran = await window.bobby.runAutomationNow({ id: automation.id });
+        await window.bobby.removeAutomation({ id: automation.id });
+        return {
+          listed: automations.some((item) => item.id === automation.id),
+          ran: Boolean(ran?.lastRunAt)
+        };
+      })`,
+      15_000
+    );
+    result.automationRoundTrip = automationRoundTrip.listed;
+    result.automationRunNowRoundTrip = automationRoundTrip.ran;
+    result.mcpServerCount = await smokeEval<number>(
+      window,
+      'listMcpServers',
+      'window.bobby.listMcpServers().then((servers) => Array.isArray(servers) ? servers.length : 0)',
+      15_000
+    );
+  } finally {
+    if (fixtureDir) {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  }
 
   console.log(`BOBBY_ELECTRON_SMOKE ${JSON.stringify(result)}`);
   app.exit(0);

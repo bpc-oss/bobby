@@ -1449,6 +1449,61 @@ describe('automation IPC handlers', () => {
     }
   });
 
+  it('times out run-now instead of leaving the automation IPC pending', async () => {
+    vi.useFakeTimers();
+    const previousTimeout = process.env.BOBBY_AUTOMATION_RUN_TIMEOUT_MS;
+    process.env.BOBBY_AUTOMATION_RUN_TIMEOUT_MS = '25';
+    const projectRoot = mkdtempSync(join(tmpdir(), 'automation-timeout-'));
+    mkdirSync(join(projectRoot, '.bobby'), { recursive: true });
+    const neverSend = vi.fn(() => new Promise<void>(() => undefined));
+    KernelHostMock.mockImplementation(() => ({
+      subscribe: vi.fn(() => () => undefined),
+      send: neverSend
+    }));
+
+    try {
+      await loadMain([], projectRoot);
+      const create = handlers.get('automations:create');
+      const runNow = handlers.get('automations:runNow');
+      if (!create || !runNow) throw new Error('automation handlers not registered');
+
+      const created = await create(undefined, {
+        title: 'Timeout ping',
+        kind: 'monitor',
+        prompt: 'This automation should not hang forever.',
+        intervalMinutes: 15
+      }) as AutomationRecord;
+
+      const pending = runNow(undefined, { id: created.id }) as Promise<AutomationRecord>;
+      await vi.advanceTimersByTimeAsync(25);
+      const updated = await pending;
+
+      expect(updated.lastRunAt).toBeTruthy();
+      expect(neverSend).toHaveBeenCalledWith({ type: 'startTask', input: created.prompt, mode: 'full' });
+      const windowInstance = (BrowserWindowMock as unknown as {
+        mock: { results: Array<{ value: { webContents: { send: ReturnType<typeof vi.fn> } } }> };
+      }).mock.results[0]?.value;
+      expect(windowInstance.webContents.send).toHaveBeenCalledWith(
+        'kernel:event',
+        expect.objectContaining({
+          type: 'error',
+          taskId: 'system',
+          message: expect.stringContaining('timed out after 25ms')
+        })
+      );
+      const taskDirs = readdirSync(join(projectRoot, '.bobby', 'tasks'));
+      expect(taskDirs).toHaveLength(1);
+      expect(readFileSync(join(projectRoot, '.bobby', 'tasks', taskDirs[0], 'report.md'), 'utf8')).toContain('timed out after 25ms');
+    } finally {
+      process.env.BOBBY_AUTOMATION_RUN_TIMEOUT_MS = previousTimeout;
+      vi.useRealTimers();
+      KernelHostMock.mockImplementation(() => ({
+        subscribe: vi.fn(() => () => undefined),
+        send: vi.fn(async () => undefined)
+      }));
+    }
+  });
+
   it('runs due automations on the background timer', async () => {
     vi.useFakeTimers();
 
