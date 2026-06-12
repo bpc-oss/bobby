@@ -413,6 +413,28 @@ describe('settings IPC handlers', () => {
       'https://deepseek.example.test'
     );
   });
+
+  it('denies snapshot restore commands at the GUI IPC boundary without human confirmation', async () => {
+    await loadMain();
+    const command = handlers.get('kernel:command');
+    if (!command) throw new Error('kernel handler not registered');
+
+    await expect(command(undefined, { type: 'restoreSnapshot' })).rejects.toThrow(/human confirmation is required/);
+
+    const hostResults = (KernelHostMock as unknown as { mock: { results: Array<{ value: { send: ReturnType<typeof vi.fn> } }> } }).mock.results.map((result) => result.value);
+    expect(hostResults.every((host) => host.send.mock.calls.length === 0)).toBe(true);
+  });
+
+  it('forwards snapshot restore only after the renderer supplies the confirmation marker', async () => {
+    await loadMain();
+    const command = handlers.get('kernel:command');
+    if (!command) throw new Error('kernel handler not registered');
+
+    await command(undefined, { type: 'restoreSnapshot', snapshotId: 'snap-1', restoreConfirmed: true });
+
+    const host = (KernelHostMock as unknown as { mock: { results: Array<{ value: { send: ReturnType<typeof vi.fn> } }> } }).mock.results.at(-1)?.value;
+    expect(host?.send).toHaveBeenCalledWith({ type: 'restoreSnapshot', snapshotId: 'snap-1', restoreConfirmed: true });
+  });
 });
 
 describe('deepseek capability IPC handlers', () => {

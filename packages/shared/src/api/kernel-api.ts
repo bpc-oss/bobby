@@ -59,7 +59,8 @@ export const KernelCommandSchema = z.union([
   }),
   z.object({
     type: z.literal('restoreSnapshot'),
-    snapshotId: z.string().min(1).optional()
+    snapshotId: z.string().min(1).optional(),
+    restoreConfirmed: z.literal(true).optional()
   }),
   z.object({
     type: z.literal('resumeSession')

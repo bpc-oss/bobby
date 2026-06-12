@@ -156,7 +156,7 @@ describe('SessionToolDock', () => {
 
     const send = window.bobby.send;
     expect(window.confirm).toHaveBeenCalledWith('Restore the latest checkpoint?');
-    expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot' });
+    expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot', restoreConfirmed: true });
   });
 
   it('shows checkpoint snapshots and restores a specific checkpoint', async () => {
@@ -169,7 +169,7 @@ describe('SessionToolDock', () => {
 
     const send = window.bobby.send;
     expect(window.confirm).toHaveBeenCalledWith('Restore checkpoint snap-1?');
-    expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot', snapshotId: 'snap-1' });
+    expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot', snapshotId: 'snap-1', restoreConfirmed: true });
   });
 
   it('filters checkpoint timeline to the current task', async () => {

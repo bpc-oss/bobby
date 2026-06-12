@@ -434,7 +434,7 @@ export function makeKernelClient() {
     readWorkspaceFile: (path: string) => window.bobby.readWorkspaceFile!(path),
     runTerminalCommand: (input: TerminalRunInput) => window.bobby.runTerminalCommand!(input) as Promise<TerminalRunResult>,
     startPreviewServer: (input: PreviewStartInput) => window.bobby.startPreviewServer!(input),
-    restoreSnapshot: (snapshotId?: string) => window.bobby.send({ type: 'restoreSnapshot', snapshotId }),
+    restoreSnapshot: (snapshotId?: string) => window.bobby.send({ type: 'restoreSnapshot', snapshotId, restoreConfirmed: true }),
     applyProposal: (input: ProposalApplyInput) => window.bobby.applyProposal!(input),
     discardProposal: (input: ProposalDiscardInput) => window.bobby.discardProposal!(input),
     gitIsRepo: () => window.bobby.gitIsRepo?.() ?? Promise.resolve(false),

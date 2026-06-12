@@ -25,7 +25,7 @@ import {
   type CapabilityReport,
   WriteFileTool
 } from '@bobby/kernel';
-import type { KernelEvent } from '@bobby/shared';
+import { KernelCommandSchema, type KernelEvent } from '@bobby/shared';
 import {
   AppSettingsSchema,
   AppSettingsUpdateSchema,
@@ -1702,11 +1702,16 @@ ipcMain.handle('automations:runNow', async (_event, input) => {
 });
 
 ipcMain.handle('kernel:command', async (_event, cmd) => {
+  const parsed = KernelCommandSchema.parse(cmd);
+  if (parsed.type === 'restoreSnapshot' && parsed.restoreConfirmed !== true) {
+    throw new Error('Snapshot restore denied: human confirmation is required');
+  }
+
   const currentHost = await (pendingHost ?? (pendingHost = createHost()));
   if (!currentHost) {
     throw hostInitError ?? new Error('Kernel 主机未就绪，请先完成配置');
   }
-  return currentHost.send(cmd);
+  return currentHost.send(parsed);
 });
 
 app.whenReady().then(() => {
