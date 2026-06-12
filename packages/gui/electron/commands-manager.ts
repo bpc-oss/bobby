@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type {
   CommandRecordDto,
   CommandRemoveInput,
@@ -29,11 +29,12 @@ function resolveCommandsDir(workspaceRoot: string): string {
   return join(resolve(workspaceRoot), COMMANDS_DIR);
 }
 
-function resolveWithinWorkspace(workspaceRoot: string, targetPath: string): string {
-  const root = resolve(workspaceRoot);
+function resolveWithinCommandsDir(workspaceRoot: string, targetPath: string): string {
+  const root = resolveCommandsDir(workspaceRoot);
   const absolute = resolve(root, targetPath);
-  if (relative(root, absolute).startsWith('..')) {
-    throw new Error('Command path must stay inside the workspace');
+  const relativeToRoot = relative(root, absolute);
+  if (relativeToRoot === '..' || relativeToRoot.startsWith(`..${sep}`) || isAbsolute(relativeToRoot)) {
+    throw new Error('Command path must stay inside .bobby/commands');
   }
 
   return absolute;
@@ -68,7 +69,7 @@ function parseHeader(raw: string): Record<string, string> {
 
 function resolveCommandPath(workspaceRoot: string, sourcePath?: string, name?: string): string {
   if (sourcePath) {
-    return resolveWithinWorkspace(workspaceRoot, sourcePath);
+    return resolveWithinCommandsDir(workspaceRoot, sourcePath);
   }
 
   return join(resolveCommandsDir(workspaceRoot), `${slugify(name ?? 'command')}.md`);
@@ -127,7 +128,7 @@ export function upsertCommand(workspaceRoot: string, input: CommandUpsertInput):
 }
 
 export function removeCommand(workspaceRoot: string, input: CommandRemoveInput): boolean {
-  const sourcePath = resolveWithinWorkspace(workspaceRoot, input.sourcePath);
+  const sourcePath = resolveWithinCommandsDir(workspaceRoot, input.sourcePath);
   if (!existsSync(sourcePath)) {
     return false;
   }

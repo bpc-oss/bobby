@@ -826,6 +826,32 @@ describe('command IPC handlers', () => {
     const afterRemove = await list() as CommandRecordDto[];
     expect(afterRemove.some((item) => item.name === 'rewrite')).toBe(false);
   });
+
+  it('keeps command upsert and remove paths inside .bobby/commands', async () => {
+    await loadMain();
+    const projectRoot = mkdtempSync(join(tempHome, 'commands-boundary-'));
+    mkdirSync(join(projectRoot, '.bobby', 'commands'), { recursive: true });
+    writeFileSync(join(projectRoot, 'notes.md'), 'do not delete', 'utf8');
+
+    const selectProject = handlers.get('project:select');
+    const upsert = handlers.get('commands:upsert');
+    const remove = handlers.get('commands:remove');
+    if (!selectProject || !upsert || !remove) {
+      throw new Error('command handlers not registered');
+    }
+
+    await selectProject(undefined, { projectDir: projectRoot });
+
+    await expect(upsert(undefined, {
+      sourcePath: join(projectRoot, 'notes.md'),
+      name: 'unsafe',
+      description: 'Unsafe write',
+      promptTemplate: 'Overwrite {{input}}'
+    })).rejects.toThrow(/\.bobby\/commands/);
+
+    await expect(remove(undefined, { sourcePath: join(projectRoot, 'notes.md') })).rejects.toThrow(/\.bobby\/commands/);
+    expect(readFileSync(join(projectRoot, 'notes.md'), 'utf8')).toBe('do not delete');
+  });
 });
 
 describe('session IPC handlers', () => {
