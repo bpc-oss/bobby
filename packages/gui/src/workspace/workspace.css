@@ -78,6 +78,110 @@
   padding: 0 16px;
 }
 
+.msg,
+.card {
+  max-width: min(760px, 100%);
+  margin-bottom: 12px;
+}
+
+.msg {
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: var(--glass-2);
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.msg.user {
+  margin-left: auto;
+  background: var(--teal-soft);
+  border-color: var(--hairline-2);
+}
+
+.msg.bot {
+  margin-right: auto;
+}
+
+.card {
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--teal);
+  border-radius: var(--radius-card);
+  background: var(--glass-2);
+  padding: 12px;
+}
+
+.card.tool {
+  border-left-color: var(--blue);
+}
+
+.card.gate {
+  border-left-color: var(--amber);
+}
+
+.card.evid {
+  border-left-color: var(--teal);
+}
+
+.card.verdict {
+  border-left-color: var(--blue);
+}
+
+.ch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tag {
+  padding: 2px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.card pre {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+.gate-btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.gate-btns button {
+  border: 1px solid var(--hairline-2);
+  border-radius: 8px;
+  background: var(--glass);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 7px 12px;
+}
+
+.gate-btns .allow {
+  color: var(--teal);
+}
+
+.gate-btns .deny {
+  color: var(--coral);
+}
+
+.gate-done {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .composer-wrap {
   padding: 0 16px 16px;
 }
