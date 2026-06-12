@@ -200,8 +200,12 @@ describe('SessionToolDock', () => {
     render(<SessionToolDock />);
 
     fireEvent.click(screen.getByTitle(/Files/));
-    expect(await screen.findByText('Open file')).toBeTruthy();
+    expect(await screen.findByTestId('files-layout')).toBeTruthy();
+    expect(screen.getByTestId('files-preview-pane')).toBeTruthy();
     expect(screen.getByText('Select a file from the workspace tree to preview it.')).toBeTruthy();
+    expect(screen.queryByText('Open file')).toBeNull();
+    expect(screen.queryByPlaceholderText('src/file.ts')).toBeNull();
+    expect(window.bobby.readWorkspaceFile).not.toHaveBeenCalledWith('src/utils.ts');
 
     fireEvent.click(screen.getByText('utils.ts'));
     expect(await screen.findByText('export const answer = 42;')).toBeTruthy();
@@ -227,7 +231,7 @@ describe('SessionToolDock', () => {
     render(<SessionToolDock />);
 
     fireEvent.click(screen.getByTitle(/Files/));
-    expect(await screen.findByText('Open file')).toBeTruthy();
+    expect(await screen.findByTestId('files-layout')).toBeTruthy();
 
     fireEvent.click(screen.getByText('utils.ts'));
 
@@ -251,7 +255,7 @@ describe('SessionToolDock', () => {
     render(<SessionToolDock />);
 
     fireEvent.click(screen.getByTitle(/Files/));
-    expect(await screen.findByText('Open file')).toBeTruthy();
+    expect(await screen.findByTestId('files-layout')).toBeTruthy();
     fireEvent.click(screen.getByText('utils.ts'));
     expect(await screen.findByText('export const answer = 42;')).toBeTruthy();
     fireEvent.click(screen.getByText('Insert reference'));

@@ -681,7 +681,6 @@ function FilesPanel() {
   const setComposerInsertion = useChatStore((s) => s.setComposerInsertion);
   const [tree, setTree] = React.useState<WorkspaceTreeNode[]>([]);
   const [selectedPath, setSelectedPath] = React.useState<string | null>(null);
-  const [pathInput, setPathInput] = React.useState('');
   const [filterQuery, setFilterQuery] = React.useState('');
   const [file, setFile] = React.useState<WorkspaceReadFileResult | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -744,38 +743,12 @@ function FilesPanel() {
       <div className="flex items-center justify-between rounded-lg border px-3 py-2" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
         <div>
           <div className="text-[12px] font-semibold text-bobby-ink">Workspace tree</div>
-          <div className="text-[11px] text-bobby-faint">{loading ? 'Loading...' : 'Click a file to preview contents'}</div>
+          <div className="text-[11px] text-bobby-faint">{loading ? 'Loading...' : 'Select a file to preview contents'}</div>
         </div>
         <button type="button" onClick={() => void refresh()} className="rounded-md px-2 py-1 text-[11px] text-bobby-muted hover:bg-bobby-hover hover:text-bobby-ink">Refresh</button>
       </div>
 
       {error && <div className="rounded-lg border px-3 py-2 text-[12px] text-bobby-danger" style={{ background: 'var(--bobby-danger-soft)', borderColor: 'var(--bobby-danger-soft)' }}>{error}</div>}
-
-      <div className="rounded-lg border p-2.5" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
-        <label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-bobby-faint">
-          <FolderOpen className="h-3.5 w-3.5" />
-          Open file
-        </label>
-        <div className="flex gap-2">
-          <input
-            data-testid="files-search-input"
-            value={pathInput}
-            onChange={(event) => setPathInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                void selectPath(pathInput.trim());
-              }
-            }}
-            placeholder="src/file.ts"
-            className="min-w-0 flex-1 rounded-md border bg-transparent px-2.5 py-1.5 text-[12px] text-bobby-ink outline-none placeholder:text-bobby-faint"
-            style={{ borderColor: 'var(--bobby-border)' }}
-          />
-          <button type="button" onClick={() => void selectPath(pathInput.trim())} disabled={!pathInput.trim()} className="rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white disabled:opacity-40">
-            Open
-          </button>
-        </div>
-      </div>
 
       <div className="rounded-lg border p-2.5" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
         <label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-bobby-faint">
@@ -791,11 +764,11 @@ function FilesPanel() {
         />
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <div data-testid="files-layout" className="grid gap-3 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div data-testid="files-tree" className="max-h-[520px] overflow-y-auto rounded-lg border p-2" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
           {visibleTree.length === 0 ? <Empty title="No files found." /> : visibleTree.map((node) => <FileTreeNode key={node.path} node={node} selectedPath={selectedPath} onSelect={(path) => void selectPath(path)} />)}
         </div>
-        <div className="min-w-0 rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
+        <div data-testid="files-preview-pane" className="min-w-0 rounded-lg border p-3" style={{ background: 'var(--bobby-surface-card)', borderColor: 'var(--bobby-border-muted)' }}>
           {file ? (
             <>
               <div className="mb-2 flex items-center justify-between gap-2">

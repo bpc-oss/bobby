@@ -1179,7 +1179,8 @@ describe('workspace UI smoke', () => {
     expect(screen.getByText('Run')).toBeTruthy();
 
     fireEvent.click(screen.getByTitle(/Files/));
-    expect(screen.getByPlaceholderText(/src\/file.ts/)).toBeTruthy();
+    expect(screen.getByTestId('files-layout')).toBeTruthy();
+    expect(screen.queryByPlaceholderText(/src\/file.ts/)).toBeNull();
 
     fireEvent.click(screen.getByTitle(/Browser/));
     expect(screen.getByPlaceholderText(/localhost:5174/)).toBeTruthy();
