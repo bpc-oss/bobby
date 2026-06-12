@@ -10,6 +10,7 @@ import '@fontsource/ibm-plex-mono/400.css';
 import { setLang, t } from './lib/i18n';
 import { makeKernelClient } from './ipc/contract';
 import './lib/theme.css';
+import './modes/modes.css';
 import './panels/panels.css';
 import './shell/shell.css';
 import { History } from './screens/History';
