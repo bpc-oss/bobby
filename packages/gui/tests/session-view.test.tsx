@@ -2,15 +2,18 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useSessionStore } from '../src/store/session-store';
 import { useUiStore } from '../src/store/ui-store';
 import { Composer } from '../src/workspace/Composer';
 import { SessionView } from '../src/workspace/SessionView';
 import { UsageBar } from '../src/workspace/UsageBar';
 
-const initial = useUiStore.getState();
+const initialUi = useUiStore.getState();
+const initialSession = useSessionStore.getState();
 
 beforeEach(() => {
-  useUiStore.setState(initial, true);
+  useUiStore.setState(initialUi, true);
+  useSessionStore.setState(initialSession, true);
 });
 
 afterEach(() => {
@@ -19,7 +22,10 @@ afterEach(() => {
 
 describe('SessionView 静态壳', () => {
   it('渲染标题与摘要开关，点击展开摘要', () => {
-    render(<SessionView title="New Chat" />);
+    useSessionStore.getState().setSessions([
+      { id: 's1', mode: 'chat', title: 'New Chat', pinned: false, status: 'idle', updatedAt: '' }
+    ]);
+    render(<SessionView sessionId="s1" />);
     expect(screen.getByText('New Chat')).toBeTruthy();
     fireEvent.click(screen.getByText(/摘要/));
     expect(useUiStore.getState().summaryOpen).toBe(true);
@@ -47,7 +53,9 @@ describe('Composer', () => {
 
 describe('UsageBar', () => {
   it('显示缓存命中率 / tokens / 人民币', () => {
-    render(<UsageBar usage={{ inputTokens: 8100, outputTokens: 4200, cacheHitRate: 0.92, cny: 0.18 }} />);
+    render(
+      <UsageBar usage={{ inputTokens: 8100, outputTokens: 4200, cacheHitRate: 0.92, cny: 0.18 }} />
+    );
     expect(screen.getByText(/92%/)).toBeTruthy();
     expect(screen.getByText(/8\.1K/)).toBeTruthy();
     expect(screen.getByText(/¥0\.18/)).toBeTruthy();
