@@ -228,9 +228,21 @@ describe('workspace UI smoke', () => {
     expect(screen.getByTestId('dock-active-tab').textContent).toBe('Review');
   });
 
-  it('renders the sidebar task list with task status and project name', () => {
+  it('renders the activity rail and project-grouped task navigator', () => {
     useChatStore.setState({
       activeSessionId: 'thread-2',
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-11T00:04:00.000Z'
+      },
+      recentProjects: [
+        {
+          name: 'Bobby',
+          path: 'E:\\ai-files\\Bobby',
+          lastOpenedAt: '2026-06-11T00:04:00.000Z'
+        }
+      ],
       threads: {
         'thread-1': {
           id: 'thread-1',
@@ -278,10 +290,14 @@ describe('workspace UI smoke', () => {
 
     render(<App />);
 
-    expect(screen.getByText('Tasks')).toBeTruthy();
+    expect(screen.getByTestId('activity-rail')).toBeTruthy();
+    expect(screen.getByTestId('project-task-navigator')).toBeTruthy();
+    expect(screen.getByText('Projects')).toBeTruthy();
+    expect(screen.getAllByText('Bobby').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Second task').length).toBeGreaterThan(0);
     expect(screen.getAllByText('running').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Bobby').length).toBeGreaterThan(0);
+    expect(screen.getByText('New Chat')).toBeTruthy();
+    expect(screen.getByText('Plugins')).toBeTruthy();
   });
 
   it('starts from brainstorming mission guidance instead of write/code modules', () => {

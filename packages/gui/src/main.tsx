@@ -269,7 +269,7 @@ export function App() {
       className="flex h-screen w-screen overflow-hidden bg-bobby-main text-bobby-ink"
       style={{ fontFamily: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }}
     >
-      <Sidebar theme={theme} onThemeChange={handleTheme} onPage={setPage} onNewSession={() => setPage('chat')} />
+      <Sidebar page={page} theme={theme} onThemeChange={handleTheme} onPage={setPage} onNewSession={() => setPage('chat')} />
       <main className="h-full min-w-0 flex-1 overflow-hidden">{content}</main>
     </div>
   );
