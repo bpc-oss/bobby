@@ -556,6 +556,29 @@ it('KernelHost: resolves a pending plan gate on abort and emits blocked final_re
   expect(finalResult).toContain('final_result');
 });
 
+it('KernelHost: uses renderer-assigned task ids for startTask events', async () => {
+  const { host } = createHost();
+  const taskIds: string[] = [];
+
+  host.subscribe((event) => {
+    if ('taskId' in event) {
+      taskIds.push(event.taskId);
+    }
+    if (event.type === 'plan_ready') {
+      void host.send({
+        type: 'planDecision',
+        taskId: event.taskId,
+        decision: 'approve'
+      });
+    }
+  });
+
+  await host.send({ type: 'startTask', input: 'run this task', taskId: 'task-renderer-1' });
+
+  expect(taskIds.length).toBeGreaterThan(0);
+  expect(new Set(taskIds)).toEqual(new Set(['task-renderer-1']));
+});
+
 it('KernelHost: unsubscribe should stop receiving events', async () => {
   const { host } = createHost();
   const eventTypes: string[] = [];

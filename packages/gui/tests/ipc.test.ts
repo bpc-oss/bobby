@@ -285,12 +285,27 @@ async function expectWorkspaceAttachmentMethodsToDispatchCommands(): Promise<voi
   });
 }
 
+async function expectStartTaskToDispatchRendererTaskId(): Promise<void> {
+  const send = installBobby();
+
+  const client = makeKernelClient();
+  await client.startTask('organize files', 'standard', 'task-renderer-1');
+
+  expect(send).toHaveBeenCalledWith({
+    type: 'startTask',
+    input: 'organize files',
+    mode: 'standard',
+    taskId: 'task-renderer-1'
+  });
+}
+
 describe('makeKernelClient IPC contract', () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
 
   it('startTask should dispatch startTask command', expectStartTaskToDispatchCommand);
+  it('startTask should dispatch renderer-assigned task ids', expectStartTaskToDispatchRendererTaskId);
   it('approveGate should dispatch allow decision command', expectAllowDecisionToDispatchCommand);
   it('approveGate should dispatch always decision command', expectAlwaysDecisionToDispatchCommand);
   it('mcp methods should dispatch commands', expectMcpMethodsToDispatchCommands);

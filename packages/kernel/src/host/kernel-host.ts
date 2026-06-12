@@ -184,9 +184,9 @@ export class KernelHost {
     });
   }
 
-  private async handleStartTask(cmd: { type: 'startTask'; input: string; mode?: SessionMode }): Promise<void> {
+  private async handleStartTask(cmd: { type: 'startTask'; input: string; taskId?: string; mode?: SessionMode }): Promise<void> {
     const intent = await classifyIntent(cmd.input);
-    const taskId = this.makeTaskId();
+    const taskId = cmd.taskId ?? this.makeTaskId();
 
     if (!this.knownTaskIds.has(taskId)) {
       this.knownTaskIds.add(taskId);

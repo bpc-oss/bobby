@@ -7,7 +7,7 @@ import type { CapabilityReport, CommandRecordDto, SessionMode } from '../ipc/con
 
 type WorkspaceProps = {
   kernelClient?: {
-    startTask: (input: string, mode?: SessionMode) => Promise<unknown>;
+    startTask: (input: string, mode?: SessionMode, taskId?: string) => Promise<unknown>;
     approveGate?: (gateId: string, decision: GateDecision) => Promise<unknown>;
     restoreSnapshot?: (snapshotId?: string) => Promise<unknown>;
     getCapabilityReport?: () => Promise<CapabilityReport | null>;

@@ -291,33 +291,35 @@ describe('chat session store', () => {
 
     await useChatStore.getState().sendMessage('Task one');
     const firstThreadId = useChatStore.getState().activeSessionId;
-    if (!firstThreadId) throw new Error('first thread missing');
+    const firstTaskId = startTask.mock.calls[0]?.[2] as string | undefined;
+    if (!firstThreadId || !firstTaskId) throw new Error('first thread missing');
 
     useChatStore.getState().handleEvent({
       type: 'intent_proposed',
-      taskId: 'task-one',
+      taskId: firstTaskId,
       contract: { goal: 'Task one', acceptanceCriteria: [], constraints: [], inputs: [], outOfScope: [] }
     });
 
     await useChatStore.getState().sendMessage('Task two');
     const secondThreadId = useChatStore.getState().activeSessionId;
-    if (!secondThreadId) throw new Error('second thread missing');
+    const secondTaskId = startTask.mock.calls[1]?.[2] as string | undefined;
+    if (!secondThreadId || !secondTaskId) throw new Error('second thread missing');
 
     useChatStore.getState().handleEvent({
       type: 'intent_proposed',
-      taskId: 'task-two',
+      taskId: secondTaskId,
       contract: { goal: 'Task two', acceptanceCriteria: [], constraints: [], inputs: [], outOfScope: [] }
     });
-    useChatStore.getState().handleEvent({ type: 'assistant_delta', taskId: 'task-one', content: 'First thread', sequence: 0 });
-    useChatStore.getState().handleEvent({ type: 'final_result', taskId: 'task-one', status: 'failed' });
-    useChatStore.getState().handleEvent({ type: 'assistant_delta', taskId: 'task-two', content: 'Second thread', sequence: 0 });
-    useChatStore.getState().handleEvent({ type: 'final_result', taskId: 'task-two', status: 'done' });
+    useChatStore.getState().handleEvent({ type: 'assistant_delta', taskId: firstTaskId, content: 'First thread', sequence: 0 });
+    useChatStore.getState().handleEvent({ type: 'final_result', taskId: firstTaskId, status: 'failed' });
+    useChatStore.getState().handleEvent({ type: 'assistant_delta', taskId: secondTaskId, content: 'Second thread', sequence: 0 });
+    useChatStore.getState().handleEvent({ type: 'final_result', taskId: secondTaskId, status: 'done' });
 
     const state = useChatStore.getState();
     expect(startTask).toHaveBeenCalledTimes(2);
-    expect(state.threads[firstThreadId]?.taskId).toBe('task-one');
+    expect(state.threads[firstThreadId]?.taskId).toBe(firstTaskId);
     expect(state.threads[firstThreadId]?.status).toBe('failed');
-    expect(state.threads[secondThreadId]?.taskId).toBe('task-two');
+    expect(state.threads[secondThreadId]?.taskId).toBe(secondTaskId);
     expect(state.threads[secondThreadId]?.status).toBe('done');
     expect(state.blocks).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'user', text: 'Task two' })
@@ -325,6 +327,40 @@ describe('chat session store', () => {
     expect(state.blocks).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'assistant', text: 'First thread' })
     ]));
+  });
+
+  it('binds out-of-order parallel events to the renderer-assigned task ids', async () => {
+    const startTask = vi.fn().mockResolvedValue(undefined);
+    useChatStore.setState({ _client: { startTask } });
+
+    await useChatStore.getState().sendMessage('Task one');
+    const firstThreadId = useChatStore.getState().activeSessionId;
+    const firstTaskId = startTask.mock.calls[0]?.[2] as string | undefined;
+    if (!firstThreadId || !firstTaskId) throw new Error('first task missing');
+
+    await useChatStore.getState().sendMessage('Task two');
+    const secondThreadId = useChatStore.getState().activeSessionId;
+    const secondTaskId = startTask.mock.calls[1]?.[2] as string | undefined;
+    if (!secondThreadId || !secondTaskId) throw new Error('second task missing');
+
+    useChatStore.getState().handleEvent({
+      type: 'intent_proposed',
+      taskId: secondTaskId,
+      contract: { goal: 'Task two', acceptanceCriteria: [], constraints: [], inputs: [], outOfScope: [] }
+    });
+    useChatStore.getState().handleEvent({ type: 'assistant_delta', taskId: secondTaskId, content: 'Second arrived first', sequence: 0 });
+    useChatStore.getState().handleEvent({
+      type: 'intent_proposed',
+      taskId: firstTaskId,
+      contract: { goal: 'Task one', acceptanceCriteria: [], constraints: [], inputs: [], outOfScope: [] }
+    });
+    useChatStore.getState().handleEvent({ type: 'assistant_delta', taskId: firstTaskId, content: 'First arrived second', sequence: 0 });
+
+    const state = useChatStore.getState();
+    expect(state.threads[firstThreadId]?.taskId).toBe(firstTaskId);
+    expect(state.threads[firstThreadId]?.liveAssistant).toBe('First arrived second');
+    expect(state.threads[secondThreadId]?.taskId).toBe(secondTaskId);
+    expect(state.threads[secondThreadId]?.liveAssistant).toBe('Second arrived first');
   });
 
   it('snapshots a running task before starting another active task', async () => {
@@ -341,7 +377,7 @@ describe('chat session store', () => {
     await useChatStore.getState().sendMessage('Second task');
 
     const state = useChatStore.getState();
-    expect(startTask).toHaveBeenCalledWith('Second task', 'standard');
+    expect(startTask).toHaveBeenCalledWith('Second task', 'standard', expect.stringMatching(/^task-/));
     expect(state.blocks).toEqual([expect.objectContaining({ kind: 'user', text: 'Second task' })]);
     expect(state.sessions).toEqual(expect.arrayContaining([
       expect.objectContaining({ taskId: 'task-current', status: 'running' })
@@ -354,14 +390,16 @@ describe('chat session store', () => {
 
     await useChatStore.getState().sendMessage('Run this through Mission Control');
     const activeSessionId = useChatStore.getState().activeSessionId;
+    const taskId = startTask.mock.calls[0]?.[2] as string | undefined;
+    if (!taskId) throw new Error('task id missing');
 
     useChatStore.getState().handleEvent({
       type: 'intent_proposed',
-      taskId: 'task-1',
+      taskId,
       contract: { goal: 'Run this through Mission Control', acceptanceCriteria: [], constraints: [], inputs: [], outOfScope: [] }
     });
-    useChatStore.getState().handleEvent({ type: 'assistant_delta', taskId: 'task-1', content: 'Working', sequence: 0 });
-    useChatStore.getState().handleEvent({ type: 'final_result', taskId: 'task-1', status: 'done' });
+    useChatStore.getState().handleEvent({ type: 'assistant_delta', taskId, content: 'Working', sequence: 0 });
+    useChatStore.getState().handleEvent({ type: 'final_result', taskId, status: 'done' });
 
     const saveSession = (window as unknown as { bobby: { saveSession: ReturnType<typeof vi.fn> } }).bobby.saveSession;
     const savedIds = saveSession.mock.calls.map(([saved]) => saved.id);
@@ -376,21 +414,22 @@ describe('chat session store', () => {
 
     await useChatStore.getState().sendMessage('Persist this task');
     const activeSessionId = useChatStore.getState().activeSessionId;
-    if (!activeSessionId) throw new Error('active session missing');
+    const taskId = startTask.mock.calls[0]?.[2] as string | undefined;
+    if (!activeSessionId || !taskId) throw new Error('active session missing');
 
     useChatStore.getState().handleEvent({
       type: 'intent_proposed',
-      taskId: 'task-persist',
+      taskId,
       contract: { goal: 'Persist this task', acceptanceCriteria: [], constraints: [], inputs: [], outOfScope: [] }
     });
     useChatStore.getState().handleEvent({
       type: 'plan_ready',
-      taskId: 'task-persist',
+      taskId,
       steps: [{ id: 'S1', desc: 'Plan work', satisfiesAcIds: ['AC1'], dependsOn: [] }]
     });
     useChatStore.getState().handleEvent({
       type: 'evidence_produced',
-      taskId: 'task-persist',
+      taskId,
       evidence: {
         claimId: 'claim-1',
         acId: 'AC1',
@@ -399,7 +438,7 @@ describe('chat session store', () => {
         producedBy: 'tool'
       }
     });
-    useChatStore.getState().handleEvent({ type: 'final_result', taskId: 'task-persist', status: 'done' });
+    useChatStore.getState().handleEvent({ type: 'final_result', taskId, status: 'done' });
 
     await Promise.resolve();
 
@@ -407,7 +446,7 @@ describe('chat session store', () => {
     expect(saveSession.mock.calls.length).toBeGreaterThanOrEqual(4);
     const persisted = saveSession.mock.calls.at(-1)?.[0] as { id?: string; blocks?: ChatBlock[]; taskId?: string | null; status?: string } | undefined;
     expect(persisted?.id).toBe(activeSessionId);
-    expect(persisted?.taskId).toBe('task-persist');
+    expect(persisted?.taskId).toBe(taskId);
     expect(persisted?.status).toBe('done');
     expect(persisted?.blocks).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'plan' }),

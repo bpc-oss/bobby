@@ -101,7 +101,7 @@ describe('workspace UI smoke', () => {
     useChatStore.getState().setClient(client);
     useChatStore.getState().sendMessage('hello world');
     await vi.waitFor(() => {
-      expect(client.startTask).toHaveBeenCalledWith('hello world', 'standard');
+      expect(client.startTask).toHaveBeenCalledWith('hello world', 'standard', expect.stringMatching(/^task-/));
     });
   });
 
@@ -117,7 +117,7 @@ describe('workspace UI smoke', () => {
     fireEvent.click(screen.getByText('Send'));
 
     await vi.waitFor(() => {
-      expect(client.startTask).toHaveBeenCalledWith('run another task', 'standard');
+      expect(client.startTask).toHaveBeenCalledWith('run another task', 'standard', expect.stringMatching(/^task-/));
     });
   });
 
@@ -131,7 +131,7 @@ describe('workspace UI smoke', () => {
     fireEvent.click(screen.getByText('Send'));
 
     await vi.waitFor(() => {
-      expect(client.startTask).toHaveBeenCalledWith('plan this task', 'plan-only');
+      expect(client.startTask).toHaveBeenCalledWith('plan this task', 'plan-only', expect.stringMatching(/^task-/));
     });
   });
 
@@ -145,11 +145,12 @@ describe('workspace UI smoke', () => {
     fireEvent.click(screen.getByText('Send'));
 
     await vi.waitFor(() => {
-      expect(client.startTask).toHaveBeenCalledWith(expect.stringContaining('isolated git worktree'), 'standard');
+      expect(client.startTask).toHaveBeenCalledWith(expect.stringContaining('isolated git worktree'), 'standard', expect.stringMatching(/^task-/));
     });
     expect(client.startTask).toHaveBeenCalledWith(
       expect.stringContaining('Edit src/screens/Workspace.tsx to fix the layout'),
-      'standard'
+      'standard',
+      expect.stringMatching(/^task-/)
     );
   });
 
@@ -332,7 +333,7 @@ describe('workspace UI smoke', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await vi.waitFor(() => {
-      expect(client.startTask).toHaveBeenCalledWith('Summarize this task:\nnotes from the build', 'standard');
+      expect(client.startTask).toHaveBeenCalledWith('Summarize this task:\nnotes from the build', 'standard', expect.stringMatching(/^task-/));
     });
   });
 

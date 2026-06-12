@@ -432,7 +432,13 @@ function makeRegistryClientMethods() {
 export function makeKernelClient() {
   return {
     ...makeRegistryClientMethods(),
-    startTask: (input: string, mode?: SessionMode) => window.bobby.send({ type: 'startTask', input, mode }),
+    startTask: (input: string, mode?: SessionMode, taskId?: string) =>
+      window.bobby.send({
+        type: 'startTask',
+        input,
+        ...(mode ? { mode } : {}),
+        ...(taskId ? { taskId } : {})
+      }),
     approveGate: (gateId: string, decision: GateDecision) =>
       window.bobby.send({ type: 'approveGate', gateId, decision }),
     onEvent: (cb: (event: KernelEvent) => void) => window.bobby.onEvent(cb),

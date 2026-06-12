@@ -18,6 +18,7 @@ export const KernelCommandSchema = z.union([
   z.object({
     type: z.literal('startTask'),
     input: z.string().min(1),
+    taskId: z.string().min(1).optional(),
     mode: z.enum(['plan-only', 'standard', 'enhanced', 'full']).optional()
   }),
   z.object({

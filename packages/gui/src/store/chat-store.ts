@@ -10,7 +10,7 @@ import {
 } from '../ipc/contract';
 
 export type ChatClient = {
-  startTask: (input: string, mode?: SessionMode) => Promise<unknown>;
+  startTask: (input: string, mode?: SessionMode, taskId?: string) => Promise<unknown>;
   approveGate?: (gateId: string, decision: GateDecision) => Promise<unknown>;
   onEvent?: (cb: (e: unknown) => void) => () => void;
 };
@@ -452,9 +452,8 @@ export function reduceEvent(state: ChatState, event: KernelEvent): Partial<ChatS
 
 // ---- Mock mode (no backend) ----
 
-function mockReply(text: string) {
+function mockReply(text: string, taskId = 'mock-' + Date.now()) {
   const event = (e: KernelEvent) => useChatStore.getState().handleEvent(e);
-  const taskId = 'mock-' + Date.now();
   const isGreeting = /hello|hi|hey|你好|帮助|help/i.test(text);
 
   if (isGreeting) {
@@ -497,6 +496,7 @@ function buildOutgoingThread(
   input: {
     userBlock: UserBlock;
     threadId: string;
+    taskId: string;
     createdAt: string;
     active: ThreadRecord | null | undefined;
     currentSnapshot: ThreadRecord | null;
@@ -509,7 +509,7 @@ function buildOutgoingThread(
     createdAt: input.createdAt,
     updatedAt: nowIso(),
     projectDir: state.currentProject?.path ?? input.currentSnapshot?.projectDir ?? input.active?.projectDir ?? null,
-    taskId: null,
+    taskId: input.taskId,
     status: 'running',
     liveReasoning: '',
     liveAssistant: '',
@@ -528,6 +528,7 @@ function outgoingStatePatch(
   input: {
     userBlock: UserBlock;
     threadId: string;
+    taskId: string;
     reuseActive: boolean;
     currentSnapshot: ThreadRecord | null;
     nextThread: ThreadRecord;
@@ -540,7 +541,7 @@ function outgoingStatePatch(
     liveAssistant: '',
     liveToolContent: '',
     busy: true,
-    currentTaskId: null,
+    currentTaskId: input.taskId,
     currentPlan: [],
     status: 'running',
     error: null,
@@ -549,7 +550,8 @@ function outgoingStatePatch(
     model: null,
     sessionMode: state.sessionMode,
     activeSessionId: input.threadId,
-    pendingThreadIds: input.reuseActive ? state.pendingThreadIds : [...state.pendingThreadIds, input.threadId],
+    taskThreadIds: { ...state.taskThreadIds, [input.taskId]: input.threadId },
+    pendingThreadIds: state.pendingThreadIds.filter((pendingId) => pendingId !== input.threadId),
     threads: input.reuseActive
       ? replaceThread(state.threads, input.nextThread)
       : replaceThread(threadsWithSnapshot, input.nextThread),
@@ -557,19 +559,19 @@ function outgoingStatePatch(
   };
 }
 
-async function dispatchOutgoingTask(client: ChatClient | null, text: string, mode: SessionMode): Promise<void> {
+async function dispatchOutgoingTask(client: ChatClient | null, text: string, mode: SessionMode, taskId: string): Promise<void> {
   if (client) {
-    await client.startTask(text, mode);
+    await client.startTask(text, mode, taskId);
     return;
   }
   if (typeof window !== 'undefined') {
     const bobby = (window as unknown as { bobby?: { send: (cmd: unknown) => Promise<unknown> } }).bobby;
     if (bobby && typeof bobby.send === 'function') {
-      await bobby.send({ type: 'startTask', input: text, mode });
+      await bobby.send({ type: 'startTask', input: text, mode, taskId });
       return;
     }
   }
-  mockReply(text);
+  mockReply(text, taskId);
 }
 
 function resolveEventThreadId(state: ChatState, taskId: string): string {
@@ -644,11 +646,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const currentSnapshot = active && !reuseActive && active.blocks.length > 0 ? currentThreadSnapshot(state, active.id) : null;
     const userBlock: UserBlock = { kind: 'user', id: uid(), text };
     const threadId = reuseActive && active ? active.id : uid();
+    const taskId = `task-${threadId}`;
     const createdAt = reuseActive && active ? active.createdAt : nowIso();
-    const nextThread = buildOutgoingThread(state, { userBlock, threadId, createdAt, active, currentSnapshot });
+    const nextThread = buildOutgoingThread(state, { userBlock, threadId, taskId, createdAt, active, currentSnapshot });
 
-    set(outgoingStatePatch(state, { userBlock, threadId, reuseActive, currentSnapshot, nextThread }));
-    await dispatchOutgoingTask(get()._client, text, state.sessionMode);
+    set(outgoingStatePatch(state, { userBlock, threadId, taskId, reuseActive, currentSnapshot, nextThread }));
+    await dispatchOutgoingTask(get()._client, text, state.sessionMode, taskId);
   },
 
   handleEvent: (event: KernelEvent) => {
