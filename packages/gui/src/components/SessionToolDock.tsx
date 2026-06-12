@@ -767,6 +767,7 @@ function buildPreviewSuggestion(packageJsonText: string | null): PreviewSuggesti
 
 function PreviewPanel() {
   const currentProject = useChatStore((s) => s.currentProject);
+  const setPreviewTarget = useChatStore((s) => s.setPreviewTarget);
   const client = React.useMemo(() => (typeof window !== 'undefined' && window.bobby ? makeKernelClient() : null), []);
   const [url, setUrl] = React.useState('http://localhost:5174');
   const [activeUrl, setActiveUrl] = React.useState('http://localhost:5174');
@@ -800,6 +801,7 @@ function PreviewPanel() {
         setSuggestion(nextSuggestion);
         setUrl(nextSuggestion.url);
         setActiveUrl(nextSuggestion.url);
+        setPreviewTarget(nextSuggestion.url);
       })
       .catch(() => {
         if (!active) return;
@@ -829,6 +831,7 @@ function PreviewPanel() {
       const result = await client.startPreviewServer({ command: suggestion.command, url: suggestion.url, confirmed: true });
       setActiveUrl(result.url);
       setUrl(result.url);
+      setPreviewTarget(result.url);
       setStatus(`Started ${result.command} and opened ${result.url}.`);
     } catch (nextError) {
       setStatus(nextError instanceof Error ? nextError.message : String(nextError));
@@ -852,14 +855,25 @@ function PreviewPanel() {
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault();
-                setActiveUrl(url.trim());
+                const nextUrl = url.trim();
+                setActiveUrl(nextUrl);
+                setPreviewTarget(nextUrl);
               }
             }}
             placeholder="http://localhost:5174"
             className="min-w-0 flex-1 rounded-md border bg-transparent px-2.5 py-1.5 text-[12px] text-bobby-ink outline-none placeholder:text-bobby-faint"
             style={{ borderColor: 'var(--bobby-border)' }}
           />
-          <button data-testid="preview-open-button" type="button" onClick={() => setActiveUrl(url.trim())} className="rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white">
+          <button
+            data-testid="preview-open-button"
+            type="button"
+            onClick={() => {
+              const nextUrl = url.trim();
+              setActiveUrl(nextUrl);
+              setPreviewTarget(nextUrl);
+            }}
+            className="rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white"
+          >
             Open
           </button>
         </div>

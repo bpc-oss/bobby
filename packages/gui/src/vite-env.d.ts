@@ -22,6 +22,9 @@ import type {
   ProposalDiscardInput,
   GitCommitInput,
   GitCommitResult,
+  GitBranchSwitchInput,
+  GitBranchSwitchResult,
+  GitStatusSummary,
   PreviewStartInput,
   PreviewStartResult,
   ProposalSummary,
@@ -73,6 +76,8 @@ declare global {
       readProposal?: (proposalId: string) => Promise<ProposalSummary | null>;
       applyProposal?: (input: ProposalApplyInput) => Promise<ProposalSummary | null>;
       discardProposal?: (input: ProposalDiscardInput) => Promise<boolean>;
+      getGitStatusSummary?: () => Promise<GitStatusSummary>;
+      switchGitBranch?: (input: GitBranchSwitchInput) => Promise<GitBranchSwitchResult>;
       gitIsRepo?: () => Promise<boolean>;
       gitCommit?: (input: GitCommitInput) => Promise<GitCommitResult>;
       listSnapshots?: () => Promise<SnapshotListEntry[]>;

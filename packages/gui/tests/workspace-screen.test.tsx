@@ -17,6 +17,9 @@ type KernelClientMock = {
   searchFiles: ReturnType<typeof vi.fn>;
   saveAttachment: ReturnType<typeof vi.fn>;
   listCommands: ReturnType<typeof vi.fn>;
+  getGitStatusSummary: ReturnType<typeof vi.fn>;
+  switchGitBranch: ReturnType<typeof vi.fn>;
+  gitCommit: ReturnType<typeof vi.fn>;
   getCapabilityReport?: ReturnType<typeof vi.fn>;
   onEvent: (callback: (event: KernelEvent) => void) => () => void;
 };
@@ -33,6 +36,22 @@ function makeKernelClientMock(): KernelClientMock {
     searchFiles: vi.fn().mockResolvedValue([]),
     saveAttachment: vi.fn().mockResolvedValue({ path: '.bobby/uploads/saved.png' }),
     listCommands: vi.fn().mockResolvedValue([]),
+    getGitStatusSummary: vi.fn().mockResolvedValue({
+      isRepo: true,
+      branch: 'feature/env-card',
+      ahead: 0,
+      behind: 0,
+      added: 7,
+      deleted: 3,
+      modified: 2,
+      untracked: 1,
+      branches: [
+        { name: 'feature/env-card', current: true, upstream: 'origin/feature/env-card' },
+        { name: 'main', current: false, upstream: 'origin/main' }
+      ]
+    }),
+    switchGitBranch: vi.fn().mockResolvedValue({ currentBranch: 'main' }),
+    gitCommit: vi.fn().mockResolvedValue({ committed: true, hash: 'abc1234', output: 'Committed changes' }),
     onEvent: noopOnEvent
   };
 }
@@ -59,6 +78,7 @@ beforeEach(() => {
     activeSessionId: null,
     currentProject: null,
     recentProjects: [],
+    previewTarget: null,
     _client: null
   });
 });
@@ -356,6 +376,65 @@ describe('workspace UI smoke', () => {
     expect(screen.getAllByText('计划模式').length).toBeGreaterThan(0);
     expect(screen.getAllByText('目标').length).toBeGreaterThan(0);
     expect(screen.getByText('插件')).toBeTruthy();
+  });
+
+  it('shows an environment popover with git, progress, browser, and sources', async () => {
+    const client = makeKernelClientMock();
+    useChatStore.setState({
+      blocks: [
+        { kind: 'user', id: 'u-1', text: 'Review @src/index.ts and inspect proposal.patch' },
+        {
+          kind: 'evidence',
+          id: 'e-1',
+          evidence: {
+            claimId: 'c-1',
+            acId: 'AC1',
+            evidenceType: 'file_diff',
+            payload: { path: 'src/index.ts', patch: '@@ -0,0 +1 @@\n+hello' },
+            producedBy: 'tool'
+          }
+        }
+      ],
+      currentPlan: [{ id: 'step-1', desc: 'Inspect shell parity', satisfiesAcIds: ['AC1'], dependsOn: [] }],
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      },
+      previewTarget: 'http://localhost:5174'
+    });
+
+    render(<Workspace kernelClient={client} />);
+
+    expect(await screen.findByText('环境信息')).toBeTruthy();
+    expect(screen.getByText('feature/env-card')).toBeTruthy();
+    expect(screen.getByText('+7')).toBeTruthy();
+    expect(screen.getByText('-3')).toBeTruthy();
+    expect(screen.getByText('Inspect shell parity')).toBeTruthy();
+    expect(screen.getByText('http://localhost:5174')).toBeTruthy();
+    expect(screen.getAllByText('src/index.ts').length).toBeGreaterThan(0);
+  });
+
+  it('filters and switches branches from the environment popover', async () => {
+    const client = makeKernelClientMock();
+    useChatStore.setState({
+      currentProject: {
+        name: 'Bobby',
+        path: 'E:\\ai-files\\Bobby',
+        lastOpenedAt: '2026-06-12T00:00:00.000Z'
+      }
+    });
+
+    render(<Workspace kernelClient={client} />);
+
+    expect(await screen.findByText('feature/env-card')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('environment-branch-toggle'));
+    fireEvent.change(screen.getByPlaceholderText('搜索分支'), { target: { value: 'main' } });
+    fireEvent.click(screen.getByText('main'));
+
+    await vi.waitFor(() => {
+      expect(client.switchGitBranch).toHaveBeenCalledWith({ name: 'main', confirmed: true });
+    });
   });
 
   it('opens the composer project picker and shows recent projects', () => {

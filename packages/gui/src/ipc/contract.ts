@@ -222,6 +222,37 @@ export const GitCommitResultSchema = z.object({
 });
 export type GitCommitResult = z.infer<typeof GitCommitResultSchema>;
 
+export const GitBranchRecordSchema = z.object({
+  name: z.string().min(1),
+  current: z.boolean(),
+  upstream: z.string().nullable().optional()
+});
+export type GitBranchRecord = z.infer<typeof GitBranchRecordSchema>;
+
+export const GitStatusSummarySchema = z.object({
+  isRepo: z.boolean(),
+  branch: z.string().nullable(),
+  ahead: z.number().int().nonnegative(),
+  behind: z.number().int().nonnegative(),
+  added: z.number().int().nonnegative(),
+  deleted: z.number().int().nonnegative(),
+  modified: z.number().int().nonnegative(),
+  untracked: z.number().int().nonnegative(),
+  branches: z.array(GitBranchRecordSchema)
+});
+export type GitStatusSummary = z.infer<typeof GitStatusSummarySchema>;
+
+export const GitBranchSwitchInputSchema = z.object({
+  name: z.string().min(1),
+  confirmed: z.literal(true)
+});
+export type GitBranchSwitchInput = z.infer<typeof GitBranchSwitchInputSchema>;
+
+export const GitBranchSwitchResultSchema = z.object({
+  currentBranch: z.string().min(1)
+});
+export type GitBranchSwitchResult = z.infer<typeof GitBranchSwitchResultSchema>;
+
 export const SnapshotListEntrySchema = z.object({
   id: z.string().min(1),
   createdAt: z.string().min(1),
@@ -471,6 +502,18 @@ export function makeKernelClient() {
     restoreSnapshot: (snapshotId?: string) => window.bobby.send({ type: 'restoreSnapshot', snapshotId, restoreConfirmed: true }),
     applyProposal: (input: ProposalApplyInput) => window.bobby.applyProposal!(input),
     discardProposal: (input: ProposalDiscardInput) => window.bobby.discardProposal!(input),
+    getGitStatusSummary: () => window.bobby.getGitStatusSummary?.() ?? Promise.resolve(GitStatusSummarySchema.parse({
+      isRepo: false,
+      branch: null,
+      ahead: 0,
+      behind: 0,
+      added: 0,
+      deleted: 0,
+      modified: 0,
+      untracked: 0,
+      branches: []
+    })),
+    switchGitBranch: (input: GitBranchSwitchInput) => window.bobby.switchGitBranch!(input),
     gitIsRepo: () => window.bobby.gitIsRepo?.() ?? Promise.resolve(false),
     gitCommit: (input: GitCommitInput) => window.bobby.gitCommit!(input)
   };

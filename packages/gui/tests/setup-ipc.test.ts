@@ -579,6 +579,60 @@ describe('git IPC handlers', () => {
     expect(result.output).toContain('Test Bobby commit');
     expect(spawnSync('git', ['-C', projectRoot, 'log', '-1', '--pretty=%s'], { encoding: 'utf8' }).stdout.trim()).toBe('Test Bobby commit');
   });
+
+  it('reports git branch and working tree counts for the selected project', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'bobby-git-status-project-'));
+    spawnSync('git', ['init', '-q', '-b', 'feature/env-card'], { cwd: projectRoot, encoding: 'utf8' });
+    spawnSync('git', ['config', 'user.email', 'test@example.com'], { cwd: projectRoot, encoding: 'utf8' });
+    spawnSync('git', ['config', 'user.name', 'Bobby Test'], { cwd: projectRoot, encoding: 'utf8' });
+    writeFileSync(join(projectRoot, 'tracked.txt'), 'before\n', 'utf8');
+    spawnSync('git', ['add', 'tracked.txt'], { cwd: projectRoot, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'Initial'], { cwd: projectRoot, encoding: 'utf8' });
+
+    writeFileSync(join(projectRoot, 'tracked.txt'), 'after\n', 'utf8');
+    writeFileSync(join(projectRoot, 'new.txt'), 'new\n', 'utf8');
+
+    await loadMain([], projectRoot);
+    const status = handlers.get('git:getStatus');
+    if (!status) throw new Error('git:getStatus handler not registered');
+
+    const result = await status() as {
+      isRepo: boolean;
+      branch: string | null;
+      modified: number;
+      untracked: number;
+      branches: Array<{ name: string; current: boolean }>;
+    };
+
+    expect(result.isRepo).toBe(true);
+    expect(result.branch).toBe('feature/env-card');
+    expect(result.modified).toBeGreaterThanOrEqual(1);
+    expect(result.untracked).toBeGreaterThanOrEqual(1);
+    expect(result.branches.some((branch) => branch.name === 'feature/env-card' && branch.current)).toBe(true);
+  });
+
+  it('switches git branches inside the selected project', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'bobby-git-switch-project-'));
+    spawnSync('git', ['init', '-q', '-b', 'feature/env-card'], { cwd: projectRoot, encoding: 'utf8' });
+    spawnSync('git', ['config', 'user.email', 'test@example.com'], { cwd: projectRoot, encoding: 'utf8' });
+    spawnSync('git', ['config', 'user.name', 'Bobby Test'], { cwd: projectRoot, encoding: 'utf8' });
+    writeFileSync(join(projectRoot, 'tracked.txt'), 'before\n', 'utf8');
+    spawnSync('git', ['add', 'tracked.txt'], { cwd: projectRoot, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'Initial'], { cwd: projectRoot, encoding: 'utf8' });
+    spawnSync('git', ['branch', 'main'], { cwd: projectRoot, encoding: 'utf8' });
+
+    await loadMain([], projectRoot);
+    const switchBranch = handlers.get('git:switchBranch');
+    const status = handlers.get('git:getStatus');
+    if (!switchBranch || !status) throw new Error('git branch handlers not registered');
+
+    const switched = await switchBranch(undefined, { name: 'main', confirmed: true }) as { currentBranch: string };
+    const nextStatus = await status() as { branch: string | null };
+
+    expect(switched.currentBranch).toBe('main');
+    expect(nextStatus.branch).toBe('main');
+    expect(spawnSync('git', ['-C', projectRoot, 'branch', '--show-current'], { encoding: 'utf8' }).stdout.trim()).toBe('main');
+  });
 });
 
 describe('agent IPC handlers', () => {

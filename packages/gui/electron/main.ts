@@ -38,7 +38,10 @@ import {
   AutomationUpdateInputSchema,
   CommandRemoveInputSchema,
   CommandUpsertInputSchema,
+  GitBranchSwitchInputSchema,
+  GitBranchSwitchResultSchema,
   GitCommitInputSchema,
+  GitStatusSummarySchema,
   ProjectSelectResultSchema,
   ProposalApplyInputSchema,
   ProposalDiscardInputSchema,
@@ -1333,6 +1336,106 @@ function commitWorkspace(workspaceRoot: string, message: string) {
   });
 }
 
+function listGitBranches(workspaceRoot: string): Array<{ name: string; current: boolean; upstream: string | null }> {
+  if (!isGitRepository(workspaceRoot)) {
+    return [];
+  }
+
+  const result = runGit(['branch', '--format=%(refname:short)|%(HEAD)|%(upstream:short)'], workspaceRoot);
+  if (!result.ok) {
+    return [];
+  }
+
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [name, head, upstream] = line.split('|');
+      return {
+        name: name?.trim() ?? '',
+        current: head?.trim() === '*',
+        upstream: upstream?.trim() ? upstream.trim() : null
+      };
+    })
+    .filter((branch) => branch.name.length > 0);
+}
+
+function readGitStatusSummary(workspaceRoot: string) {
+  if (!isGitRepository(workspaceRoot)) {
+    return GitStatusSummarySchema.parse({
+      isRepo: false,
+      branch: null,
+      ahead: 0,
+      behind: 0,
+      added: 0,
+      deleted: 0,
+      modified: 0,
+      untracked: 0,
+      branches: []
+    });
+  }
+
+  const status = runGit(['status', '--porcelain=1', '--branch'], workspaceRoot);
+  const branches = listGitBranches(workspaceRoot);
+  const summary = {
+    isRepo: true,
+    branch: branches.find((branch) => branch.current)?.name ?? null,
+    ahead: 0,
+    behind: 0,
+    added: 0,
+    deleted: 0,
+    modified: 0,
+    untracked: 0,
+    branches
+  };
+
+  for (const rawLine of status.stdout.split(/\r?\n/)) {
+    const line = rawLine.trimEnd();
+    if (!line) {
+      continue;
+    }
+    if (line.startsWith('## ')) {
+      const tracking = line.match(/\[(.*?)\]/)?.[1] ?? '';
+      const aheadMatch = tracking.match(/ahead (\d+)/);
+      const behindMatch = tracking.match(/behind (\d+)/);
+      summary.ahead = aheadMatch ? Number.parseInt(aheadMatch[1] ?? '0', 10) : 0;
+      summary.behind = behindMatch ? Number.parseInt(behindMatch[1] ?? '0', 10) : 0;
+      continue;
+    }
+    if (line.startsWith('??')) {
+      summary.untracked += 1;
+      continue;
+    }
+
+    const x = line[0] ?? ' ';
+    const y = line[1] ?? ' ';
+    if (x === 'A' || y === 'A') summary.added += 1;
+    if (x === 'D' || y === 'D') summary.deleted += 1;
+    if (['M', 'R', 'C', 'T', 'U'].includes(x) || ['M', 'R', 'C', 'T', 'U'].includes(y)) {
+      summary.modified += 1;
+    }
+  }
+
+  return GitStatusSummarySchema.parse(summary);
+}
+
+function switchGitBranch(workspaceRoot: string, branchName: string) {
+  if (!isGitRepository(workspaceRoot)) {
+    throw new Error('Not a git repository');
+  }
+
+  const result = runGit(['switch', branchName], workspaceRoot);
+  if (!result.ok) {
+    throw new Error(result.stderr || result.stdout || 'git switch failed');
+  }
+
+  const current = runGit(['branch', '--show-current'], workspaceRoot);
+  return GitBranchSwitchResultSchema.parse({
+    currentBranch: current.ok ? current.stdout.trim() : branchName
+  });
+}
+
 function getCapabilityReport(): CapabilityReport | null {
   const paths = resolveSetupPaths();
   if (!existsSync(paths.capabilitiesPath)) {
@@ -1872,6 +1975,13 @@ ipcMain.handle('proposals:discard', async (_event, input) => {
 });
 
 ipcMain.handle('git:isRepo', async () => isGitRepository(currentWorkspaceRoot()));
+
+ipcMain.handle('git:getStatus', async () => readGitStatusSummary(currentWorkspaceRoot()));
+
+ipcMain.handle('git:switchBranch', async (_event, input) => {
+  const parsed = GitBranchSwitchInputSchema.parse(input);
+  return switchGitBranch(currentWorkspaceRoot(), parsed.name);
+});
 
 ipcMain.handle('git:commit', async (_event, input) => {
   const parsed = GitCommitInputSchema.parse(input);

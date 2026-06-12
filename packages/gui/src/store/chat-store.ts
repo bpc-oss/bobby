@@ -117,6 +117,7 @@ export type ChatState = {
   activeSessionId: string | null;
   currentProject: ProjectMeta | null;
   recentProjects: ProjectMeta[];
+  previewTarget: string | null;
 
   // Internal client
   _client: ChatClient | null;
@@ -133,6 +134,7 @@ export type ChatState = {
   switchSession: (id: string) => void;
   resumeSession: (id: string) => void;
   setSessionMode: (mode: SessionMode) => void;
+  setPreviewTarget: (target: string | null) => void;
   loadProjectState: () => Promise<void>;
   openProject: () => Promise<void>;
   selectProject: (projectDir: string) => Promise<void>;
@@ -303,9 +305,10 @@ function stateFromThread(base: ChatState, thread: ThreadRecord): ChatState {
     threads: replaceThread(base.threads, thread),
     taskThreadIds: thread.taskId ? { ...base.taskThreadIds, [thread.taskId]: thread.id } : base.taskThreadIds,
     pendingThreadIds: base.pendingThreadIds.filter((threadId) => threadId !== thread.id),
-    currentProject: base.currentProject,
-    recentProjects: base.recentProjects,
-    _client: base._client
+  currentProject: base.currentProject,
+  recentProjects: base.recentProjects,
+  previewTarget: base.previewTarget,
+  _client: base._client
   };
 }
 
@@ -635,6 +638,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   activeSessionId: null,
   currentProject: null,
   recentProjects: [],
+  previewTarget: null,
 
   _client: null as ChatClient | null,
   setClient: (client) => set({ _client: client }),
@@ -812,6 +816,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       sessions: replaceSession(state.sessions, nextThread)
     });
     void persistSession(nextThread);
+  },
+  setPreviewTarget: (target: string | null) => {
+    set({ previewTarget: target?.trim() ? target.trim() : null });
   },
 
   clearBlocks: () => set({ blocks: [], liveReasoning: '', liveAssistant: '', liveToolContent: '' }),

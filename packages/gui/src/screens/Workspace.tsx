@@ -3,7 +3,7 @@ import type { GateDecision, KernelEvent } from '@bobby/shared';
 import { Check, ChevronDown, ChevronUp, GitBranch, Lightbulb, Mic, Plus, Route, Search, Send, ShieldCheck, Square } from 'lucide-react';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { useChatStore, type ChatBlock } from '../store/chat-store';
-import type { CapabilityReport, CommandRecordDto, SessionMode } from '../ipc/contract';
+import type { CapabilityReport, CommandRecordDto, GitStatusSummary, SessionMode } from '../ipc/contract';
 
 type WorkspaceProps = {
   kernelClient?: {
@@ -11,6 +11,9 @@ type WorkspaceProps = {
     approveGate?: (gateId: string, decision: GateDecision) => Promise<unknown>;
     restoreSnapshot?: (snapshotId?: string) => Promise<unknown>;
     getCapabilityReport?: () => Promise<CapabilityReport | null>;
+    getGitStatusSummary?: () => Promise<GitStatusSummary>;
+    switchGitBranch?: (input: { name: string; confirmed: true }) => Promise<{ currentBranch: string }>;
+    gitCommit?: (input: { message: string }) => Promise<{ committed: boolean; hash: string | null; output: string }>;
     searchFiles?: (query: string) => Promise<Array<{ path: string; preview?: string | null }>>;
     saveAttachment?: (input: { sourcePath: string; fileName: string }) => Promise<{ path: string }>;
     listCommands?: () => Promise<CommandRecordDto[]>;
@@ -254,6 +257,231 @@ type ComposerItem = {
   mode: ComposerMode;
   onPick: () => void;
 };
+
+function collectEnvironmentSources(blocks: ChatBlock[]): string[] {
+  const seen = new Set<string>();
+  const push = (value: string | null | undefined) => {
+    const normalized = value?.trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+  };
+
+  for (const block of blocks) {
+    if (block.kind === 'user') {
+      for (const match of block.text.matchAll(/@([A-Za-z0-9._/-]+\.[A-Za-z0-9]{1,12})/g)) {
+        push(match[1]);
+      }
+    }
+    if (block.kind === 'evidence') {
+      const payload = block.evidence.payload as Record<string, unknown>;
+      if (typeof payload.path === 'string') {
+        push(payload.path);
+      }
+    }
+  }
+
+  return Array.from(seen).slice(0, 6);
+}
+
+function EnvironmentPopover({
+  kernelClient,
+  blocks,
+  currentPlan,
+  currentProject,
+  previewTarget
+}: {
+  kernelClient?: WorkspaceProps['kernelClient'];
+  blocks: ChatBlock[];
+  currentPlan: Array<{ id: string; desc: string }>;
+  currentProject: { name: string; path: string; lastOpenedAt: string } | null;
+  previewTarget: string | null;
+}) {
+  const [gitSummary, setGitSummary] = useState<GitStatusSummary | null>(null);
+  const [branchesOpen, setBranchesOpen] = useState(false);
+  const [branchQuery, setBranchQuery] = useState('');
+  const [busyBranch, setBusyBranch] = useState<string | null>(null);
+  const sources = React.useMemo(() => collectEnvironmentSources(blocks), [blocks]);
+  const progressSteps = currentPlan.slice(0, 4);
+
+  useEffect(() => {
+    let active = true;
+    if (!currentProject || !kernelClient?.getGitStatusSummary) {
+      setGitSummary(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    void kernelClient.getGitStatusSummary()
+      .then((summary) => {
+        if (active) {
+          setGitSummary(summary);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setGitSummary(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentProject, kernelClient]);
+
+  const filteredBranches = React.useMemo(() => {
+    const normalized = branchQuery.trim().toLowerCase();
+    const branches = gitSummary?.branches ?? [];
+    if (!normalized) {
+      return branches;
+    }
+    return branches.filter((branch) => {
+      const haystack = `${branch.name} ${branch.upstream ?? ''}`.toLowerCase();
+      return haystack.includes(normalized);
+    });
+  }, [branchQuery, gitSummary]);
+
+  const positiveCount = gitSummary?.added ?? 0;
+  const negativeCount = gitSummary?.deleted ?? 0;
+
+  const switchBranch = async (name: string) => {
+    if (!kernelClient?.switchGitBranch || busyBranch === name) {
+      return;
+    }
+    setBusyBranch(name);
+    try {
+      await kernelClient.switchGitBranch({ name, confirmed: true });
+      const refreshed = await kernelClient.getGitStatusSummary?.();
+      if (refreshed) {
+        setGitSummary(refreshed);
+      }
+      setBranchesOpen(false);
+      setBranchQuery('');
+    } finally {
+      setBusyBranch(null);
+    }
+  };
+
+  if (!currentProject) {
+    return null;
+  }
+
+  return (
+    <aside
+      className="absolute right-4 top-4 z-10 w-[300px] rounded-[28px] border px-5 py-4 shadow-2xl"
+      style={{ background: 'rgba(33, 33, 38, 0.96)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[12px] font-semibold tracking-wide text-bobby-faint">环境信息</div>
+        </div>
+        <button
+          type="button"
+          aria-label="Environment settings"
+          className="rounded-full p-1 text-bobby-faint transition hover:bg-bobby-hover hover:text-bobby-ink"
+        >
+          <Check className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-4 text-[12px]">
+        <section>
+          <div className="text-bobby-faint">变更</div>
+          <div className="mt-1 flex items-center gap-2 text-[16px] font-semibold">
+            <span style={{ color: 'var(--bobby-success)' }}>{`+${positiveCount}`}</span>
+            <span style={{ color: 'var(--bobby-danger)' }}>{`-${negativeCount}`}</span>
+          </div>
+        </section>
+
+        <section className="border-t pt-3" style={{ borderColor: 'rgba(255, 255, 255, 0.08)' }}>
+          <div className="text-bobby-faint">本地</div>
+          <div className="mt-1 flex items-center gap-2">
+            <GitBranch className="h-3.5 w-3.5 text-bobby-faint" />
+            <button
+              data-testid="environment-branch-toggle"
+              type="button"
+              onClick={() => setBranchesOpen((open) => !open)}
+              className="inline-flex items-center gap-1 text-left text-[13px] font-medium text-bobby-ink"
+            >
+              <span className="truncate">{gitSummary?.branch ?? '非 git 项目'}</span>
+              <ChevronDown className={`h-3.5 w-3.5 text-bobby-faint transition ${branchesOpen ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+          {branchesOpen ? (
+            <div
+              className="mt-2 rounded-2xl border p-2"
+              style={{ background: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
+            >
+              <input
+                value={branchQuery}
+                onChange={(event) => setBranchQuery(event.target.value)}
+                placeholder="搜索分支"
+                className="w-full rounded-xl border px-3 py-2 text-[12px] text-bobby-ink outline-none placeholder:text-bobby-faint"
+                style={{ background: 'rgba(255, 255, 255, 0.04)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
+              />
+              <div className="mt-2 max-h-[160px] space-y-1 overflow-y-auto">
+                {filteredBranches.map((branch) => (
+                  <button
+                    key={branch.name}
+                    type="button"
+                    disabled={busyBranch === branch.name}
+                    onClick={() => void switchBranch(branch.name)}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] text-bobby-muted transition hover:bg-bobby-hover hover:text-bobby-ink disabled:opacity-50"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{branch.name}</span>
+                    {branch.current ? <Check className="h-3.5 w-3.5 shrink-0" /> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-2 space-y-1 text-[12px] text-bobby-muted">
+            <div>提交或推送</div>
+            <div>创建拉取请求</div>
+          </div>
+        </section>
+
+        <section className="border-t pt-3" style={{ borderColor: 'rgba(255, 255, 255, 0.08)' }}>
+          <div className="text-bobby-faint">进度</div>
+          <div className="mt-2 space-y-2">
+            {progressSteps.length === 0 ? (
+              <div className="text-[12px] text-bobby-muted">暂无计划步骤</div>
+            ) : (
+              progressSteps.map((step, index) => (
+                <div key={step.id} className="flex items-start gap-2 text-[12px] text-bobby-muted">
+                  <span className="mt-[2px] inline-block h-2 w-2 rounded-full" style={{ background: index === 0 ? 'var(--bobby-success)' : 'rgba(255, 255, 255, 0.28)' }} />
+                  <span className="min-w-0 flex-1 break-words">{step.desc}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="border-t pt-3" style={{ borderColor: 'rgba(255, 255, 255, 0.08)' }}>
+          <div className="text-bobby-faint">浏览器</div>
+          <div className="mt-1 break-all text-[12px] text-bobby-ink">{previewTarget ?? '暂无浏览器'}</div>
+        </section>
+
+        <section className="border-t pt-3" style={{ borderColor: 'rgba(255, 255, 255, 0.08)' }}>
+          <div className="text-bobby-faint">来源</div>
+          <div className="mt-2 space-y-1">
+            {sources.length === 0 ? (
+              <div className="text-[12px] text-bobby-muted">暂无来源</div>
+            ) : (
+              sources.map((source) => (
+                <div key={source} className="truncate text-[12px] text-bobby-ink">
+                  {source}
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+    </aside>
+  );
+}
 
 function Composer({ onSend, busy, onAbort, kernelClient }: { onSend: (text: string) => void; busy: boolean; onAbort: () => void; kernelClient?: WorkspaceProps['kernelClient'] }) {
   const [input, setInput] = useState('');
@@ -1064,6 +1292,9 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange }: Work
   const currentTaskId = useChatStore((s) => s.currentTaskId);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const threads = useChatStore((s) => s.threads);
+  const currentPlan = useChatStore((s) => s.currentPlan);
+  const currentProject = useChatStore((s) => s.currentProject);
+  const previewTarget = useChatStore((s) => s.previewTarget);
   const [selectedModel, setSelectedModel] = useState('deepseek-chat');
   const [showModelPicker, setShowModelPicker] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -1108,7 +1339,14 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange }: Work
   }, [clearBlocks, newSession]);
 
   return (
-    <div className="flex h-full flex-col" style={{ background: 'var(--bobby-stage-gradient)' }}>
+    <div className="relative flex h-full flex-col" style={{ background: 'var(--bobby-stage-gradient)' }}>
+      <EnvironmentPopover
+        kernelClient={kernelClient}
+        blocks={blocks}
+        currentPlan={currentPlan}
+        currentProject={currentProject}
+        previewTarget={previewTarget}
+      />
       <div style={{ background: 'var(--bobby-topbar-bg)', boxShadow: 'var(--bobby-topbar-shadow)', borderBottom: '1px solid var(--bobby-border-muted)' }}>
         <div className="flex items-center justify-between px-4 py-2.5">
           <div className="flex items-center gap-3">
