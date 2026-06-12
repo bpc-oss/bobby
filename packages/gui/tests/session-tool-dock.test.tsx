@@ -6,7 +6,7 @@ import { SessionToolDock } from '../src/components/SessionToolDock';
 import { useChatStore } from '../src/store/chat-store';
 
 function installBobby() {
-    (window as any).bobby = {
+    (window as { bobby?: unknown }).bobby = {
     send: vi.fn().mockResolvedValue(undefined),
     onEvent: vi.fn().mockReturnValue(() => undefined),
     getSetupStatus: vi.fn().mockResolvedValue({
@@ -138,7 +138,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  (window as any).bobby = undefined;
+  (window as { bobby?: unknown }).bobby = undefined;
 });
 
 describe('SessionToolDock', () => {
@@ -148,7 +148,7 @@ describe('SessionToolDock', () => {
     fireEvent.click(screen.getByTitle(/Diff/));
     fireEvent.click(screen.getByText('Undo'));
 
-    const send = (window as any).bobby.send as ReturnType<typeof vi.fn>;
+    const send = window.bobby.send;
     expect(window.confirm).toHaveBeenCalledWith('Restore the latest checkpoint?');
     expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot' });
   });
@@ -161,7 +161,7 @@ describe('SessionToolDock', () => {
     expect(screen.getByText('task task-1 / step step-1')).toBeTruthy();
     fireEvent.click(screen.getByText('Restore'));
 
-    const send = (window as any).bobby.send as ReturnType<typeof vi.fn>;
+    const send = window.bobby.send;
     expect(window.confirm).toHaveBeenCalledWith('Restore checkpoint snap-1?');
     expect(send).toHaveBeenCalledWith({ type: 'restoreSnapshot', snapshotId: 'snap-1' });
   });
@@ -188,7 +188,7 @@ describe('SessionToolDock', () => {
   });
 
   it('orders checkpoint timeline from oldest to newest', async () => {
-    (window as any).bobby.listSnapshots = vi.fn().mockResolvedValue([
+    window.bobby.listSnapshots = vi.fn().mockResolvedValue([
       {
         id: 'snap-2',
         createdAt: '2026-06-11T00:01:00.000Z',
@@ -236,7 +236,7 @@ describe('SessionToolDock', () => {
     fireEvent.click(screen.getByText('utils.ts'));
     expect(await screen.findByText('export const answer = 42;')).toBeTruthy();
 
-    const readWorkspaceFile = (window as any).bobby.readWorkspaceFile as ReturnType<typeof vi.fn>;
+    const readWorkspaceFile = window.bobby.readWorkspaceFile;
     expect(readWorkspaceFile).toHaveBeenCalledWith('src/utils.ts');
   });
 
@@ -248,7 +248,7 @@ describe('SessionToolDock', () => {
     fireEvent.change(input, { target: { value: 'pnpm test' } });
     fireEvent.click(screen.getByText('Run'));
 
-    const runTerminalCommand = (window as any).bobby.runTerminalCommand as ReturnType<typeof vi.fn>;
+    const runTerminalCommand = window.bobby.runTerminalCommand;
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('pnpm test'));
     expect(runTerminalCommand).toHaveBeenCalledWith({ command: 'pnpm test' });
     expect(await screen.findByText('exit 0')).toBeTruthy();
@@ -325,7 +325,7 @@ describe('SessionToolDock', () => {
   });
 
   it('keeps proposal apply disabled while the current session still has a gate', async () => {
-    (window as any).bobby.listProposals = vi.fn().mockResolvedValue([
+    window.bobby.listProposals = vi.fn().mockResolvedValue([
       {
         proposalId: 'proposal-1',
         proposalPath: 'E:\\ai-files\\Bobby\\.bobby\\proposals\\proposal-1.patch',
@@ -377,7 +377,7 @@ describe('SessionToolDock', () => {
 
     fireEvent.click(screen.getByText('Start dev server'));
 
-    const runTerminalCommand = (window as any).bobby.runTerminalCommand as ReturnType<typeof vi.fn>;
+    const runTerminalCommand = window.bobby.runTerminalCommand;
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('pnpm dev'));
     expect(runTerminalCommand).toHaveBeenCalledWith({ command: 'cmd /c start "" pnpm dev' });
     expect(await screen.findByText(/Active preview: http:\/\/localhost:5173/)).toBeTruthy();

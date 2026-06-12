@@ -42,7 +42,6 @@ import {
   ProposalDiscardInputSchema,
   ProposalSummarySchema,
   GitCommitResultSchema,
-  McpServerRecordSchema,
   McpServerRemoveInputSchema,
   McpServerToggleInputSchema,
   McpServerUpsertInputSchema,
@@ -64,10 +63,6 @@ import {
   type ProjectMeta,
   type ProjectSelectResult,
   type ProposalSummary,
-  type McpServerRecordDto,
-  type McpServerRemoveInput,
-  type McpServerToggleInput,
-  type McpServerUpsertInput,
   type SessionRecordDto,
   type SubAgentRecordDto,
   type TaskDetail,
@@ -96,8 +91,6 @@ import {
   listMcpServers,
   registerMcpTools,
   removeMcpServer,
-  resolveMcpServersFile,
-  saveMcpServers,
   toggleMcpServer,
   upsertMcpServer
 } from './mcp-manager';
@@ -156,7 +149,7 @@ function createConscienceDepsForWorkspace(workspaceRoot: string, registry = new 
   };
 }
 
-let conscienceDeps = {
+const conscienceDeps = {
   engine: new VerificationEngine([new CommandExitOracle(), new FileDiffOracle(), new FileExistsOracle()]),
   gate: new CompletionGate(),
   evidenceFor: (

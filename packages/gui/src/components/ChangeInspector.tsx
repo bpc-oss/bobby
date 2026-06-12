@@ -35,7 +35,11 @@ export function ChangeInspector() {
 
   const toggle = (file: string) => {
     const next = new Set(expanded);
-    next.has(file) ? next.delete(file) : next.add(file);
+    if (next.has(file)) {
+      next.delete(file);
+    } else {
+      next.add(file);
+    }
     setExpanded(next);
   };
 

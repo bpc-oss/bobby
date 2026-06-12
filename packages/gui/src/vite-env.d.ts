@@ -91,7 +91,7 @@ declare global {
       toggleAutomation: (input: AutomationToggleInput) => Promise<AutomationRecord>;
       removeAutomation: (input: AutomationRemoveInput) => Promise<boolean>;
       runAutomationNow: (input: AutomationToggleInput) => Promise<AutomationRecord | null>;
-    } & Record<string, any>;
+    } & Record<string, unknown>;
   }
 }
 

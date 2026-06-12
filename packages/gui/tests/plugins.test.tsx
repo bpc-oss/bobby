@@ -32,7 +32,7 @@ function makeServer(overrides: Partial<McpServerRecordDto> = {}): McpServerRecor
 }
 
 beforeEach(() => {
-  (window as any).bobby = {
+  (window as { bobby?: unknown }).bobby = {
     send: vi.fn(),
     onEvent: vi.fn(),
     getSetupStatus: vi.fn(),
@@ -53,7 +53,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  (window as any).bobby = undefined;
+  (window as { bobby?: unknown }).bobby = undefined;
 });
 
 describe('PluginMarketplace', () => {
@@ -69,22 +69,22 @@ describe('PluginMarketplace', () => {
 
     fireEvent.click(screen.getByText('Add server'));
     await waitFor(() => {
-      expect((window as any).bobby.upsertMcpServer).toHaveBeenCalled();
+      expect(window.bobby.upsertMcpServer).toHaveBeenCalled();
     });
 
     fireEvent.click(screen.getByText('Disable'));
     await waitFor(() => {
-      expect((window as any).bobby.toggleMcpServer).toHaveBeenCalled();
+      expect(window.bobby.toggleMcpServer).toHaveBeenCalled();
     });
 
     fireEvent.click(screen.getByText('Remove'));
     await waitFor(() => {
-      expect((window as any).bobby.removeMcpServer).toHaveBeenCalled();
+      expect(window.bobby.removeMcpServer).toHaveBeenCalled();
     });
   });
 
   it('renders MCP health and tool permissions from backend records', async () => {
-    (window as any).bobby.listMcpServers = vi.fn().mockResolvedValue([
+    window.bobby.listMcpServers = vi.fn().mockResolvedValue([
       makeServer({ health: 'disabled', enabled: false, lastError: null }),
       makeServer({
         id: 'remote',

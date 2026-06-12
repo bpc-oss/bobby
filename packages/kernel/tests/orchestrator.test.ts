@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Orchestrator } from '../src/brain/orchestrator';
+import { Orchestrator, type ConscienceDeps } from '../src/brain/orchestrator';
 import { ToolRegistry } from '../src/hands/tool';
 import { MockModelClient } from '../src/model/mock-model-client';
 
@@ -67,7 +67,7 @@ const createPermissionConscience = () => {
     },
     evidenceFor: vi.fn(),
     toolRegistry
-  } as any;
+  } as unknown as ConscienceDeps;
 };
 
 const createDeferred = <T>(): {

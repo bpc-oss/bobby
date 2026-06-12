@@ -42,7 +42,6 @@ const mkdirThenWriteThenRunRunnerJson = JSON.stringify({
   ]
 });
 
-// eslint-disable-next-line max-lines-per-function
 describe('CLI e2e (mock executor)', () => {
   it('prints real evidence and done for write_file + exec tool calls', async () => {
     const originalCwd = process.cwd();

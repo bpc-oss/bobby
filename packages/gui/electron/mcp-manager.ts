@@ -210,7 +210,7 @@ export function saveMcpServers(userDataDir: string, servers: McpServerRecordDto[
   writeFileSync(path, JSON.stringify(servers, null, 2), 'utf8');
 }
 
-export function ensureDefaultMcpServers(userDataDir: string, workspaceRoot: string): McpServerRecordDto[] {
+export function ensureDefaultMcpServers(userDataDir: string, _workspaceRoot: string): McpServerRecordDto[] {
   const existing = loadMcpServers(userDataDir);
   if (existing.length > 0) {
     return existing;

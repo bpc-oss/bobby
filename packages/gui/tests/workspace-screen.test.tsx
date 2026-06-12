@@ -86,7 +86,7 @@ describe('workspace UI smoke', () => {
 
   it('smoke renders workspace core areas', () => {
     const client = makeKernelClientMock();
-    const { container } = render(<Workspace kernelClient={client} />);
+    render(<Workspace kernelClient={client} />);
 
     expect(screen.getByPlaceholderText(/Describe a task/)).toBeTruthy();
     expect(screen.getByText('Send')).toBeTruthy();

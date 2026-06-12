@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Agents } from '../src/screens/Agents';
 
 beforeEach(() => {
-  (window as any).bobby = {
+  (window as { bobby?: unknown }).bobby = {
     send: vi.fn(),
     onEvent: vi.fn(),
     listSubAgents: vi.fn().mockResolvedValue([
@@ -87,7 +87,7 @@ describe('Agents screen', () => {
     fireEvent.click(screen.getByText('Dispatch'));
 
     await vi.waitFor(() => {
-      expect((window as any).bobby.upsertSubAgent).toHaveBeenCalledWith({
+      expect(window.bobby.upsertSubAgent).toHaveBeenCalledWith({
         sourcePath: undefined,
         name: 'Inspector',
         description: 'Inspects files',
@@ -96,7 +96,7 @@ describe('Agents screen', () => {
         triggers: [],
         systemPrompt: 'Inspect:\n{{input}}'
       });
-      expect((window as any).bobby.dispatchSubAgent).toHaveBeenCalledWith({
+      expect(window.bobby.dispatchSubAgent).toHaveBeenCalledWith({
         sourcePath: 'E:\\ai-files\\Bobby\\.bobby\\agents\\writer.md',
         task: 'Review hello.txt'
       });

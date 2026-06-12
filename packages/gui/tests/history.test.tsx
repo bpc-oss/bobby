@@ -41,7 +41,7 @@ const detail: TaskDetail = {
 };
 
 beforeEach(() => {
-  (window as any).bobby = {
+  (window as { bobby?: unknown }).bobby = {
     listTasks: vi.fn().mockResolvedValue([summary]),
     readTask: vi.fn().mockResolvedValue(detail)
   };
@@ -50,7 +50,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  delete (window as any).bobby;
+  delete (window as { bobby?: unknown }).bobby;
 });
 
 describe('History replay', () => {
@@ -65,7 +65,7 @@ describe('History replay', () => {
   });
 
   it('switches to a clicked task and reveals its continue action', async () => {
-    (window as any).bobby = {
+    (window as { bobby?: unknown }).bobby = {
       listTasks: vi.fn().mockResolvedValue([
         summary,
         {

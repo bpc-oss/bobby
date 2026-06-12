@@ -92,7 +92,7 @@ describe('ScheduleTasks', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
-    (window as any).bobby = undefined;
+    (window as { bobby?: unknown }).bobby = undefined;
   });
 
   it('lists, creates, runs, toggles, and removes automations through the local bridge', async () => {
@@ -111,7 +111,7 @@ describe('ScheduleTasks', () => {
       expect(screen.getByText('Weekly digest')).toBeTruthy();
     });
 
-    expect((window as any).bobby.createAutomation).toHaveBeenCalledWith({
+    expect(window.bobby.createAutomation).toHaveBeenCalledWith({
       title: 'Weekly digest',
       kind: 'schedule',
       prompt: 'Summarize the latest session and flag blockers.',
@@ -120,17 +120,17 @@ describe('ScheduleTasks', () => {
 
     fireEvent.click(screen.getAllByTitle('Run now')[0]);
     await waitFor(() => {
-      expect((window as any).bobby.runAutomationNow).toHaveBeenCalled();
+      expect(window.bobby.runAutomationNow).toHaveBeenCalled();
     });
 
     fireEvent.click(screen.getAllByTitle('Disable')[0]);
     await waitFor(() => {
-      expect((window as any).bobby.toggleAutomation).toHaveBeenCalled();
+      expect(window.bobby.toggleAutomation).toHaveBeenCalled();
     });
 
     fireEvent.click(screen.getAllByTitle('Remove')[0]);
     await waitFor(() => {
-      expect((window as any).bobby.removeAutomation).toHaveBeenCalled();
+      expect(window.bobby.removeAutomation).toHaveBeenCalled();
     });
   });
 });

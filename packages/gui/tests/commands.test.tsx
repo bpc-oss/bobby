@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Commands } from '../src/screens/Commands';
 
 beforeEach(() => {
-  (window as any).bobby = {
+  (window as { bobby?: unknown }).bobby = {
     send: vi.fn(),
     onEvent: vi.fn(),
     listCommands: vi.fn().mockResolvedValue([
@@ -49,7 +49,7 @@ describe('Commands screen', () => {
     fireEvent.click(screen.getByText('Save'));
 
     await vi.waitFor(() => {
-      expect((window as any).bobby.upsertCommand).toHaveBeenCalledWith({
+      expect(window.bobby.upsertCommand).toHaveBeenCalledWith({
         sourcePath: undefined,
         name: 'rewrite',
         description: 'Rewrite text',

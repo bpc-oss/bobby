@@ -10,7 +10,7 @@ type AutomationDraft = {
 };
 
 function resolveClient() {
-  if (typeof window === 'undefined' || (window as any).bobby === undefined) {
+  if (typeof window === 'undefined' || window.bobby === undefined) {
     return null;
   }
 

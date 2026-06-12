@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Plus, Power, PowerOff, Server, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Power, PowerOff, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 import { makeKernelClient, type McpServerRecordDto, type McpServerUpsertInput } from '../ipc/contract';
 
 type DraftTool = {

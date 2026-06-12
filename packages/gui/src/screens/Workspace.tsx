@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { KernelEvent } from '@bobby/shared';
+import type { GateDecision, KernelEvent } from '@bobby/shared';
 import { ChevronDown, ChevronUp, GitBranch, Lightbulb, Route, Search, Send, ShieldCheck, Square } from 'lucide-react';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { useChatStore, type ChatBlock } from '../store/chat-store';
@@ -8,7 +8,7 @@ import type { CapabilityReport, CommandRecordDto, SessionMode } from '../ipc/con
 type WorkspaceProps = {
   kernelClient?: {
     startTask: (input: string, mode?: SessionMode) => Promise<unknown>;
-    approveGate?: (gateId: string, decision: string) => Promise<unknown>;
+    approveGate?: (gateId: string, decision: GateDecision) => Promise<unknown>;
     restoreSnapshot?: (snapshotId?: string) => Promise<unknown>;
     getCapabilityReport?: () => Promise<CapabilityReport | null>;
     searchFiles?: (query: string) => Promise<Array<{ path: string; preview?: string | null }>>;
@@ -826,7 +826,7 @@ export function Workspace({ kernelClient, theme = 'light', onThemeChange }: Work
 
   useEffect(() => {
     if (!kernelClient) return;
-    setClient(kernelClient as any);
+    setClient(kernelClient);
     return () => setClient(null);
   }, [kernelClient, setClient]);
 

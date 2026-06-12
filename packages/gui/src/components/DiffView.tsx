@@ -39,7 +39,7 @@ function DiffHeader({ badge, name, added, removed, onCopy, copied }: { badge: Re
       <span className="shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px] font-semibold" style={{ background: badge.tone.bg, color: badge.tone.fg }}>{badge.label}</span>
       <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-medium text-bobby-ink" title={name ?? ''}>{name ?? 'patch'}</span>
       {added != null && <span className="shrink-0 font-mono text-[11px] tabular-nums"><span style={{ color: 'var(--bobby-diff-added)' }}>+{added}</span>{(removed ?? 0) > 0 && <span className="px-1 text-bobby-faint">·</span>}<span style={{ color: 'var(--bobby-diff-removed)' }}>-{removed}</span></span>}
-      <button onClick={onCopy} className="shrink-0 rounded-md p-1 text-bobby-faint hover:text-bobby-ink transition"><Copy className="h-3.5 w-3.5" strokeWidth={1.8} /></button>
+      <button onClick={onCopy} className="shrink-0 rounded-md p-1 text-bobby-faint hover:text-bobby-ink transition">{copied ? <Check className="h-3.5 w-3.5" strokeWidth={1.8} style={{ color: 'var(--bobby-diff-added)' }} /> : <Copy className="h-3.5 w-3.5" strokeWidth={1.8} />}</button>
     </div>
   );
 }

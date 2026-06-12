@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Evidence, KernelEvent, PlanStep } from '@bobby/shared';
+import type { Evidence, GateDecision, KernelEvent, PlanStep } from '@bobby/shared';
 import {
   ProjectListSchema,
   ProjectMetaSchema,
@@ -8,6 +8,12 @@ import {
   type ProjectMeta,
   type SessionRecordDto
 } from '../ipc/contract';
+
+export type ChatClient = {
+  startTask: (input: string, mode?: SessionMode) => Promise<unknown>;
+  approveGate?: (gateId: string, decision: GateDecision) => Promise<unknown>;
+  onEvent?: (cb: (e: unknown) => void) => () => void;
+};
 
 // ---- Chat block types ----
 
@@ -112,9 +118,9 @@ export type ChatState = {
   currentProject: ProjectMeta | null;
   recentProjects: ProjectMeta[];
 
-  // Internal client  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  _client: any;
-  setClient: (client: any) => void;
+  // Internal client
+  _client: ChatClient | null;
+  setClient: (client: ChatClient | null) => void;
 
   // Actions
   sendMessage: (text: string) => Promise<void>;
@@ -195,30 +201,6 @@ function cloneSessionForResume(source: SessionRecordDto, id = uid()): SessionRec
   });
 }
 
-function snapshotSession(state: ChatState, id = state.activeSessionId ?? uid()): SessionRecordDto {
-  const current = state.threads[id] ?? state.sessions.find((session) => session.id === id);
-  const createdAt = current?.createdAt ?? nowIso();
-  return SessionRecordSchema.parse({
-    id,
-    title: sessionTitle(state.blocks),
-    blocks: state.blocks,
-    createdAt,
-    updatedAt: nowIso(),
-    projectDir: state.currentProject?.path ?? null,
-    taskId: state.currentTaskId,
-    status: state.status,
-    liveReasoning: state.liveReasoning,
-    liveAssistant: state.liveAssistant,
-    liveToolContent: state.liveToolContent,
-    currentPlan: state.currentPlan,
-    error: state.error,
-    costUsd: state.costUsd,
-    spendUsd: state.spendUsd,
-    model: state.model,
-    mode: state.sessionMode
-  });
-}
-
 function replaceSession(sessions: SessionRecordDto[], next: SessionRecordDto): SessionRecordDto[] {
   const filtered = sessions.filter((session) => session.id !== next.id);
   return [next, ...filtered].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
@@ -286,26 +268,6 @@ function currentThreadSnapshot(state: ChatState, id = state.activeSessionId ?? u
   });
 }
 
-function updateCurrentThreadState(state: ChatState, thread: SessionRecordDto): Partial<ChatState> {
-  return {
-    blocks: [...(thread.blocks as ChatBlock[])],
-    liveReasoning: thread.liveReasoning,
-    liveAssistant: thread.liveAssistant,
-    liveToolContent: thread.liveToolContent,
-    busy: thread.status === 'running',
-    currentTaskId: thread.taskId,
-    currentPlan: thread.currentPlan,
-    status: thread.status,
-    error: thread.error,
-    costUsd: thread.costUsd,
-    spendUsd: thread.spendUsd,
-    model: thread.model,
-    sessionMode: thread.mode ?? 'standard',
-    activeSessionId: thread.id,
-    threads: replaceThread(state.threads, thread)
-  };
-}
-
 function sameBlocks(left: ChatBlock[], right: unknown[]): boolean {
   try {
     return JSON.stringify(left) === JSON.stringify(right);
@@ -365,23 +327,6 @@ function activeThreadFromState(state: ChatState): ThreadRecord | null {
     return currentThreadSnapshot(state);
   }
   return null;
-}
-
-function upsertThread(state: ChatState, thread: ThreadRecord, options: { active?: boolean; updateSession?: boolean } = {}): Partial<ChatState> {
-  const nextThreads = replaceThread(state.threads, thread);
-  const nextSessions = options.updateSession === false ? state.sessions : replaceSession(state.sessions, thread);
-  return {
-    threads: nextThreads,
-    sessions: nextSessions,
-    ...(options.active ? updateCurrentThreadState(state, thread) : {})
-  };
-}
-
-function startPendingThread(state: ChatState, threadId: string): Partial<ChatState> {
-  return {
-    activeSessionId: threadId,
-    pendingThreadIds: [...state.pendingThreadIds, threadId]
-  };
 }
 
 function resolveThreadId(state: ChatState, taskId: string): string | null {
@@ -585,8 +530,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   currentProject: null,
   recentProjects: [],
 
-  _client: null as { startTask: (input: string, mode?: SessionMode) => Promise<unknown>; approveGate?: (gateId: string, decision: 'allow' | 'always' | 'deny') => Promise<unknown>; onEvent?: (cb: (e: unknown) => void) => () => void } | null,
-  setClient: (client) => set({ _client: client as typeof client | null }),
+  _client: null as ChatClient | null,
+  setClient: (client) => set({ _client: client }),
 
   sendMessage: async (text: string) => {
     const state = get();

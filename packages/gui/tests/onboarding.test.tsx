@@ -66,7 +66,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  (window as any).bobby = undefined;
+  (window as { bobby?: unknown }).bobby = undefined;
 });
 
 describe('App onboarding', () => {
@@ -104,7 +104,7 @@ describe('App onboarding', () => {
 
     await screen.findByText('Welcome to Bobby');
     fireEvent.click(screen.getByText('Quickstart'));
-    expect((window as any).bobby.openQuickstart).toHaveBeenCalledOnce();
+    expect(window.bobby.openQuickstart).toHaveBeenCalledOnce();
   });
 
   it('enters the workspace after onboarding is complete', async () => {

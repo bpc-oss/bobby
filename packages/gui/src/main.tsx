@@ -25,7 +25,7 @@ const LAST_ACTIVE_SESSION_KEY = 'bobby-last-active-session';
 
 function resolveKernelClient() {
   if (typeof window === 'undefined') return null;
-  if ((window as any).bobby !== undefined) return makeKernelClient();
+  if (window.bobby !== undefined) return makeKernelClient();
   return null;
 }
 
@@ -66,7 +66,7 @@ export function App() {
     }
   });
   const [page, setPage] = React.useState<AppPage>('chat');
-  const [lang, setLangState] = React.useState<'zh' | 'en'>('zh');
+  const [lang] = React.useState<'zh' | 'en'>('zh');
   const [setupStatus, setSetupStatus] = React.useState<OnboardingStatus | null>(null);
   const [setupLoading, setSetupLoading] = React.useState(false);
   const [onboardingComplete, setOnboardingComplete] = React.useState(() => readOnboardingComplete());
@@ -235,7 +235,7 @@ export function App() {
     content = (
       <div data-testid="chat-workbench" className="flex h-full min-w-0 overflow-hidden">
         <section className="min-w-0 flex-1">
-          <Workspace kernelClient={client ? (client as any) : undefined} theme={theme} onThemeChange={handleTheme} />
+          <Workspace kernelClient={client ?? undefined} theme={theme} onThemeChange={handleTheme} />
         </section>
         <SessionToolDock />
       </div>
