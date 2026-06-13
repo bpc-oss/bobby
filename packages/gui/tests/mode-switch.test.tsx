@@ -16,23 +16,25 @@ afterEach(() => {
 });
 
 describe('ModeSwitch', () => {
-  it('渲染 Chat / Code 两个分段，chat 默认激活', () => {
+  it('renders two tabs and keeps chat selected by default in zh mode', () => {
+    useUiStore.setState({ ...useUiStore.getState(), lang: 'zh' });
     render(<ModeSwitch />);
-    const chat = screen.getByRole('tab', { name: /chat/i });
-    const code = screen.getByRole('tab', { name: /code/i });
+    const chat = screen.getByRole('tab', { name: /对话/i });
+    const code = screen.getByRole('tab', { name: /代码/i });
     expect(chat.getAttribute('aria-selected')).toBe('true');
     expect(code.getAttribute('aria-selected')).toBe('false');
   });
 
-  it('点击 Code 切换模式并重置视图', () => {
+  it('switches to code mode and resets the view', () => {
+    useUiStore.setState({ ...useUiStore.getState(), lang: 'zh' });
     useUiStore.getState().setView('projects');
     render(<ModeSwitch />);
-    fireEvent.click(screen.getByRole('tab', { name: /code/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /代码/i }));
     expect(useUiStore.getState().mode).toBe('code');
     expect(useUiStore.getState().view).toBe('session');
   });
 
-  it('badge>0 时显示角标', () => {
+  it('shows the badge when codeBadge is greater than zero', () => {
     render(<ModeSwitch codeBadge={2} />);
     expect(screen.getByText('2')).toBeTruthy();
   });

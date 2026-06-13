@@ -2,6 +2,12 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 #root {
   min-height: 100vh;
 }
@@ -50,11 +56,14 @@
   border-radius: 6px;
 }
 
-.costbar {
-  border: 1px dashed var(--dim);
-  border-radius: 6px;
-  padding: 8px 10px;
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

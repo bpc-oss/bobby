@@ -3,12 +3,30 @@ import type { KernelEvent } from '@bobby/shared';
 export type SessionMode = 'chat' | 'code';
 export type SessionStatus = 'idle' | 'running' | 'gate' | 'done' | 'failed';
 
+export interface SessionLinkedAgent {
+  name: string;
+  detail?: string;
+}
+
+export interface SessionLinkedBrowser {
+  label: string;
+  detail?: string;
+}
+
+export interface SessionLinkedSource {
+  label: string;
+  detail?: string;
+}
+
 export interface SessionMeta {
   id: string;
   mode: SessionMode;
   title: string;
   project?: string;
   branch?: string;
+  agents?: SessionLinkedAgent[];
+  browsers?: SessionLinkedBrowser[];
+  sources?: SessionLinkedSource[];
   pinned: boolean;
   status: SessionStatus;
   updatedAt: string;

@@ -10,16 +10,26 @@
   text-align: center;
 }
 
+.placeholder-shell {
+  gap: 18px;
+  padding: 36px;
+}
+
+.placeholder-copy {
+  display: grid;
+  gap: 10px;
+  max-width: 760px;
+}
+
 .placeholder h2 {
   margin: 0;
   color: var(--text);
   font-family: var(--font-brand);
-  font-size: 18px;
+  font-size: 28px;
   letter-spacing: 0.6px;
 }
 
 .placeholder p {
-  max-width: 720px;
   margin: 0;
   line-height: 1.8;
 }
@@ -53,17 +63,49 @@
 .mini-sketch {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
   margin-top: 10px;
 }
 
+.mini-sketch.stack {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .mini-sketch .box {
   min-width: 170px;
+  max-width: 220px;
   padding: 16px 14px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-card);
   background: var(--glass-2);
   color: var(--text);
+}
+
+.mini-sketch .box.emphasis {
+  border-style: solid;
+  color: var(--teal);
+}
+
+.mini-note {
+  color: var(--dim);
+  font-size: 10px;
+}
+
+.mini-head {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--teal);
+  font-family: var(--font-brand);
+  font-size: 10px;
+}
+
+.arrow {
+  color: var(--dim);
+  font-family: var(--font-mono);
+  font-size: 18px;
 }
 
 .wizard {
@@ -128,4 +170,146 @@
 
 .chip.ai {
   color: var(--teal);
+}
+
+.chat-projects-view {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-height: 100%;
+  padding: 24px 26px 30px;
+  background:
+    radial-gradient(680px 320px at 22% -4%, rgba(54, 228, 200, 0.06), transparent 65%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.012), transparent 24%);
+}
+
+.chat-projects-hero {
+  display: grid;
+  gap: 10px;
+  max-width: 840px;
+}
+
+.chat-projects-kicker {
+  color: var(--teal);
+  font-family: var(--font-brand);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.chat-projects-hero h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.chat-projects-hero p {
+  margin: 0;
+  max-width: 760px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.75;
+  text-align: left;
+}
+
+.chat-projects-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.chat-projects-primary {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(54, 228, 200, 0.22);
+  border-radius: 999px;
+  background: rgba(54, 228, 200, 0.08);
+  color: var(--teal);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chat-projects-note {
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.chat-projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.chat-project-card {
+  display: grid;
+  gap: 12px;
+  min-height: 204px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0.006)),
+    rgba(9, 15, 23, 0.78);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.022),
+    0 10px 30px rgba(0, 0, 0, 0.16);
+}
+
+.chat-project-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-project-chip,
+.chat-project-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 10px;
+}
+
+.chat-project-chip {
+  border: 1px solid rgba(54, 228, 200, 0.14);
+  background: rgba(54, 228, 200, 0.07);
+  color: rgba(161, 235, 221, 0.92);
+}
+
+.chat-project-count {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--dim);
+}
+
+.chat-project-card h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.chat-project-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: left;
+}
+
+.chat-project-meta {
+  display: grid;
+  gap: 6px;
+  margin-top: auto;
+  color: rgba(177, 188, 202, 0.76);
+  font-size: 11px;
 }

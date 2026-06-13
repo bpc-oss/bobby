@@ -9,7 +9,7 @@ const messages: Record<Lang, Dictionary> = {
     allow: '允许',
     deny: '拒绝',
     evidence: '证据',
-    cost: '成本',
+    cost: '成本'
   },
   en: {
     start: 'Start',
@@ -17,14 +17,18 @@ const messages: Record<Lang, Dictionary> = {
     allow: 'Allow',
     deny: 'Deny',
     evidence: 'Evidence',
-    cost: 'Cost',
-  },
+    cost: 'Cost'
+  }
 };
 
 let currentLang: Lang = 'zh';
 
 export function setLang(lang: Lang): void {
   currentLang = lang;
+}
+
+export function getLang(): Lang {
+  return currentLang;
 }
 
 export function t(key: string): string {

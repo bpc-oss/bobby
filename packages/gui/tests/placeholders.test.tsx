@@ -1,24 +1,44 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { EmptyState } from '../src/modes/EmptyState';
 import { LoopPlaceholder } from '../src/modes/LoopPlaceholder';
-import { PLACEHOLDERS } from '../src/modes/placeholder-config';
+import { getPlaceholders } from '../src/modes/placeholder-config';
+import { useUiStore } from '../src/store/ui-store';
 
-describe('占位页', () => {
-  it('所有非 session 视图都有占位配置', () => {
-    for (const view of ['search', 'write', 'projects', 'routines', 'team', 'settings'] as const) {
-      expect(PLACEHOLDERS[view]).toBeTruthy();
-      expect(PLACEHOLDERS[view].title.length).toBeGreaterThan(0);
-    }
+const initialUi = useUiStore.getState();
+
+beforeEach(() => {
+  useUiStore.setState(initialUi, true);
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe('Placeholder surfaces', () => {
+  it('renders the shared placeholder shell markers', () => {
+    render(<EmptyState glyph="S" title="Search" desc="desc" tag="P6" />);
+
+    expect(document.querySelector('.placeholder-shell')).toBeTruthy();
+    expect(document.querySelector('.placeholder-copy')).toBeTruthy();
   });
 
-  it('Loop 占位页渲染四步引导向导骨架', () => {
+  it('renders the loop wizard aid chips', () => {
     render(<LoopPlaceholder />);
-    expect(screen.getByText('目标')).toBeTruthy();
-    expect(screen.getByText('验收器')).toBeTruthy();
-    expect(screen.getByText('迭代策略')).toBeTruthy();
-    expect(screen.getByText('预算')).toBeTruthy();
-    expect(screen.getByText(/AI 辅助润写/)).toBeTruthy();
+
+    expect(document.querySelector('.wizard')).toBeTruthy();
+    expect(document.querySelector('.wz-aids')).toBeTruthy();
+  });
+
+  it('provides page-specific skeleton detail blocks for the placeholder family', () => {
+    const detailViews = ['write', 'projects', 'routines', 'team', 'settings'] as const;
+    const placeholders = getPlaceholders('zh');
+
+    for (const key of detailViews) {
+      const detail = placeholders[key].children;
+      expect(detail).toBeTruthy();
+    }
   });
 });

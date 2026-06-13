@@ -1,5 +1,15 @@
+import { getLang } from '../../lib/i18n';
 import type { GuiEvent, KernelClient, SessionMeta, SessionMode } from '../client';
 import type { SessionScript } from './fixtures';
+
+function deriveSessionTitle(input: string, fallback: string): string {
+  const singleLine = input.replace(/\s+/g, ' ').trim();
+  if (!singleLine) {
+    return fallback;
+  }
+
+  return singleLine.length > 48 ? `${singleLine.slice(0, 45).trimEnd()}...` : singleLine;
+}
 
 export class MockKernelClient implements KernelClient {
   private listeners = new Set<(event: GuiEvent) => void>();
@@ -23,7 +33,15 @@ export class MockKernelClient implements KernelClient {
     const meta: SessionMeta = {
       id: `new-${this.seq}`,
       mode,
-      title: mode === 'chat' ? 'New Chat' : 'New Session',
+      title:
+        mode === 'chat'
+          ? getLang() === 'zh'
+            ? '新对话'
+            : 'New Chat'
+          : getLang() === 'zh'
+            ? '新会话'
+            : 'New Session',
+      project: mode === 'code' ? 'bobby' : undefined,
       pinned: false,
       status: 'idle',
       updatedAt: new Date().toISOString()
@@ -35,7 +53,18 @@ export class MockKernelClient implements KernelClient {
   }
 
   async startTask(sessionId: string, input: string): Promise<void> {
-    void input;
+    const extraIndex = this.extraSessions.findIndex((session) => session.id === sessionId);
+    if (extraIndex >= 0) {
+      const current = this.extraSessions[extraIndex];
+      const next: SessionMeta = {
+        ...current,
+        title: deriveSessionTitle(input, current.title),
+        updatedAt: new Date().toISOString()
+      };
+      this.extraSessions[extraIndex] = next;
+      this.emit({ kind: 'session_meta', session: next });
+    }
+
     const script = this.scripts.get(sessionId);
     if (!script || script.listOnly) {
       return;

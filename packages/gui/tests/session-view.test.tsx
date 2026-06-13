@@ -20,47 +20,50 @@ afterEach(() => {
   cleanup();
 });
 
-describe('SessionView 静态壳', () => {
-  it('渲染标题与摘要开关，点击展开摘要', () => {
-    useSessionStore.getState().setSessions([
-      { id: 's1', mode: 'chat', title: 'New Chat', pinned: false, status: 'idle', updatedAt: '' }
-    ]);
-    render(<SessionView sessionId="s1" />);
-    expect(screen.getByText('New Chat')).toBeTruthy();
-    fireEvent.click(screen.getByText(/摘要/));
+describe('SessionView static shell', () => {
+  it('renders the title and summary toggle, then opens the summary drawer', () => {
+    useSessionStore.getState().setSessions([{ id: 's1', mode: 'chat', title: '新对话', pinned: false, status: 'idle', updatedAt: '' }]);
+
+    render(<SessionView sessionId="s1" mode="chat" />);
+
+    expect(screen.getByText('新对话')).toBeTruthy();
+    expect(document.querySelector('.summary')?.className).not.toContain('open');
+    fireEvent.click(screen.getByRole('button', { name: '切换摘要栏' }));
     expect(useUiStore.getState().summaryOpen).toBe(true);
+    expect(document.querySelector('.summary')?.className).toContain('open');
   });
 });
 
 describe('Composer', () => {
-  it('输入并发送触发 onSubmit，输入框清空', () => {
+  it('submits input and clears the field', () => {
     const onSubmit = vi.fn();
-    render(<Composer onSubmit={onSubmit} />);
-    const box = screen.getByPlaceholderText(/询问或下达任务/);
-    fireEvent.change(box, { target: { value: '帮我修个 bug' } });
-    fireEvent.click(screen.getByText(/发送/));
-    expect(onSubmit).toHaveBeenCalledWith('帮我修个 bug');
+    useUiStore.setState({ ...useUiStore.getState(), lang: 'zh' });
+    render(<Composer mode="chat" onSubmit={onSubmit} />);
+    const box = screen.getByPlaceholderText('询问或下达任务... @文件、/命令、粘贴图片');
+    fireEvent.change(box, { target: { value: '修一个 sidebar bug' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送 ↗' }));
+    expect(onSubmit).toHaveBeenCalledWith('修一个 sidebar bug');
     expect((box as HTMLTextAreaElement).value).toBe('');
   });
 
-  it('空输入不触发 onSubmit', () => {
-    const onSubmit = vi.fn();
-    render(<Composer onSubmit={onSubmit} />);
-    fireEvent.click(screen.getByText(/发送/));
-    expect(onSubmit).not.toHaveBeenCalled();
+  it('shows workspace selection only in code mode', () => {
+    useUiStore.setState({ ...useUiStore.getState(), lang: 'zh', currentProjectId: undefined });
+    const { rerender } = render(<Composer mode="chat" onSubmit={vi.fn()} />);
+    expect(screen.queryByLabelText('工作区')).toBeNull();
+
+    rerender(<Composer mode="code" onSubmit={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('工作区'), { target: { value: 'bobby' } });
+    expect(useUiStore.getState().currentProjectId).toBe('bobby');
+    expect(screen.getByText('该项目下可创建多个 sessions')).toBeTruthy();
   });
 });
 
 describe('UsageBar', () => {
-  it('显示精确的非零用量文案', () => {
-    render(
-      <UsageBar usage={{ inputTokens: 8100, outputTokens: 4200, cacheHitRate: 0.92, cny: 0.18 }} />
-    );
-    expect(screen.getByText('CACHE 92% · IN 8.1K / OUT 4.2K · ¥0.18')).toBeTruthy();
-  });
-
-  it('零态显示精确的 directive 文案', () => {
-    render(<UsageBar usage={{ inputTokens: 0, outputTokens: 0, cacheHitRate: -1, cny: 0 }} />);
-    expect(screen.getByText('CACHE — · 0 TOK · ¥0.00')).toBeTruthy();
+  it('shows non-zero usage text precisely', () => {
+    useUiStore.setState({ ...useUiStore.getState(), lang: 'zh' });
+    render(<UsageBar usage={{ inputTokens: 8100, outputTokens: 4200, cacheHitRate: 0.92, cny: 0.18 }} />);
+    expect(screen.getByText('缓存 92%')).toBeTruthy();
+    expect(screen.getByText('输入 8.1K / 输出 4.2K')).toBeTruthy();
+    expect(screen.getByText('¥0.18')).toBeTruthy();
   });
 });

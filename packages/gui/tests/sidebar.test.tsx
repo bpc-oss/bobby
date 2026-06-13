@@ -16,32 +16,44 @@ afterEach(() => {
 });
 
 describe('Sidebar', () => {
-  it('chat 模式显示 chat 功能项', () => {
+  it('shows chat actions in chat mode by default', () => {
+    useUiStore.setState({ ...useUiStore.getState(), lang: 'en' });
+
     render(<Sidebar />);
+
     expect(screen.getByText('New Chat')).toBeTruthy();
+    expect(screen.queryByText('Search')).toBeNull();
+    expect(screen.getAllByRole('button', { name: /projects/i })[0]).toBeTruthy();
     expect(screen.getByText('Write')).toBeTruthy();
     expect(screen.queryByText('Loop Engineering')).toBeNull();
   });
 
-  it('code 模式显示 code 功能项', () => {
-    useUiStore.getState().setMode('code');
+  it('shows code actions without a dedicated projects entry', () => {
+    useUiStore.setState({ ...useUiStore.getState(), mode: 'code', lang: 'en' });
+
     render(<Sidebar />);
+
     expect(screen.getByText('New Session')).toBeTruthy();
-    expect(screen.getByText('Routines')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Projects' })).toBeNull();
     expect(screen.getByText('Loop Engineering')).toBeTruthy();
     expect(screen.getByText('Team')).toBeTruthy();
   });
 
-  it('点击功能项切换视图', () => {
-    useUiStore.getState().setMode('code');
+  it('switches view when a function item is clicked', () => {
+    useUiStore.setState({ ...useUiStore.getState(), mode: 'code', lang: 'en' });
+
     render(<Sidebar />);
     fireEvent.click(screen.getByText('Loop Engineering'));
+
     expect(useUiStore.getState().view).toBe('loop');
   });
 
-  it('底部 Settings 切到 settings 视图', () => {
+  it('switches to settings from the footer button', () => {
+    useUiStore.setState({ ...useUiStore.getState(), lang: 'en' });
+
     render(<Sidebar />);
     fireEvent.click(screen.getByText('Settings'));
+
     expect(useUiStore.getState().view).toBe('settings');
   });
 });

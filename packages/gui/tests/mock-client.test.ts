@@ -15,16 +15,29 @@ describe('MockKernelClient', () => {
     return events;
   }
 
-  it('listSessions filters by mode', async () => {
+  it('listSessions filters by mode while exposing the richer shell fixture set', async () => {
     const client = new MockKernelClient(FIXTURES);
     const chat = await client.listSessions('chat');
     const code = await client.listSessions('code');
 
-    expect(chat.map((session) => session.id)).toEqual(['chat-basic']);
+    expect(chat.every((session) => session.mode === 'chat')).toBe(true);
+    expect(code.every((session) => session.mode === 'code')).toBe(true);
+    expect(chat.map((session) => session.id)).toEqual([
+      'chat-basic',
+      'chat-pinned-deepseek',
+      'chat-project-intro',
+      'chat-project-review',
+      'chat-today-electron',
+      'chat-yesterday-pnpm',
+      'chat-yesterday-zustand'
+    ]);
     expect(code.map((session) => session.id).sort()).toEqual([
       'code-gate',
+      'code-p0-shell',
       'loop-converge',
-      'multi-1'
+      'multi-1',
+      'paper-release',
+      'paper-tools-pdf'
     ]);
   });
 
@@ -88,5 +101,20 @@ describe('MockKernelClient', () => {
     const chat = await client.listSessions('chat');
 
     expect(chat.some((session) => session.id === created.id)).toBe(true);
+  });
+
+  it('promotes a created draft session to the first user prompt title after startTask', async () => {
+    const client = new MockKernelClient(FIXTURES);
+    const created = await client.createSession('chat');
+
+    await client.startTask(created.id, 'Help me debug this');
+
+    const chat = await client.listSessions('chat');
+    const stored = chat.find((session) => session.id === created.id);
+
+    expect(stored).toMatchObject({
+      id: created.id,
+      title: 'Help me debug this'
+    });
   });
 });

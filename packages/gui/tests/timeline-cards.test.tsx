@@ -1,21 +1,28 @@
 /* eslint-disable max-lines-per-function */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useUiStore } from '../src/store/ui-store';
 import { TimelineCard } from '../src/workspace/TimelineCards';
+
+const initialUi = useUiStore.getState();
+
+beforeEach(() => {
+  useUiStore.setState(initialUi, true);
+});
 
 afterEach(() => {
   cleanup();
 });
 
 describe('TimelineCard', () => {
-  it('用户消息右侧气泡', () => {
+  it('renders user messages as right-side bubbles', () => {
     render(<TimelineCard item={{ kind: 'user', text: '你好' }} onGateDecision={vi.fn()} />);
     expect(screen.getByText('你好').className).toContain('user');
   });
 
-  it('gate_request 渲染审批卡，点允许回调 allow', () => {
+  it('renders gate_request approval cards and calls allow', () => {
     const onDecide = vi.fn();
 
     render(
@@ -34,7 +41,7 @@ describe('TimelineCard', () => {
     expect(onDecide).toHaveBeenCalledWith('g1', 'allow');
   });
 
-  it('已决策的 gate 卡不再显示按钮', () => {
+  it('hides buttons after a gate has already been decided', () => {
     render(
       <TimelineCard
         item={{
@@ -47,9 +54,10 @@ describe('TimelineCard', () => {
     );
 
     expect(screen.queryByText('允许')).toBeNull();
+    expect(screen.getByText(/已决策/)).toBeTruthy();
   });
 
-  it('evidence_produced 渲染证据卡（类型 + payload 摘要）', () => {
+  it('renders evidence cards with the evidence type and payload summary', () => {
     render(
       <TimelineCard
         item={{
@@ -74,7 +82,7 @@ describe('TimelineCard', () => {
     expect(screen.getByText(/built in 42.3s/)).toBeTruthy();
   });
 
-  it('verdict 渲染复核卡', () => {
+  it('renders verdict cards', () => {
     render(
       <TimelineCard
         item={{

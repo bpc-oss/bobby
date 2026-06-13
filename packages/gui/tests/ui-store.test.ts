@@ -9,23 +9,25 @@ beforeEach(() => {
 });
 
 describe('ui-store', () => {
-  it('默认 chat 模式 / session 视图 / 右面板开 / review tab', () => {
+  it('defaults to chat mode, session view, closed right sidebar, and review in the panel set', () => {
     const s = useUiStore.getState();
     expect(s.mode).toBe('chat');
     expect(s.view).toBe('session');
-    expect(s.rightPanelOpen).toBe(true);
-    expect(s.rightTab).toBe('review');
+    expect(s.rightPanelOpen).toBe(false);
+    expect(s.rightPanelMenuOpen).toBe(false);
+    expect(s.rightPanels).toEqual(['review']);
+    expect(s.activeRightPanel).toBe('review');
     expect(s.summaryOpen).toBe(false);
   });
 
-  it('setMode 切模式并把视图重置为 session', () => {
+  it('setMode switches mode and resets the view to session', () => {
     useUiStore.getState().setView('projects');
     useUiStore.getState().setMode('code');
     expect(useUiStore.getState().mode).toBe('code');
     expect(useUiStore.getState().view).toBe('session');
   });
 
-  it('setView / toggleSummary / toggleRightPanel / setRightTab', () => {
+  it('supports opening the sidebar, opening the picker, and managing multiple right-panel tabs', () => {
     useUiStore.getState().setView('loop');
     expect(useUiStore.getState().view).toBe('loop');
 
@@ -33,10 +35,27 @@ describe('ui-store', () => {
     expect(useUiStore.getState().summaryOpen).toBe(true);
 
     useUiStore.getState().toggleRightPanel();
-    expect(useUiStore.getState().rightPanelOpen).toBe(false);
-
-    useUiStore.getState().setRightTab('terminal');
-    expect(useUiStore.getState().rightTab).toBe('terminal');
     expect(useUiStore.getState().rightPanelOpen).toBe(true);
+    expect(useUiStore.getState().rightPanelMenuOpen).toBe(false);
+
+    useUiStore.getState().toggleRightPanelMenu();
+    expect(useUiStore.getState().rightPanelMenuOpen).toBe(true);
+
+    useUiStore.getState().toggleRightPanelTab('terminal');
+    useUiStore.getState().toggleRightPanelTab('browser');
+    expect(useUiStore.getState().rightPanels).toEqual(['review', 'terminal', 'browser']);
+    expect(useUiStore.getState().activeRightPanel).toBe('browser');
+    expect(useUiStore.getState().rightPanelMenuOpen).toBe(true);
+
+    useUiStore.getState().toggleRightPanelMenu();
+    expect(useUiStore.getState().rightPanelMenuOpen).toBe(false);
+
+    useUiStore.getState().setActiveRightPanel('terminal');
+    expect(useUiStore.getState().activeRightPanel).toBe('terminal');
+
+    useUiStore.getState().toggleRightPanelTab('terminal');
+    expect(useUiStore.getState().rightPanels).toEqual(['review', 'browser']);
+    expect(useUiStore.getState().activeRightPanel).toBe('browser');
+    expect(useUiStore.getState().rightPanelMenuOpen).toBe(false);
   });
 });

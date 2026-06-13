@@ -19,6 +19,7 @@ interface SessionState {
   activeSessionId?: string;
   setSessions: (list: SessionMeta[]) => void;
   setActiveSession: (id: string) => void;
+  clearActiveSession: () => void;
   addUserMessage: (sessionId: string, text: string) => void;
   applyGuiEvent: (event: GuiEvent) => void;
 }
@@ -109,6 +110,8 @@ export const useSessionStore = create<SessionState>()((set) => ({
   setSessions: (list) => set((state) => mergeSessions(state, list)),
 
   setActiveSession: (id) => set({ activeSessionId: id }),
+
+  clearActiveSession: () => set({ activeSessionId: undefined }),
 
   addUserMessage: (sessionId, text) =>
     set((state) => ({

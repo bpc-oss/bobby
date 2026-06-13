@@ -1,6 +1,7 @@
 import React from 'react';
 
 import type { TimelineItem } from '../store/session-store';
+import { useUiStore } from '../store/ui-store';
 
 interface TimelineCardProps {
   item: TimelineItem;
@@ -8,11 +9,11 @@ interface TimelineCardProps {
   gatePending?: boolean;
 }
 
-function ToolCard({ tool }: { tool: string }): JSX.Element {
+function ToolCard({ tool, lang }: { tool: string; lang: 'zh' | 'en' }): JSX.Element {
   return (
     <div className="card tool">
       <div className="ch">
-        ⚙ 工具调用 <span className="tag">{tool}</span>
+        {lang === 'zh' ? '工具调用' : 'Tool call'} <span className="tag">{tool}</span>
       </div>
     </div>
   );
@@ -22,30 +23,32 @@ function GateCard({
   gateId,
   reason,
   pending,
-  onGateDecision
+  onGateDecision,
+  lang
 }: {
   gateId: string;
   reason: string;
   pending: boolean;
   onGateDecision: (gateId: string, decision: 'allow' | 'deny') => void;
+  lang: 'zh' | 'en';
 }): JSX.Element {
   return (
     <div className="card gate">
       <div className="ch">
-        ✦ 闸口审批 <span className="tag">gate</span>
+        {lang === 'zh' ? '闸口审批' : 'Approval gate'} <span className="tag">gate</span>
       </div>
       <pre>{reason}</pre>
       {pending ? (
         <div className="gate-btns">
-          <button className="allow" onClick={() => onGateDecision(gateId, 'allow')}>
-            允许
+          <button className="allow" type="button" onClick={() => onGateDecision(gateId, 'allow')}>
+            {lang === 'zh' ? '允许' : 'Allow'}
           </button>
-          <button className="deny" onClick={() => onGateDecision(gateId, 'deny')}>
-            拒绝
+          <button className="deny" type="button" onClick={() => onGateDecision(gateId, 'deny')}>
+            {lang === 'zh' ? '拒绝' : 'Deny'}
           </button>
         </div>
       ) : (
-        <div className="gate-done">✓ 已决策 · 已记录</div>
+        <div className="gate-done">{lang === 'zh' ? '已决策 · 已记录' : 'Decision recorded'}</div>
       )}
     </div>
   );
@@ -53,17 +56,26 @@ function GateCard({
 
 function EvidenceCard({
   evidenceType,
-  payload
+  payload,
+  lang
 }: {
   evidenceType: string;
   payload: unknown;
+  lang: 'zh' | 'en';
 }): JSX.Element {
+  const prettyPayload =
+    typeof payload === 'object' && payload && 'command' in payload
+      ? [(payload as { command?: string; stdout?: string }).command, (payload as { stdout?: string }).stdout ?? '']
+          .filter(Boolean)
+          .join('\n')
+      : JSON.stringify(payload, null, 2);
+
   return (
     <div className="card evid">
       <div className="ch">
-        ◯ 证据 <span className="tag">{evidenceType}</span>
+        {lang === 'zh' ? '证据' : 'Evidence'} <span className="tag">{evidenceType}</span>
       </div>
-      <pre>{JSON.stringify(payload, null, 2)}</pre>
+      <pre>{prettyPayload}</pre>
     </div>
   );
 }
@@ -71,27 +83,29 @@ function EvidenceCard({
 function VerdictCard({
   oracleTier,
   result,
-  detail
+  detail,
+  lang
 }: {
   oracleTier: string;
   result: string;
   detail?: string;
+  lang: 'zh' | 'en';
 }): JSX.Element {
   return (
     <div className="card verdict">
       <div className="ch">
-        🶶 复核 <span className="tag">{oracleTier}</span>
+        {lang === 'zh' ? '复核' : 'Review'} <span className="tag">{oracleTier}</span>
         <span className="tag">{result}</span>
       </div>
-      {detail && <pre>{detail}</pre>}
+      {detail ? <pre>{detail}</pre> : null}
     </div>
   );
 }
 
-function ErrorCard({ message }: { message: string }): JSX.Element {
+function ErrorCard({ message, lang }: { message: string; lang: 'zh' | 'en' }): JSX.Element {
   return (
     <div className="card gate">
-      <div className="ch">⚙ 错误</div>
+      <div className="ch">{lang === 'zh' ? '错误' : 'Error'}</div>
       <pre>{message}</pre>
     </div>
   );
@@ -102,6 +116,8 @@ export function TimelineCard({
   onGateDecision,
   gatePending = false
 }: TimelineCardProps): JSX.Element | null {
+  const lang = useUiStore((state) => state.lang);
+
   if (item.kind === 'user') {
     return <div className="msg user">{item.text}</div>;
   }
@@ -113,36 +129,25 @@ export function TimelineCard({
   }
 
   if (event.type === 'tool_called') {
-    return <ToolCard tool={event.tool} />;
+    return <ToolCard tool={event.tool} lang={lang} />;
   }
 
   if (event.type === 'gate_request') {
     return (
-      <GateCard
-        gateId={event.gateId}
-        reason={event.reason}
-        pending={gatePending}
-        onGateDecision={onGateDecision}
-      />
+      <GateCard gateId={event.gateId} reason={event.reason} pending={gatePending} onGateDecision={onGateDecision} lang={lang} />
     );
   }
 
   if (event.type === 'evidence_produced') {
-    return <EvidenceCard evidenceType={event.evidence.evidenceType} payload={event.evidence.payload} />;
+    return <EvidenceCard evidenceType={event.evidence.evidenceType} payload={event.evidence.payload} lang={lang} />;
   }
 
   if (event.type === 'verdict') {
-    return (
-      <VerdictCard
-        oracleTier={event.verdict.oracleTier}
-        result={event.verdict.result}
-        detail={event.verdict.detail}
-      />
-    );
+    return <VerdictCard oracleTier={event.verdict.oracleTier} result={event.verdict.result} detail={event.verdict.detail} lang={lang} />;
   }
 
   if (event.type === 'error') {
-    return <ErrorCard message={event.message} />;
+    return <ErrorCard message={event.message} lang={lang} />;
   }
 
   return null;

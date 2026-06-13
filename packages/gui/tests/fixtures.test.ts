@@ -9,16 +9,25 @@ function isKernelStep(step: ScriptStep): step is ScriptStep & { emit: { kind: 'k
 }
 
 describe('mock fixtures', () => {
-  it('包含 4 套剧本', () => {
+  it('contains the richer shell session set used by the mockup-aligned sidebar', () => {
     expect(Object.keys(FIXTURES)).toEqual([
       'chat-basic',
+      'chat-pinned-deepseek',
+      'chat-project-intro',
+      'chat-project-review',
+      'chat-today-electron',
+      'chat-yesterday-pnpm',
+      'chat-yesterday-zustand',
+      'code-shell-p0',
       'code-gate-evidence',
       'loop-converge',
-      'multi-session'
+      'multi-session',
+      'paper-tools-pdf',
+      'paper-tools-release'
     ]);
   });
 
-  it('所有 kernel 步骤事件通过 shared schema 校验', () => {
+  it('all kernel steps still validate against the shared schema', () => {
     for (const script of Object.values(FIXTURES)) {
       for (const step of script.steps) {
         if (isKernelStep(step)) {
@@ -28,7 +37,7 @@ describe('mock fixtures', () => {
     }
   });
 
-  it('code-gate-evidence 含一次 gate_request，且其后存在 evidence_produced', () => {
+  it('code-gate-evidence still pauses at gate_request before later evidence appears', () => {
     const steps = FIXTURES['code-gate-evidence'].steps;
     const gateIdx = steps.findIndex(
       (step) => isKernelStep(step) && step.emit.event.type === 'gate_request'
