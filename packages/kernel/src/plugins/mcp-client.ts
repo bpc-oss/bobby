@@ -8,6 +8,12 @@ export interface McpTransport {
 export function mcpToolToBobbyTool(name: string, transport: McpTransport): Tool {
   return {
     name: `mcp:${name}`,
+    description: `Call MCP tool ${name} and capture command-output evidence.`,
+    parametersSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: true
+    },
     permissionTier: 'L3',
     run: async (input, ctx): Promise<ToolResult> => {
       const result = await transport.call(name, input);

@@ -6,8 +6,17 @@ export interface ToolResult {
   result: unknown;
 }
 
+export type ToolParametersSchema = Record<string, unknown> & {
+  type: 'object';
+  properties: Record<string, unknown>;
+  required?: readonly string[];
+  additionalProperties?: boolean;
+};
+
 export interface Tool {
   name: string;
+  description: string;
+  parametersSchema: ToolParametersSchema;
   permissionTier: Tier;
   run(input: Record<string, unknown>, ctx: { acId: string; claimId: string }): Promise<ToolResult>;
 }

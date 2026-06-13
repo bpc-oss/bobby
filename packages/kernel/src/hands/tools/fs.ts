@@ -17,6 +17,22 @@ export interface ExistsInput {
 
 export class WriteFileTool implements Tool {
   readonly name = 'write_file';
+  readonly description = 'Write UTF-8 text to a workspace-relative path and emit file-diff evidence.';
+  readonly parametersSchema = {
+    type: 'object',
+    properties: {
+      path: {
+        type: 'string',
+        description: 'Workspace-relative file path to write.'
+      },
+      content: {
+        type: 'string',
+        description: 'Text content to write into the file.'
+      }
+    },
+    required: ['path'],
+    additionalProperties: false
+  } as const;
   readonly permissionTier = 'L1' as const;
   private static readonly maxEvidenceContentChars = 4096;
 
@@ -72,6 +88,18 @@ export class WriteFileTool implements Tool {
 
 export class FileExistsTool implements Tool {
   readonly name = 'file_exists';
+  readonly description = 'Check whether a workspace-relative path exists and emit file-exists evidence.';
+  readonly parametersSchema = {
+    type: 'object',
+    properties: {
+      path: {
+        type: 'string',
+        description: 'Workspace-relative path to inspect.'
+      }
+    },
+    required: ['path'],
+    additionalProperties: false
+  } as const;
   readonly permissionTier = 'L0' as const;
 
   constructor(private readonly ws: Workspace) {}

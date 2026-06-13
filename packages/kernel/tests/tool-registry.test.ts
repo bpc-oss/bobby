@@ -5,6 +5,12 @@ import type { Tier } from '../src/hands/permission';
 
 const createTool = (name: string): Tool => ({
   name,
+  description: `${name} description`,
+  parametersSchema: {
+    type: 'object',
+    properties: {},
+    additionalProperties: false
+  },
   permissionTier: 'L0' as Tier,
   run: async () => ({
     evidence: [],

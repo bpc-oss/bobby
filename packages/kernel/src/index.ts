@@ -14,6 +14,7 @@ export { FileExistsTool, WriteFileTool } from './hands/tools/fs';
 export { Workspace } from './hands/workspace';
 export { createSnapshot, listSnapshots, restoreSnapshot } from './hands/snapshot';
 export { FetchTransport } from './model/deepseek/transport';
+export { toToolSchemas, type OpenAiToolSchema } from './model/deepseek/tool-schema';
 export {
   buildCapabilityReport,
   defaultDeepSeekProbeRaw,

@@ -19,6 +19,29 @@ interface ParsedCommand {
 
 export class ExecTool implements Tool {
   readonly name = 'exec';
+  readonly description = 'Run a command inside the workspace and capture command-output evidence.';
+  readonly parametersSchema = {
+    type: 'object',
+    properties: {
+      cmd: {
+        type: 'string',
+        description: 'Executable or shell command name to run.'
+      },
+      args: {
+        type: 'array',
+        description: 'Optional command arguments passed positionally.',
+        items: {
+          type: 'string'
+        }
+      },
+      timeoutMs: {
+        type: 'number',
+        description: 'Optional timeout in milliseconds before the process is terminated.'
+      }
+    },
+    required: ['cmd'],
+    additionalProperties: false
+  } as const;
   readonly permissionTier = 'L2' as const;
   private readonly workspace: Workspace;
 

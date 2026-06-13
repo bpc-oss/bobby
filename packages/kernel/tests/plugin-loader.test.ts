@@ -8,6 +8,16 @@ import type { McpTransport } from '../src/plugins/mcp-client';
 
 const createPluginTool = (name: string): Tool => ({
   name,
+  description: `${name} plugin tool`,
+  parametersSchema: {
+    type: 'object',
+    properties: {
+      greeting: {
+        type: 'string'
+      }
+    },
+    additionalProperties: true
+  },
   permissionTier: 'L1',
   run: async (input: Record<string, unknown>, ctx) => {
     if (input && typeof input.greeting !== 'string') {
