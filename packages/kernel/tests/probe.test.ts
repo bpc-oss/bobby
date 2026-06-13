@@ -7,6 +7,7 @@ import {
   fetchDeepSeekModels,
   probeAndWriteCapabilities,
   probeDeepSeek,
+  probeToolCalling,
   type ProbeRaw
 } from '../src/model/deepseek/probe';
 
@@ -252,13 +253,128 @@ describe('live capability probe (GET /models)', () => {
     const writeFile = vi.fn(async (_path: string, content: string) => {
       writtenContent = content;
     });
-    const fetchSpy = vi.fn(async () => ({ ok: true, status: 200, json: async () => modelsBody }));
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => modelsBody
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          model: 'deepseek-v4-flash',
+          choices: [
+            {
+              finish_reason: 'tool_calls',
+              message: {
+                content: '',
+                tool_calls: [
+                  {
+                    id: 'call_probe',
+                    type: 'function',
+                    function: {
+                      name: 'probe_echo',
+                      arguments: '{}'
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        })
+      });
 
     await probeAndWriteCapabilities({ homeDir, mkdir, writeFile, apiKey: 'sk-test', fetch: fetchSpy });
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
     const parsed = JSON.parse(writtenContent);
     expect(parsed.runnerModel).toBe('deepseek-v4-flash');
     expect(parsed.graderModel).toBe('deepseek-v4-pro');
+    expect(parsed.useToolCalling).toBe(true);
+  });
+
+  it('probeToolCalling sends a minimal tool-call probe and returns true when tool_calls are present', async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => modelsBody
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          model: 'deepseek-v4-flash',
+          choices: [
+            {
+              finish_reason: 'tool_calls',
+              message: {
+                content: '',
+                tool_calls: [
+                  {
+                    id: 'call_probe',
+                    type: 'function',
+                    function: {
+                      name: 'probe_echo',
+                      arguments: '{}'
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        })
+      });
+
+    await expect(probeToolCalling({ apiKey: 'sk-test', fetch: fetchSpy })).resolves.toBe(true);
+
+    const [url, init] = fetchSpy.mock.calls[1] as [string, RequestInit];
+    expect(url).toBe('https://api.deepseek.com/chat/completions');
+    expect(init.method).toBe('POST');
+
+    const body = JSON.parse(String(init.body)) as {
+      model: string;
+      messages: Array<{ role: string; content: string }>;
+      tools: Array<{ type: string; function: { name: string } }>;
+      stream: boolean;
+    };
+    expect(body.model).toBe('deepseek-v4-flash');
+    expect(body.stream).toBe(false);
+    expect(body.messages).toEqual([{ role: 'user', content: 'Call the probe tool.' }]);
+    expect(body.tools).toEqual([
+      {
+        type: 'function',
+        function: {
+          name: 'probe_echo',
+          description: 'Probe whether the model can return a tool call.',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        }
+      }
+    ]);
+    expect(body).not.toHaveProperty('tool_choice');
+  });
+
+  it('probeToolCalling returns false when the tool-call probe is rejected', async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => modelsBody
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({ error: { message: 'tools are unsupported' } })
+      });
+
+    await expect(probeToolCalling({ apiKey: 'sk-test', fetch: fetchSpy })).resolves.toBe(false);
   });
 });

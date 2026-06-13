@@ -62,6 +62,19 @@ interface DeepSeekModelsResponse {
   data?: Array<{ id?: unknown }>;
 }
 
+interface DeepSeekToolCallResponse {
+  choices?: Array<{
+    message?: {
+      tool_calls?: Array<{
+        function?: {
+          name?: unknown;
+          arguments?: unknown;
+        };
+      }>;
+    };
+  }>;
+}
+
 export interface ProbeWriteDeps {
   homeDir?: string;
   mkdir?: Mkdir;
@@ -126,6 +139,53 @@ function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, '');
 }
 
+function selectRunnerModel(models: string[]): string {
+  return models.find((model) => /flash|chat/i.test(model)) ?? models[0] ?? '';
+}
+
+function buildToolCallingProbeBody(model: string): string {
+  return JSON.stringify({
+    model,
+    messages: [{ role: 'user', content: 'Call the probe tool.' }],
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'probe_echo',
+          description: 'Probe whether the model can return a tool call.',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        }
+      }
+    ],
+    stream: false
+  });
+}
+
+async function probeToolCallingWithModel(deps: DeepSeekProbeHttpDeps, model: string): Promise<boolean> {
+  const baseUrl = normalizeBaseUrl(deps.baseUrl ?? DEEPSEEK_DEFAULT_BASE_URL);
+  const doFetch = deps.fetch ?? (globalThis.fetch.bind(globalThis) as ProbeFetchFn);
+
+  const response = await doFetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${deps.apiKey}`
+    },
+    body: buildToolCallingProbeBody(model)
+  });
+
+  if (!response.ok) {
+    return false;
+  }
+
+  const body = (await response.json()) as DeepSeekToolCallResponse;
+  return Array.isArray(body.choices?.[0]?.message?.tool_calls) && body.choices[0].message.tool_calls.length > 0;
+}
+
 // Lists the models the account can actually use, via the OpenAI-compatible
 // `GET /models` endpoint. This is the source of truth for model ids — we never
 // hardcode a guessed name when a key is available.
@@ -157,9 +217,18 @@ export async function fetchDeepSeekModels(deps: DeepSeekProbeHttpDeps): Promise<
   return ids;
 }
 
+export async function probeToolCalling(deps: DeepSeekProbeHttpDeps): Promise<boolean> {
+  const models = await fetchDeepSeekModels(deps);
+  return probeToolCallingWithModel(deps, selectRunnerModel(models));
+}
+
 export async function probeDeepSeek(deps: DeepSeekProbeHttpDeps): Promise<ProbeRaw> {
   const models = await fetchDeepSeekModels(deps);
-  return { models, ...DOCUMENTED_CAPABILITY_FLAGS };
+  return {
+    models,
+    ...DOCUMENTED_CAPABILITY_FLAGS,
+    toolCalling: await probeToolCallingWithModel(deps, selectRunnerModel(models))
+  };
 }
 
 export async function probeAndWriteCapabilities(deps: ProbeWriteDeps = {}): Promise<string> {
