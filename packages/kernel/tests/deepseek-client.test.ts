@@ -4,6 +4,7 @@ import { DeepSeekModelClient } from '../src/model/deepseek/client';
 import type { ChatRequest, HttpTransport } from '../src/model/deepseek/transport';
 import type { CapabilityReport } from '../src/model/deepseek/probe';
 import type { ModelMessage, ModelRole } from '../src/model/model-client';
+import type { OpenAiToolSchema } from '../src/model/deepseek/tool-schema';
 
 const createReport = (overrides: Partial<CapabilityReport> = {}): CapabilityReport => ({
   runnerModel: 'runner-model',
@@ -17,6 +18,24 @@ const createReport = (overrides: Partial<CapabilityReport> = {}): CapabilityRepo
   contextWindow: 1024,
   ...overrides
 });
+
+const sampleTools: OpenAiToolSchema[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'write_file',
+      description: 'Write a file',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string' }
+        },
+        required: ['path'],
+        additionalProperties: false
+      }
+    }
+  }
+];
 
 it('runner role uses runnerModel and returns content + raw transport response', async () => {
   const calls: ChatRequest[] = [];
@@ -241,4 +260,43 @@ it('passes-through original messages to transport unchanged', async () => {
 
   expect(calls[0]!.messages).toBe(messages);
   expect(calls[0]!.messages).toEqual(messages);
+});
+
+it('passes tools to transport and surfaces toolCalls in model response', async () => {
+  const calls: ChatRequest[] = [];
+  const transport: HttpTransport = {
+    async chat(req) {
+      calls.push(req);
+      return {
+        content: '',
+        model: req.model,
+        toolCalls: [
+          {
+            id: 'call_1',
+            name: 'write_file',
+            arguments: '{"path":"hello.txt"}'
+          }
+        ]
+      };
+    }
+  };
+  const client = new DeepSeekModelClient({
+    apiKey: 'secret-key',
+    report: createReport({ useToolCalling: true }),
+    transport
+  });
+
+  const response = await client.complete('runner', [{ role: 'user', content: 'write a file' }], {
+    tools: sampleTools
+  });
+
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.tools).toEqual(sampleTools);
+  expect(response.toolCalls).toEqual([
+    {
+      id: 'call_1',
+      name: 'write_file',
+      arguments: '{"path":"hello.txt"}'
+    }
+  ]);
 });

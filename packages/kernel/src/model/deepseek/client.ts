@@ -28,6 +28,7 @@ export class DeepSeekModelClient implements ModelClient {
     const req: ChatRequest = {
       model,
       messages,
+      ...(opts?.tools ? { tools: opts.tools } : {}),
       ...(reasoningEffort ? { reasoningEffort } : {}),
       ...(opts?.json === true && this.deps.report.useJsonMode ? { jsonMode: true } : {}),
       ...(cacheMetadata ? { cacheMetadata } : {})
@@ -41,6 +42,7 @@ export class DeepSeekModelClient implements ModelClient {
   private toModelResponse(res: ChatResponse): ModelResponse {
     return {
       content: res.content,
+      ...(res.toolCalls ? { toolCalls: res.toolCalls } : {}),
       raw: res
     };
   }

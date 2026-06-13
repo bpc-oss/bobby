@@ -1,6 +1,25 @@
 import { expect, it, vi } from 'vitest';
 
 import { FetchTransport } from '../src/model/deepseek/transport';
+import type { OpenAiToolSchema } from '../src/model/deepseek/tool-schema';
+
+const sampleTools: OpenAiToolSchema[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'write_file',
+      description: 'Write a file',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string' }
+        },
+        required: ['path'],
+        additionalProperties: false
+      }
+    }
+  }
+];
 
 const makeFakeResponse = (body: unknown, status = 200, ok = true) =>
   ({
@@ -86,6 +105,52 @@ it('chat sends reasoning_effort when explicitly configured', async () => {
   });
 
   expect(calls).toHaveLength(1);
+});
+
+it('chat passes tools through and maps response tool_calls', async () => {
+  const fakeFetch = vi.fn(async (_url: string, init?: RequestInit): Promise<Response> => {
+    if (typeof init?.body === 'string') {
+      const parsed = await parseJson(init.body);
+      expect(parsed.tools).toEqual(sampleTools);
+      expect(parsed.tool_choice).toBeUndefined();
+    }
+
+    return makeFakeResponse({
+      choices: [
+        {
+          message: {
+            content: '',
+            tool_calls: [
+              {
+                id: 'call_1',
+                type: 'function',
+                function: {
+                  name: 'write_file',
+                  arguments: '{"path":"hello.txt"}'
+                }
+              }
+            ]
+          }
+        }
+      ],
+      model: 'deepseek-v4-flash'
+    });
+  });
+
+  const transport = new FetchTransport({ apiKey: 'token', fetch: fakeFetch });
+  const response = await transport.chat({
+    model: 'deepseek-v4-flash',
+    messages: [{ role: 'user', content: 'write it' }],
+    tools: sampleTools
+  });
+
+  expect(response.toolCalls).toEqual([
+    {
+      id: 'call_1',
+      name: 'write_file',
+      arguments: '{"path":"hello.txt"}'
+    }
+  ]);
 });
 
 it('chat keeps local cacheMetadata out of serialized HTTP body', async () => {

@@ -1,8 +1,16 @@
 import { withRetry, type RetryOptions } from './retry';
+import type { OpenAiToolSchema } from './tool-schema';
+
+export interface ChatToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
 
 export interface ChatRequest {
   model: string;
   messages: { role: string; content: string }[];
+  tools?: OpenAiToolSchema[];
   jsonMode?: boolean;
   reasoningEffort?: 'low' | 'medium' | 'high';
   reasoning?: boolean;
@@ -18,6 +26,7 @@ export interface ChatRequest {
 export interface ChatResponse {
   content: string;
   model: string;
+  toolCalls?: ChatToolCall[];
   usage?: { promptTokens: number; completionTokens: number; cachedTokens?: number };
 }
 
@@ -51,7 +60,18 @@ export interface FetchTransportOptions {
 export interface DeepSeekChatResponse {
   id?: string;
   model?: string;
-  choices?: Array<{ message?: { content?: unknown } }>;
+  choices?: Array<{
+    message?: {
+      content?: unknown;
+      tool_calls?: Array<{
+        id?: unknown;
+        function?: {
+          name?: unknown;
+          arguments?: unknown;
+        };
+      }>;
+    };
+  }>;
   usage?: {
     prompt_tokens?: unknown;
     completion_tokens?: unknown;
@@ -64,6 +84,7 @@ function buildChatRequestBody(req: ChatRequest): string {
   return JSON.stringify({
     model: req.model,
     messages: req.messages,
+    ...(req.tools ? { tools: req.tools } : {}),
     stream: false,
     ...(req.jsonMode ? { response_format: { type: 'json_object' } } : {}),
     thinking: { type: hasReasoningEffort || req.reasoning ? 'enabled' : 'disabled' },
@@ -102,10 +123,26 @@ function extractContent(raw: DeepSeekChatResponse): string {
   return typeof raw.choices?.[0]?.message?.content === 'string' ? raw.choices[0].message.content : '';
 }
 
+function extractToolCalls(raw: DeepSeekChatResponse): ChatToolCall[] | undefined {
+  const toolCalls = raw.choices?.[0]?.message?.tool_calls;
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    return undefined;
+  }
+
+  return toolCalls
+    .map((toolCall) => ({
+      id: typeof toolCall.id === 'string' ? toolCall.id : '',
+      name: typeof toolCall.function?.name === 'string' ? toolCall.function.name : '',
+      arguments: typeof toolCall.function?.arguments === 'string' ? toolCall.function.arguments : ''
+    }))
+    .filter((toolCall) => toolCall.id !== '' && toolCall.name !== '');
+}
+
 function mapChatResponse(raw: DeepSeekChatResponse, requestModel: string): ChatResponse {
   return {
     content: extractContent(raw),
     model: typeof raw.model === 'string' ? raw.model : requestModel,
+    toolCalls: extractToolCalls(raw),
     usage: mapUsage(raw.usage)
   };
 }
