@@ -31,6 +31,7 @@ import {
   isReadyForTasks,
   promptForDeepSeekKey,
   readDeepSeekKeyFromEnv,
+  readSavedDeepSeekKey,
   renderOnboarding,
   saveDeepSeekKey,
   type OnboardingDeps
@@ -182,9 +183,15 @@ async function interactiveCommand(io: CliIO, options: RunCliOptions): Promise<vo
   }
 }
 
+function resolveProbeApiKey(options: RunCliOptions): string | undefined {
+  return readDeepSeekKeyFromEnv(options.onboarding) ?? readSavedDeepSeekKey(options.onboarding);
+}
+
 async function probeCommand(io: CliIO, options: RunCliOptions): Promise<void> {
   try {
-    const reportPath = await (options.probe ?? probeAndWriteCapabilities)();
+    const runProbe =
+      options.probe ?? (() => probeAndWriteCapabilities({ apiKey: resolveProbeApiKey(options) }));
+    const reportPath = await runProbe();
     io.log(`DeepSeek capability report written to: ${reportPath}`);
   } catch (err) {
     handleError(io, err);
@@ -224,7 +231,8 @@ async function loginCommand(io: CliIO, args: string[], options: RunCliOptions): 
       return;
     }
 
-    const reportPath = await (options.probe ?? probeAndWriteCapabilities)();
+    const runProbe = options.probe ?? (() => probeAndWriteCapabilities({ apiKey }));
+    const reportPath = await runProbe();
     io.log(`Capability report written to: ${reportPath}`);
     io.log('Bobby is ready. Try: bobby run "Create hello.txt with exactly hi, then verify with cmd /c type hello.txt"');
   } catch (err) {

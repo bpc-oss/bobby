@@ -1,14 +1,16 @@
-import { expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
 
 import {
   buildCapabilityReport,
   defaultDeepSeekProbeRaw,
+  fetchDeepSeekModels,
   probeAndWriteCapabilities,
+  probeDeepSeek,
   type ProbeRaw
 } from '../src/model/deepseek/probe';
 
-it('builds report from default DeepSeek V4 probe raw', () => {
+it('builds report from default DeepSeek probe raw using real API model ids', () => {
   const raw = defaultDeepSeekProbeRaw();
   const report = buildCapabilityReport(raw);
 
@@ -21,7 +23,7 @@ it('builds report from default DeepSeek V4 probe raw', () => {
     useCaching: true,
     useReasoning: true,
     useStreaming: false,
-    contextWindow: 1_000_000
+    contextWindow: 128_000
   });
 });
 
@@ -52,7 +54,7 @@ it('writes capability report to ~/.bobby/capabilities.json with pretty JSON and 
     useCaching: true,
     useReasoning: true,
     useStreaming: false,
-    contextWindow: 1_000_000
+    contextWindow: 128_000
   });
   expect(writtenContent).toContain('\n');
   expect(writtenContent).not.toContain('deepseek-key');
@@ -179,4 +181,84 @@ it('buildCapabilityReport: passes through contextWindow directly', () => {
   const report = buildCapabilityReport(raw);
 
   expect(report.contextWindow).toBe(raw.contextWindow);
+});
+
+it('buildCapabilityReport: maps deepseek-chat -> runner and deepseek-reasoner -> grader regardless of order', () => {
+  const flags = {
+    toolCalling: true,
+    jsonMode: true,
+    fim: false,
+    promptCaching: true,
+    reasoningToggle: true,
+    streaming: false,
+    contextWindow: 128_000
+  };
+
+  const inOrder = buildCapabilityReport({ models: ['deepseek-chat', 'deepseek-reasoner'], ...flags });
+  expect(inOrder.runnerModel).toBe('deepseek-chat');
+  expect(inOrder.graderModel).toBe('deepseek-reasoner');
+
+  const reversed = buildCapabilityReport({ models: ['deepseek-reasoner', 'deepseek-chat'], ...flags });
+  expect(reversed.runnerModel).toBe('deepseek-chat');
+  expect(reversed.graderModel).toBe('deepseek-reasoner');
+});
+
+describe('live capability probe (GET /models)', () => {
+  // Mirrors the real DeepSeek GET /models response (verified live 2026-06).
+  const modelsBody = {
+    object: 'list',
+    data: [
+      { id: 'deepseek-v4-flash', object: 'model', owned_by: 'deepseek' },
+      { id: 'deepseek-v4-pro', object: 'model', owned_by: 'deepseek' }
+    ]
+  };
+
+  it('fetchDeepSeekModels sends an authorized GET to <baseUrl>/models and returns model ids', async () => {
+    const fetchSpy = vi.fn(async (_input: string, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => modelsBody
+    }));
+
+    const ids = await fetchDeepSeekModels({ apiKey: 'sk-test', baseUrl: 'https://api.deepseek.com/', fetch: fetchSpy });
+
+    expect(ids).toEqual(['deepseek-v4-flash', 'deepseek-v4-pro']);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.deepseek.com/models');
+    expect(init.method).toBe('GET');
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer sk-test');
+  });
+
+  it('fetchDeepSeekModels throws a clear error on a non-ok response', async () => {
+    const fetchSpy = vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }));
+
+    await expect(fetchDeepSeekModels({ apiKey: 'bad-key', fetch: fetchSpy })).rejects.toThrow(/401/);
+  });
+
+  it('probeDeepSeek returns ProbeRaw with live models and documented capability flags', async () => {
+    const fetchSpy = vi.fn(async () => ({ ok: true, status: 200, json: async () => modelsBody }));
+
+    const raw = await probeDeepSeek({ apiKey: 'sk-test', fetch: fetchSpy });
+
+    expect(raw.models).toEqual(['deepseek-v4-flash', 'deepseek-v4-pro']);
+    expect(raw.fim).toBe(false);
+    expect(raw.contextWindow).toBe(128_000);
+  });
+
+  it('probeAndWriteCapabilities performs a live probe when an apiKey is provided', async () => {
+    const homeDir = '/tmp/bobby-live';
+    let writtenContent = '';
+    const mkdir = vi.fn(async () => undefined);
+    const writeFile = vi.fn(async (_path: string, content: string) => {
+      writtenContent = content;
+    });
+    const fetchSpy = vi.fn(async () => ({ ok: true, status: 200, json: async () => modelsBody }));
+
+    await probeAndWriteCapabilities({ homeDir, mkdir, writeFile, apiKey: 'sk-test', fetch: fetchSpy });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const parsed = JSON.parse(writtenContent);
+    expect(parsed.runnerModel).toBe('deepseek-v4-flash');
+    expect(parsed.graderModel).toBe('deepseek-v4-pro');
+  });
 });

@@ -115,6 +115,20 @@ export function readDeepSeekKeyFromEnv(deps: OnboardingDeps = {}): string | unde
   }
 }
 
+export function readSavedDeepSeekKey(deps: OnboardingDeps = {}): string | undefined {
+  const homeDir = deps.homeDir ?? homedir();
+  const paths = getPaths(homeDir);
+  const existsSync = deps.existsSync ?? defaultExistsSync;
+  const readFileSync = deps.readFileSync ?? defaultReadFileSync;
+
+  if (!existsSync(paths.keyPath)) {
+    return undefined;
+  }
+
+  const value = readFileSync(paths.keyPath, 'utf8').trim();
+  return value.length > 0 ? value : undefined;
+}
+
 export function getOnboardingStatus(deps: OnboardingDeps = {}): OnboardingStatus {
   const homeDir = deps.homeDir ?? homedir();
   const paths = getPaths(homeDir);

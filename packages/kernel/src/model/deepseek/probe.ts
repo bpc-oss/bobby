@@ -28,22 +28,58 @@ export interface CapabilityReport {
 type Mkdir = (path: string, options?: { recursive?: boolean }) => Promise<unknown>;
 type WriteFile = (file: string, data: string, encoding?: BufferEncoding) => Promise<void>;
 
+export const DEEPSEEK_DEFAULT_BASE_URL = 'https://api.deepseek.com';
+
+// Capability flags are documented platform features of DeepSeek (account-independent),
+// not discoverable from the `/models` listing — so they are pinned here from the docs.
+// Only the model ids are probed live. FIM/streaming stay off until verified end-to-end.
+const DOCUMENTED_CAPABILITY_FLAGS = {
+  toolCalling: true,
+  jsonMode: true,
+  fim: false,
+  promptCaching: true,
+  reasoningToggle: true,
+  streaming: false,
+  contextWindow: 128_000
+} as const;
+
+type ProbeFetchResponse = {
+  ok: boolean;
+  status: number;
+  json: () => Promise<unknown>;
+};
+
+type ProbeFetchFn = (input: string, init?: RequestInit) => Promise<ProbeFetchResponse>;
+
+export interface DeepSeekProbeHttpDeps {
+  apiKey: string;
+  baseUrl?: string;
+  fetch?: ProbeFetchFn;
+}
+
+interface DeepSeekModelsResponse {
+  object?: unknown;
+  data?: Array<{ id?: unknown }>;
+}
+
 export interface ProbeWriteDeps {
   homeDir?: string;
   mkdir?: Mkdir;
   writeFile?: WriteFile;
+  // When apiKey is provided, capabilities are probed against the live API instead of defaults.
+  apiKey?: string;
+  baseUrl?: string;
+  fetch?: ProbeFetchFn;
 }
 
+// Offline fallback used only when no API key is available. Verified 2026-06 against
+// the live `GET /models` endpoint, which returns exactly these two ids. When a key is
+// present we always derive the model list live instead of trusting this fallback
+// (see probeDeepSeek), so the model ids are never a guess on the real path.
 export function defaultDeepSeekProbeRaw(): ProbeRaw {
   return {
     models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
-    toolCalling: true,
-    jsonMode: true,
-    fim: false,
-    promptCaching: true,
-    reasoningToggle: true,
-    streaming: false,
-    contextWindow: 1_000_000
+    ...DOCUMENTED_CAPABILITY_FLAGS
   };
 }
 
@@ -52,8 +88,11 @@ export function buildCapabilityReport(raw: ProbeRaw): CapabilityReport {
     throw new Error('ProbeRaw models must contain at least one model.');
   }
 
-  const runnerModel = raw.models.find((model) => /flash/i.test(model)) ?? raw.models[0];
-  const graderModel = raw.models.find((model) => /pro/i.test(model)) ?? raw.models[1] ?? runnerModel;
+  // runner = the cheaper/non-reasoning model (DeepSeek "chat", or a "flash" tier);
+  // grader = the reasoning model (DeepSeek "reasoner", or a "pro" tier). Order-independent.
+  const runnerModel = raw.models.find((model) => /flash|chat/i.test(model)) ?? raw.models[0];
+  const graderModel =
+    raw.models.find((model) => /pro|reasoner/i.test(model)) ?? raw.models[1] ?? runnerModel;
 
   return {
     runnerModel,
@@ -83,8 +122,50 @@ export async function writeCapabilityReport(
   return capabilitiesPath;
 }
 
+function normalizeBaseUrl(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
+// Lists the models the account can actually use, via the OpenAI-compatible
+// `GET /models` endpoint. This is the source of truth for model ids — we never
+// hardcode a guessed name when a key is available.
+export async function fetchDeepSeekModels(deps: DeepSeekProbeHttpDeps): Promise<string[]> {
+  const baseUrl = normalizeBaseUrl(deps.baseUrl ?? DEEPSEEK_DEFAULT_BASE_URL);
+  const doFetch = deps.fetch ?? (globalThis.fetch.bind(globalThis) as ProbeFetchFn);
+
+  const response = await doFetch(`${baseUrl}/models`, {
+    method: 'GET',
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${deps.apiKey}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`DeepSeek /models request failed with status ${response.status}`);
+  }
+
+  const body = (await response.json()) as DeepSeekModelsResponse;
+  const ids = (body.data ?? [])
+    .map((entry) => (typeof entry.id === 'string' ? entry.id : ''))
+    .filter((id) => id.length > 0);
+
+  if (ids.length === 0) {
+    throw new Error('DeepSeek /models returned no usable model ids');
+  }
+
+  return ids;
+}
+
+export async function probeDeepSeek(deps: DeepSeekProbeHttpDeps): Promise<ProbeRaw> {
+  const models = await fetchDeepSeekModels(deps);
+  return { models, ...DOCUMENTED_CAPABILITY_FLAGS };
+}
+
 export async function probeAndWriteCapabilities(deps: ProbeWriteDeps = {}): Promise<string> {
-  const raw = defaultDeepSeekProbeRaw();
+  const raw = deps.apiKey
+    ? await probeDeepSeek({ apiKey: deps.apiKey, baseUrl: deps.baseUrl, fetch: deps.fetch })
+    : defaultDeepSeekProbeRaw();
   const report = buildCapabilityReport(raw);
   return writeCapabilityReport(report, deps);
 }
