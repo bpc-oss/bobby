@@ -118,24 +118,30 @@ function FnButtons({
   mode,
   lang,
   view,
+  activeSessionId,
   onClick
 }: {
   mode: AppMode;
   lang: Lang;
   view: ReturnType<typeof useUiStore.getState>['view'];
+  activeSessionId?: string;
   onClick: (fnView: ReturnType<typeof getFnItems>[AppMode][number]['view']) => void;
 }): JSX.Element {
   const items = getFnItems(lang)[mode];
 
   return (
     <div className="side-fn">
-      {items.map((fn) => (
-        <button key={fn.view} className={`fn-item ${view === fn.view ? 'active' : ''}`} onClick={() => onClick(fn.view)}>
-          <span className="ic">{fn.icon}</span>
-          <span className="fn-label">{fn.label}</span>
-          {fn.soon ? <span className="soon">{lang === 'zh' ? '\u5373\u5c06\u63a8\u51fa' : 'SOON'}</span> : null}
-        </button>
-      ))}
+      {items.map((fn) => {
+        const active = fn.view === 'session' ? view === 'session' && !activeSessionId : view === fn.view;
+
+        return (
+          <button key={fn.view} className={`fn-item ${active ? 'active' : ''}`} onClick={() => onClick(fn.view)}>
+            <span className="ic">{fn.icon}</span>
+            <span className="fn-label">{fn.label}</span>
+            {fn.soon ? <span className="soon">{lang === 'zh' ? '\u5373\u5c06\u63a8\u51fa' : 'SOON'}</span> : null}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -421,7 +427,7 @@ export function Sidebar(): JSX.Element {
   return (
     <aside className="side side-shell">
       <ModeSwitch codeBadge={1} />
-      <FnButtons mode={mode} lang={lang} view={listView} onClick={handleFnClick} />
+      <FnButtons mode={mode} lang={lang} view={listView} activeSessionId={activeSessionId} onClick={handleFnClick} />
       <div className="side-sep" />
       <div className="side-list side-list-shell">
         {mode === 'code' ? (

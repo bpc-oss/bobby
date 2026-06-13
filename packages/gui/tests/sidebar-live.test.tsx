@@ -307,6 +307,24 @@ describe('Sidebar live list', () => {
     expect(screen.getByText('Fix updater').closest('button')?.className).toContain('active');
   });
 
+  it('clears the new session entry highlight after selecting a history thread', () => {
+    useSessionStore.getState().setSessions([
+      { id: 'a', mode: 'code', title: 'Fix updater', pinned: false, status: 'idle', updatedAt: '' }
+    ]);
+    useUiStore.setState({ ...useUiStore.getState(), mode: 'code', lang: 'zh', view: 'session' });
+
+    render(<Sidebar />);
+
+    const newSessionButton = screen.getByRole('button', { name: /新会话/i });
+    expect(newSessionButton.className).toContain('active');
+
+    fireEvent.click(screen.getByText('Fix updater'));
+
+    expect(useSessionStore.getState().activeSessionId).toBe('a');
+    expect(screen.getByText('Fix updater').closest('button')?.className).toContain('active');
+    expect(newSessionButton.className).not.toContain('active');
+  });
+
   it('mirrors kernel lifecycle into sidebar status dots', () => {
     useSessionStore.getState().setSessions([
       { id: 'a', mode: 'code', title: 'code-gate', pinned: false, status: 'idle', updatedAt: '' }
